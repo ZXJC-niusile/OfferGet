@@ -1,0 +1,138 @@
+{
+  "profile_version": "2.0.0",
+  "candidate": {
+    "name": "张晨曦",
+    "en_name": "Dr. Alex Zhang",
+    "title_zh": "资深大模型算法架构师 / Tech Lead",
+    "title_en": "Senior Staff LLM Algorithm Architect & Tech Lead",
+    "email": "alex.zhang.ai@alumni.tsinghua.edu.cn",
+    "phone": "+86 186-0000-8899",
+    "location": "北京 / 杭州 (可异地办公)",
+    "github": "https://github.com/alex-zhang-ai",
+    "linkedin": "https://linkedin.com/in/alex-zhang-llm",
+    "years_of_experience": 7,
+    "degree": "计算机科学博士 (Ph.D. in Computer Science)",
+    "institution": "清华大学 (Tsinghua University)"
+  },
+  "narrative": {
+    "summary_zh": "7 年前沿深度学习与大规模分布式计算研发经验，主导过多款千亿参数基座模型与混合专家模型（MoE）从零到一的预训练、强化学习对齐（GRPO/DPO）及万卡集群工程治理。精通 Megatron-LM 与 vLLM 底层源码，主导自研 FP8 高吞吐量推理服务引擎与基于 Model Context Protocol (MCP) 的企业级 Agent 集群架构，曾为核心业务带来年均 3800 万元的直接算力降本与 45% 的推理延迟改善。NeurIPS/ICLR 顶会一作，vLLM 官方活跃贡献者。",
+    "summary_en": "7+ years of experience in frontier deep learning and massive-scale distributed computing. Led pre-training, reinforcement learning alignment (GRPO/DPO), and 1,000+ GPU cluster stabilization for multiple 100B+ dense and MoE foundation models from scratch. Deeply customized Megatron-LM and vLLM internals; pioneered in-house FP8 high-throughput inference serving engines and enterprise MCP-based multi-agent architectures, achieving 38M RMB annual compute cost reduction and 45% P99 latency reduction. NeurIPS/ICLR primary author and active committer to vLLM."
+  },
+  "competencies": {
+    "algorithms": [
+      "Transformer Architecture (GQA, MLA, RoPE, SwiGLU, RMSNorm)",
+      "Mixture of Experts (MoE Routing, Load Balancing Loss, Shared Experts)",
+      "Reinforcement Learning (GRPO, PPO, DPO, KTO, Step-level PRM)",
+      "Long-Context Extension (YaRN, Context Parallelism, RingAttention)",
+      "Synthetic Data Generation & Evol-Instruct Pipeline"
+    ],
+    "engineering_and_infra": [
+      "Distributed Parallelism (3D/4D Parallel: TP, PP, DP, SP, CP, ZeRO-3)",
+      "Framework Internals (Megatron-LM, DeepSpeed, FlashAttention-2/3)",
+      "GPU Cluster Reliability (NCCL timeout debugging, Straggler isolation, Asynchronous checkpointing)",
+      "Inference Engines (vLLM, SGLang, TensorRT-LLM, Triton/CUDA kernels)",
+      "Quantization (FP8 E4M3/E5M2, AWQ, GPTQ, KV-Cache PagedAttention)"
+    ],
+    "agentic_systems": [
+      "Model Context Protocol (MCP) Client/Server Architecture",
+      "Multi-Agent Orchestration (LangGraph, ReAct loop, Planning & Reflection)",
+      "Hybrid Enterprise RAG (GraphRAG, Dense Vector + BM25, Cross-Encoder Rerank)",
+      "Grammar-Guided Decoding & JSON Schema Enforcement (XGrammar/Outlines)"
+    ],
+    "programming": ["Python", "C++17/20", "CUDA", "Triton", "Shell", "PyTorch", "Git"]
+  },
+  "experience": [
+    {
+      "company": "智谱前沿 AI 实验室 / 头部大模型独角兽",
+      "company_en": "Zhipu AI / Frontier LLM Unicorn Lab",
+      "role": "大模型预训练与对齐算法负责人 (Tech Lead)",
+      "period": "2023.03 - 至今",
+      "visibility": ["always", "ai_pretrain", "cluster_infra"],
+      "highlights": [
+        {
+          "claim_id": "EXP-01",
+          "claim_zh": "主导 64B Dense 及 230B MoE（激活 32B）基座大模型在 1024 卡 H800 集群上的预训练全流程，基于 Megatron-LM 实现 Sequence Parallel 与 Context Parallel 深度融合，端到端 MFU（Model Flops Utilization）从 38.5% 优化至 54.2%，提前 3 周完成千亿 Token 训练里程碑。",
+          "claim_en": "Led end-to-end pre-training of 64B Dense and 230B MoE (32B active) foundation models on a 1,024 H800 GPU cluster. Deeply fused Sequence Parallel with Context Parallel on Megatron-LM, boosting end-to-end MFU from 38.5% to 54.2% and delivering the 1T-token checkpoint 3 weeks ahead of schedule.",
+          "verified_metrics": { "cluster_size": 1024, "model_params": "230B MoE", "mfu_before": "38.5%", "mfu_after": "54.2%", "time_saved": "3 weeks" }
+        },
+        {
+          "claim_id": "EXP-02",
+          "claim_zh": "主导攻坚万卡集群通信慢卡（Straggler）与网络抖动治理，开发基于 NCCL 心跳插桩与 ECC 探针的慢节点秒级自动剔除隔离系统，将大模型训练任务因单卡故障导致的日均有效中断时间从 2.4 小时压减至 8 分钟以內，训练可用率达 99.4%。",
+          "claim_en": "Spearheaded fault-tolerant cluster engineering, architecting an automated sub-minute straggler isolation system combining NCCL heartbeat instrumentation and ECC health probes, slashing daily mean downtime from 2.4 hours to under 8 minutes with 99.4% training availability.",
+          "verified_metrics": { "downtime_before": "2.4h/day", "downtime_after": "<8min/day", "uptime": "99.4%" }
+        },
+        {
+          "claim_id": "EXP-03",
+          "claim_zh": "设计并落地基于 GRPO（组内相对优势策略优化）与过程奖励模型（Step-level PRM）的数学与代码推理强化对齐管线，在移除 Critic 网络的条件下显存消耗减少 48%，模型在 GSM8K 与 MATH 基准准确率分别提升 14.2% 与 11.6%，达到 GPT-4o 评测水平。",
+          "claim_en": "Designed and deployed a pure RL alignment pipeline for mathematical and code reasoning leveraging GRPO and Step-level Process Reward Models (PRM), slashing training VRAM footprint by 48% via Critic removal and elevating GSM8K and MATH accuracies by 14.2% and 11.6%, matching GPT-4o benchmarks.",
+          "verified_metrics": { "vram_reduction": "48%", "gsm8k_gain": "+14.2%", "math_gain": "+11.6%" }
+        }
+      ]
+    },
+    {
+      "company": "字节跳动 / 基础架构与搜索算法团队",
+      "company_en": "ByteDance / AI Infrastructure & Search Algorithm Team",
+      "role": "资深推理优化算法工程师 (Senior Engineer)",
+      "period": "2020.08 - 2023.02",
+      "visibility": ["always", "inference_serving"],
+      "highlights": [
+        {
+          "claim_id": "EXP-04",
+          "claim_zh": "主导设计大规模高并发大模型推理服务中台，定制扩展 vLLM 架构，深度适配 FP8 (E4M3) 权重与 KV-Cache 动态量化，结合投机采样（Speculative Decoding）算法，在海量搜索总结业务场景下单 Token 推理成本降低 62%，P99 延迟降低 45%，年均节省云算力开销 3800 万元。",
+          "claim_en": "Architected high-concurrency LLM inference serving platform by customizing vLLM with FP8 (E4M3) weight and dynamic KV-Cache quantization combined with speculative decoding, driving a 62% reduction in cost-per-token and 45% P99 latency reduction in core search synthesis, saving 38M RMB annually.",
+          "verified_metrics": { "cost_reduction": "62%", "p99_latency_reduction": "45%", "annual_savings": "38,000,000 RMB" }
+        },
+        {
+          "claim_id": "EXP-05",
+          "claim_zh": "攻坚长上下文推理调度，实现 Chunked Prefill 与连续批处理（Continuous Batching）协同算子，彻底消除 Decode 阶段由于长 Prompt Prefill 造成的 GPU 显存带宽饥饿与首字延迟尖峰，TTFT（首字响应时间）均值从 1.8s 下降至 320ms。",
+          "claim_en": "Pioneered chunked prefill co-scheduling alongside continuous batching, eliminating decode starvation and TTFT latency spikes caused by lengthy input prompts, driving average TTFT from 1.8s down to 320ms.",
+          "verified_metrics": { "ttft_before": "1.8s", "ttft_after": "320ms" }
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Enterprise-Agent-OS (企业级多智能体协同引擎)",
+      "role": "架构师与开源项目发起人",
+      "visibility": ["agentic_systems", "enterprise_rag"],
+      "description_zh": "基于 Anthropic Model Context Protocol (MCP) 标准构建的工业级多 Agent 调度编排系统，打通企业私有知识库 GraphRAG、代码沙箱执行器与生产数据库。引入 DFA 驱动的 Grammar-Guided Decoding 实现 100% 结构化 JSON Schema 约束，解决复杂智能体死循环反思问题。",
+      "description_en": "Industrial-grade multi-agent orchestration operating system built upon Anthropic Model Context Protocol (MCP), linking enterprise GraphRAG, code sandboxes, and production databases. Enforced 100% compliant JSON Schema output via DFA-driven Grammar-Guided Decoding, eliminating infinite reflection loops.",
+      "github": "https://github.com/alex-zhang-ai/enterprise-agent-os",
+      "stars": 3400
+    },
+    {
+      "name": "Fast-Megatron-MLA (高效长文本注意力算子库)",
+      "role": "主要开发者",
+      "visibility": ["always", "ai_pretrain", "inference_serving"],
+      "description_zh": "在 Megatron-LM 架构中移植并开源 Multi-Head Latent Attention (MLA) 算子与 Triton 自定义算子内核，支持低秩 KV 潜在向量在线吸收与解耦 RoPE，KV-Cache 显存降低 75%，已合并至多个知名大模型开源推理仓库。",
+      "description_en": "Ported and open-sourced Multi-Head Latent Attention (MLA) operators and Triton kernels into Megatron-LM, supporting low-rank KV latent absorption and decoupled RoPE, slashing KV-Cache footprint by 75%, merged into prominent open-source inference repositories.",
+      "stars": 1250
+    }
+  ],
+  "publications": [
+    {
+      "title": "Scaling MoE Foundation Models with Auxiliary-Loss-Free Adaptive Routing",
+      "conference": "NeurIPS 2024 (First Author)",
+      "highlight": "提出无辅助损失的自适应路由架构，解决稀疏大模型负载均衡与专家坍塌问题，单篇引用 140+"
+    },
+    {
+      "title": "Accelerating LLM Serving via Group Relative Speculative Decoding",
+      "conference": "ICLR 2024 (Co-first Author)",
+      "highlight": "提出结合组相对采样的大模型投机加速方法，在保持零精度损失下实现 2.8x 推理吞吐加速"
+    }
+  ],
+  "salary_expectations": {
+    "current_comp": "190W RMB (120W Base + 40W Bonus + 30W Stock)",
+    "target_comp_min": "220W RMB",
+    "target_comp_target": "250W RMB",
+    "stock_cash_flexibility": "支持期权与现金组合弹性谈判，重点看团队算力储备与商业变现前景"
+  },
+  "constraints_and_assumptions": {
+    "preferred_locations": ["北京", "杭州", "深圳", "上海"],
+    "onsite_requirement": "支持部分远程，接受每周 3-4 天 On-site",
+    "compute_floor": "目标团队独占物理卡资源不得少于 128 张 H100/H800（或具备等效千卡算力支持）",
+    "role_positioning": "聚焦算法与系统架构总控，拒绝纯手工标注或纯边缘 Demo 开发",
+    "notice_period": "30 天"
+  }
+}

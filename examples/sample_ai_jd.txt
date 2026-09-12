@@ -1,0 +1,28 @@
+【岗位名称】大模型算法架构师 / 负责人 (Staff / Principal LLM Algorithm Architect)
+【所属部门】前沿人工智能实验室 - 基础模型与智能体工程部 (Foundation Models & Agentic AI Lab)
+【工作地点】北京 / 杭州 / 深圳 / 上海 (支持部分远程弹性)
+【薪资范围】150W - 260W RMB / 年 (Base + 年终奖金 + 战略期权/限制性股票RSU)
+【岗位级别】P8 / P9 / Staff Level
+
+【团队与业务使命】
+我们致力于打造面向下一代通用人工智能（AGI）的核心基座模型与自主智能体（Autonomous Agents）操作系统。团队拥有自建万卡 H800/H100 独占算力集群与海量高质量多模态语料库，核心成员由来自顶级科技公司科学家及顶尖高校博士领衔。在这里，你将直接攻坚千亿级别大模型在预训练扩展、强化学习推理与工业级 Agent 核心场景的落地下限与能力上限。
+
+【岗位核心职责】
+1. 负责百亿至千亿参数规模语言与多模态大模型的预训练（Pre-training）演进，探索下一代稀疏 MoE 架构、长上下文注意力变体（MLA/GQA）与 Scaling Law 前沿边界；
+2. 负责 Post-training 对齐技术栈研发，主导 SFT、DPO、PPO 及 GRPO 等强化学习算法在数学逻辑、复杂代码生成与多步深度推理（System 2 Thinking）任务中的算法调优与工业落地；
+3. 负责大规模分布式训练工程攻坚，结合 Megatron-LM 与 DeepSpeed 源码改造 3D/4D 并行（TP, PP, DP, SP, CP），治理千卡/万卡长时间连续训练中的 Loss Spike、梯度异常及 Straggler 慢卡秒级自动隔离与容错自愈；
+4. 负责高性能推理服务化与量化落地，深度优化 vLLM / SGLang / TensorRT-LLM 引擎，推动 FP8 混合精度量化、投机采样（Speculative Decoding）与 Chunked Prefill 架构在大规模高并发场景的落地，持续降低单 Token 服务成本；
+5. 负责下一代企业级 Agent 架构基础设施建设，基于 Model Context Protocol (MCP) 与 GraphRAG 打造具备自省纠错（Reflection）、长短期记忆与复杂 Tool Calling 的智能体集群；
+6. 深入业务一线，与业务方保持紧密合作，推进前沿算法在核心产品场景的变现与落地，带领团队攻坚核心技术难题。
+
+【任职资格 · Must-Have 硬性要求】
+1. 计算机科学、人工智能、应用数学或相关专业硕士及以上学历，5 年以上深度学习算法与大规模分布式系统研发经验；
+2. 深度理解 Transformer 底层算子与注意力演进机制（RoPE, FlashAttention, SwiGLU, MLA），精通 PyTorch，熟练掌握并深入改造过 Megatron-LM、DeepSpeed 等分布式并行开源框架源码；
+3. 具备 128 卡以上（千卡独占集群经验优先）物理 GPU 集群上的全流程训练、通信调优与实战踩坑经历，深入理解各并行维度的通信量推导与显存分配预算；
+4. 熟练掌握 C++ 及 Python，具备扎实的系统工程素养，深入理解 CUDA / Triton 算子编写原理，精通 vLLM 或 TensorRT-LLM 内部调度与 PagedAttention 机制；
+5. 具备从 0 到 1 搭建体系的自驱力与极客精神，抗压能力强，拥抱变化，敢于在不确定性中寻找确定性，能够端到端对核心算法指标与系统稳定性负责。
+
+【优先条件 · Nice-to-Have 加分项】
+1. 在 NeurIPS, ICML, ICLR, ACL, KDD, CVPR 等人工智能顶级学术会议发表过第一作者（或共同一作）高水平论文；
+2. 作为核心贡献者主导或深度参与过头部开源大模型、分布式框架或推理引擎（如 vLLM, Megatron-LM, Llama-Index 等）项目，在 GitHub 拥有重要影响力的 Merged PR 或个人开源项目（Star > 1k）；
+3. 主导过千亿大模型从预训练、对齐到大规模生产环境商业化落地全流程，带来可量化的业务突破或千万级以上直接降本增效收益者优先。

@@ -1,0 +1,32 @@
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Generated reports and exports
+report.html
+*_report.html
+*.pdf
+*.docx
+*.log
+
+# Local anonymization maps and derived profiles
+*_map.json
+*deanon*.json
+*anon*.json
+*tailored_profile*.json
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

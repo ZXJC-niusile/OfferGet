@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "offerget"
+version = "1.0.0"
+description = "Local-first JD analysis, resume auditing, academic application, and offer strategy toolkit"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools]
+packages = ["core", "modules", "modules.jd_analyst"]

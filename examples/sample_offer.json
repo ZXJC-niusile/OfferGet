@@ -1,0 +1,63 @@
+{
+  "offer_metadata": {
+    "version": "1.0.0",
+    "issued_date": "2026-09-10",
+    "expiration_date": "2026-09-17"
+  },
+  "company": "智联前沿 (北京) 人工智能技术有限公司 (Frontier AI Unicorn)",
+  "role": "资深大模型算法架构师 / Tech Lead (Senior Staff LLM Architect)",
+  "department": "基础模型与智能体工程部 (Foundation Models & Agentic AI Lab)",
+  "location": "北京 · 望京核心区 / 支持部分远程弹性",
+  "base_salary_monthly": 75000.0,
+  "months_per_year": 15.0,
+  "performance_split": {
+    "fixed_ratio": 0.50,
+    "floating_ratio": 0.50,
+    "fixed_base_monthly": 37500.0,
+    "floating_performance_monthly": 37500.0,
+    "notes": "月度全额薪资由50%固定基本工资与50%浮动绩效工资构成，按月根据部门OKR完成度与个人产出综合折算。"
+  },
+  "target_bonus_months": 3.0,
+  "target_bonus_annual": 225000.0,
+  "sign_on_bonus": 50000.0,
+  "stock_rsu": {
+    "total_grant_value": 800000.0,
+    "currency": "CNY",
+    "vesting_years": 4,
+    "cliff_years": 2,
+    "vesting_schedule": "4年归属周期：满2年归属50%，第3年归属25%，第4年归属25%",
+    "liquidity": "pre_ipo",
+    "total_pool_disclosed": false,
+    "repurchase_clause": "若员工在公司成功IPO上市前因任何个人原因离职，公司有权按原始出资面值（每股人民币 0.01 元）全额强制回购所有已归属期权份额。"
+  },
+  "housing_fund": {
+    "rate": 0.12,
+    "monthly_employer_amount": 4200.0,
+    "is_statutory_capped": true
+  },
+  "probation": {
+    "duration_months": 6,
+    "salary_discount_rate": 0.70,
+    "pay_social_insurance": true,
+    "clause": "试用期约定为6个月，试用期期间月薪按正式薪资的 70% 发放（即 52,500 元/月），转正后补发差额不予支持。"
+  },
+  "non_compete": {
+    "applies": true,
+    "duration_months": 12,
+    "monthly_compensation_rate": 0.0,
+    "compensation_included_in_salary": true,
+    "scope": "离职后12个月内，不得在任何从事人工智能、大模型、云计算、互联网软件研发的企业及其关联分支机构任职或提供顾问咨询。",
+    "clause": "双方特别约定，员工月度发放薪酬中已全额包含离职后竞业限制经济补偿金，离职后用人单位不再另行按月支付竞业补偿。"
+  },
+  "working_hours_overtime": {
+    "system": "comprehensive",
+    "labor_bureau_approved": false,
+    "overtime_pay": "none",
+    "clause": "岗位推行综合工时制与弹性工作机制，员工月薪已包揽一切工作时间支出与项目紧急发版投入，公司不设加班费，夜间21:00后在岗可凭发票报销晚餐及加班打车费用。"
+  },
+  "candidate_expected": {
+    "expected_base_monthly": 90000.0,
+    "expected_total_annual": 1800000.0,
+    "notes": "候选人在终面及猎头沟通中明确表达期望固定底薪为 90,000 元/月，年度综合现金期望 180 万元人民币。"
+  }
+}

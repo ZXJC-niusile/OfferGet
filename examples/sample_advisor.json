@@ -1,0 +1,84 @@
+{
+  "advisor_profile_version": "1.0.0",
+  "name": "陈建平",
+  "en_name": "Prof. Jianping Chen",
+  "title": "长聘教授、博士生导师 (Tenured Full Professor)",
+  "honors": ["国家杰出青年科学基金获得者", "IEEE Fellow", "CCF 杰出会员"],
+  "institution": "清华大学 (Tsinghua University)",
+  "college": "计算机科学与技术系 (Department of Computer Science and Technology)",
+  "lab_name": "高可用智能计算与分布式系统实验室 (PACMAN & Intelligent Computing Systems Lab)",
+  "office": "清华大学东主楼 10-302",
+  "email": "jpchen@tsinghua.edu.cn",
+  "homepage": "https://pacman.cs.tsinghua.edu.cn/~jpchen",
+  "research_directions": [
+    "大模型大规模分布式训练与长文本推理系统 (Distributed LLM Training & Inference Systems)",
+    "AI 软硬件协同设计与算子自动生成/编译优化 (HW/SW Co-Design & AI Compilers/Triton Kernels)",
+    "分布式显存层级化管理与新型高速互连 (Heterogeneous Memory Tiering, CXL & Ultra-High-Speed Interconnects)",
+    "面向具身智能与大模型端侧部署的高性能基础设施 (Edge/Embodied AI System Infrastructures)"
+  ],
+  "representative_papers": [
+    {
+      "paper_id": "ADV-PUB-01",
+      "title": "MegaScale-2: Architecture and Infrastructure for 100,000-GPU LLM Training",
+      "venue": "USENIX Symposium on Operating Systems Design and Implementation (OSDI 2024)",
+      "ccf_rank": "CCF-A",
+      "tier": "System Top-1 Conference",
+      "authors": "Jianping Chen*, Z. Wang, L. Zhang, et al.",
+      "summary": "针对十万卡 GPU 集群训练大模型面临的网络拥塞、硬件故障频发与集体通信瓶颈，提出面向超大规模集群的容错通信拓扑与异步梯度聚合协议，将有效训练可用率提升至 99.1%。"
+    },
+    {
+      "paper_id": "ADV-PUB-02",
+      "title": "FlashFlow: Ultra-Low Latency LLM Serving via Decoupled Prefill-Decode Disaggregation",
+      "venue": "ACM Symposium on Operating Systems Principles (SOSP 2024)",
+      "ccf_rank": "CCF-A",
+      "tier": "System Top-1 Conference",
+      "authors": "H. Liu, Jianping Chen*, Y. Zhao, et al.",
+      "summary": "提出计算与内存解耦的 Prefill-Decode 分离式推理调度范式，结合动态 RDMA 远程显存池化，消除长 Prompt 干扰，P99 首字生成延迟降低 72%。"
+    },
+    {
+      "paper_id": "ADV-PUB-03",
+      "title": "Dual-Gated Speculative Routing for Trillion-Parameter Mixture-of-Experts",
+      "venue": "Advances in Neural Information Processing Systems (NeurIPS 2024 Spotlight)",
+      "ccf_rank": "CCF-A",
+      "tier": "AI Top-1 Conference",
+      "authors": "Y. Song, Shuyang Lin, Jianping Chen*, et al.",
+      "summary": "针对万亿参数 MoE 路由倾斜与跨节点通信瓶颈，构建投机式双门控路由理论与高速算子内核，零精度损失下吞吐提升 1.85x。"
+    },
+    {
+      "paper_id": "ADV-PUB-04",
+      "title": "CXL-MemOpt: Efficient Memory Tiering and Cache Management for Large Scale Recommender Systems",
+      "venue": "ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS 2024)",
+      "ccf_rank": "CCF-A",
+      "tier": "Architecture/System Top-1 Conference",
+      "authors": "W. Qian, Jianping Chen*, X. Sun, et al.",
+      "summary": "基于 CXL 3.0 内存池化协议设计亚微秒级冷热数据迁移引擎，在降低 60% 物理内存硬件成本的同时保持吞吐不下降。"
+    }
+  ],
+  "lab_compute_resources": {
+    "dedicated_gpu_cluster": "实验室专属万卡调度池及 256 卡独立自建集群：128x NVIDIA H800 SXM5 80GB + 128x NVIDIA A100 80GB SXM4",
+    "network_interconnect": "全互连无阻塞 NVIDIA Quantum-2 800Gbps NDR InfiniBand 与 RoCE v2 400Gbps 双平面高速网络",
+    "storage_system": "4PB 全闪 NVMe-over-Fabrics Lustre 并行分布式文件系统 (聚合读写带宽高达 800GB/s)",
+    "per_student_quota": "博士生平均独占 8-16 张顶级 GPU，新生入组首月即配属 4 张 A100 专用算力节点，不设算力壁垒"
+  },
+  "prospective_student_expectations": {
+    "enrollment_quotas_2025": {
+      "phd_direct": 2,
+      "master_academic": 1,
+      "master_professional": 1,
+      "joint_phd": 1
+    },
+    "preferred_background": [
+      "本科就读于 985 高水平高校计算机、软件工程、电子工程或交叉学科，专业排名通常在专业前 3%（强基础）",
+      "对具备顶级会议（如 OSDI/SOSP/ASPLOS/EuroSys/NeurIPS/ICLR/SIGCOMM）论文发表经历或在顶级开源项目核心模块贡献突出者，排名要求可适当放宽至前 10%",
+      "数理基础扎实：高等数学、线性代数、离散数学均在 90 分以上；英语 CET-6 560+ 或具备无障碍英文口头学术汇报能力"
+    ],
+    "technical_skills": [
+      "精通 C/C++ (C++17/20) 与 Python，具备扎实的操作系统、计算机体系结构与计算机网络系统编程经验",
+      "熟悉 Linux 内核、系统调用调试（gdb/perf/strace）或 CUDA/Triton 异构并行编程者优先考虑",
+      "ACM-ICPC / CCPC 区域赛银奖以上、全国大学生电子设计竞赛国一、或全国高性能计算挑战赛获奖者优先考虑"
+    ],
+    "research_motivation_and_mindset": "对计算机体系结构、大模型基础设施有强烈好奇心与内生科研自驱力；拒绝为了毕业而制造垃圾论文，坚持做‘高影响力、可工业落地或开创新领域’的硬核研究。",
+    "advising_style_and_culture": "实行紧密师生导师负责制：导师坚持亲自指导一线代码与实验架构，每周固定 1-on-1 深入科研研讨 60-90 分钟；支持并全额资助学生赴海外参加国际顶级学术会议（口头报告或参会）；倡导健康科研，不提倡无意义的加班打卡。",
+    "financial_support_and_stipend": "提供国内第一梯队研究生助研津贴 (博士生 7,000 - 12,000 元/月，硕士生 3,500 - 6,000 元/月)；设立顶会论文高额奖学金（CCF-A 论文奖励每篇 10,000 - 20,000 元）；全额报销实验算力云资源与论文版面费。"
+  }
+}

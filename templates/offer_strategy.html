@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Offer Strategy Report · {{COMPANY}} × {{ROLE}} — {{CANDIDATE_NAME}}</title>
+<!-- Google Fonts for CJK & Precision Typography -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-page: #f8fafc;
+    --bg-card: #ffffff;
+    --bg-subtle: #f1f5f9;
+    --bg-hover: #e2e8f0;
+    --ink-primary: #0f172a;
+    --ink-secondary: #334155;
+    --ink-muted: #64748b;
+    --ink-faint: #94a3b8;
+    --border-main: #e2e8f0;
+    --border-subtle: #cbd5e1;
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --primary-dark: #1d4ed8;
+    --success: #10b981;
+    --success-light: #ecfdf5;
+    --success-border: #a7f3d0;
+    --warning: #f59e0b;
+    --warning-light: #fffbeb;
+    --warning-border: #fde68a;
+    --danger: #ef4444;
+    --danger-light: #fef2f2;
+    --danger-border: #fecaca;
+    --font-main: "Plus Jakarta Sans", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+  }
+
+  /* Language Switching Core Rules */
+  html[lang="en"] [data-lang="zh"] { display: none !important; }
+  html[lang="zh"] [data-lang="en"] { display: none !important; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background-color: var(--bg-page);
+    color: var(--ink-primary);
+    font-family: var(--font-main);
+    font-size: 15px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 1020px;
+    margin: 0 auto;
+    padding: 40px 24px 120px;
+  }
+
+  /* Top Control Toolbar */
+  .top-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-md);
+    padding: 12px 20px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+  }
+  .brand-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -0.01em;
+  }
+  .brand-logo {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: white;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+  }
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .btn-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border-main);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-tool:hover {
+    background: var(--bg-hover);
+    color: var(--ink-primary);
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary-dark);
+  }
+  .btn-primary:hover {
+    background: var(--primary-dark);
+    color: white;
+  }
+
+  /* Header Section */
+  .report-header {
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    padding: 36px 40px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
+  }
+  .report-header::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #2563eb, #3b82f6, #10b981);
+  }
+  .header-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+  .header-title {
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--ink-primary);
+    margin-bottom: 12px;
+  }
+  .header-subtitle {
+    font-size: 16px;
+    color: var(--ink-secondary);
+    margin-bottom: 24px;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-main);
+  }
+  .meta-item .meta-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .meta-item .meta-val {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-primary);
+  }
+
+  /* Verdict Hero Banner */
+  .verdict-banner {
+    background: linear-gradient(145deg, #0f172a, #1e293b);
+    color: #f8fafc;
+    border-radius: var(--radius-lg);
+    padding: 36px 40px;
+    margin-bottom: 36px;
+    box-shadow: var(--shadow-lg);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+    align-items: center;
+  }
+  .verdict-left .verdict-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #38bdf8;
+    margin-bottom: 10px;
+  }
+  .verdict-left h2 {
+    font-size: 28px;
+    font-weight: 800;
+    line-height: 1.25;
+    margin-bottom: 12px;
+    color: #ffffff;
+  }
+  .verdict-left p {
+    font-size: 14px;
+    color: #94a3b8;
+    line-height: 1.6;
+    max-width: 600px;
+  }
+  .verdict-score {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .score-badge-large {
+    font-size: 42px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: #10b981;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .score-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #94a3b8;
+  }
+
+  /* Metric Gauges Row */
+  .gauges-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 40px;
+  }
+  .gauge-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-md);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .gauge-card-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .gauge-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+  }
+  .gauge-svg-wrap {
+    width: 220px;
+    height: 120px;
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
+  .gauge-inner-val {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+  }
+  .gauge-num {
+    font-size: 34px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    color: var(--ink-primary);
+    line-height: 1;
+  }
+  .gauge-desc {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--ink-secondary);
+    line-height: 1.5;
+  }
+  .gauge-breakdown {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-main);
+  }
+  .sub-metric .sub-num {
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink-primary);
+  }
+  .sub-metric .sub-lbl {
+    font-size: 10px;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* Section Styles */
+  .section-block {
+    background: var(--bg-card);
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-lg);
+    padding: 32px;
+    margin-bottom: 32px;
+    box-shadow: var(--shadow-sm);
+  }
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-main);
+  }
+  .section-title-wrap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  .section-idx {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+  .section-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--ink-primary);
+  }
+  .section-badge {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--ink-muted);
+  }
+
+  /* Table Styles */
+  .table-responsive {
+    overflow-x: auto;
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-sm);
+  }
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    text-align: left;
+  }
+  table.data-table th {
+    background: var(--bg-subtle);
+    color: var(--ink-secondary);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-main);
+  }
+  table.data-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-main);
+    vertical-align: top;
+    line-height: 1.55;
+  }
+  table.data-table tr:last-child td {
+    border-bottom: none;
+  }
+  table.data-table tr:hover {
+    background: rgba(241, 245, 249, 0.5);
+  }
+
+  /* Status Tags */
+  .tag-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .tag-success { background: var(--success-light); color: var(--success); border: 1px solid var(--success-border); }
+  .tag-warning { background: var(--warning-light); color: var(--warning); border: 1px solid var(--warning-border); }
+  .tag-danger { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger-border); }
+
+  /* Must-Have Cards Grid */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .cred-card {
+    border: 1px solid var(--border-main);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius-sm);
+    padding: 18px 20px;
+    background: #ffffff;
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .cred-card.match-full { border-left-color: var(--success); }
+  .cred-card.match-partial { border-left-color: var(--warning); }
+  .cred-card.match-gap { border-left-color: var(--danger); }
+  .cred-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .cred-req {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--ink-primary);
+  }
+  .cred-evidence {
+    font-size: 13px;
+    color: var(--ink-secondary);
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+  .cred-nuance {
+    font-size: 12px;
+    color: var(--ink-muted);
+    background: var(--bg-subtle);
+    padding: 6px 12px;
+    border-radius: 4px;
+  }
+
+  /* Gap Fix Cards */
+  .gap-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .gap-card {
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .gap-card.high { border-top: 3px solid var(--danger); }
+  .gap-card.med { border-top: 3px solid var(--warning); }
+  .gap-card.low { border-top: 3px solid var(--primary); }
+  .gap-card-top { margin-bottom: 14px; }
+  .gap-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink-primary);
+    margin: 8px 0 6px;
+  }
+  .gap-card-probe {
+    font-size: 12.5px;
+    color: var(--ink-secondary);
+    line-height: 1.5;
+  }
+  .gap-fix-plan {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed var(--border-main);
+    font-size: 12px;
+    color: var(--ink-primary);
+    font-weight: 500;
+  }
+
+  /* Interview Prediction Collapsible Cards */
+  .questions-container {
+    display: grid;
+    gap: 12px;
+  }
+  details.q-card {
+    border: 1px solid var(--border-main);
+    border-radius: var(--radius-sm);
+    background: #ffffff;
+    overflow: hidden;
+    transition: all 0.2s;
+  }
+  details.q-card[open] {
+    border-color: var(--primary);
+    box-shadow: var(--shadow-sm);
+  }
+  summary.q-header {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-primary);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card);
+    user-select: none;
+  }
+  summary.q-header::-webkit-details-marker { display: none; }
+  .q-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .q-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-subtle);
+    color: var(--ink-secondary);
+  }
+  .q-body {
+    padding: 16px 20px 20px;
+    border-top: 1px solid var(--border-main);
+    background: var(--bg-subtle);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  .q-field {
+    margin-bottom: 12px;
+  }
+  .q-field-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  .q-field-content {
+    color: var(--ink-secondary);
+  }
+
+  /* Floating Language Switcher */
+  .floating-lang-toggle {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #ffffff;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 4px;
+    display: flex;
+    gap: 2px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1000;
+  }
+  .lang-btn {
+    border: none;
+    background: transparent;
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  html[lang="en"] .lang-btn-en {
+    background: var(--primary);
+    color: #ffffff;
+  }
+  html[lang="zh"] .lang-btn-zh {
+    background: var(--primary);
+    color: #ffffff;
+  }
+
+  /* Footer */
+  .report-footer {
+    text-align: center;
+    padding: 48px 0 24px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .footer-brand {
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    color: var(--ink-primary);
+    margin-bottom: 6px;
+  }
+
+  @media (max-width: 768px) {
+    .gauges-row { grid-template-columns: 1fr; }
+    .verdict-banner { grid-template-columns: 1fr; }
+    .verdict-score { align-items: flex-start; text-align: left; margin-top: 12px; }
+  }
+
+  @media print {
+    .floating-lang-toggle, .top-toolbar { display: none !important; }
+    body { background: white; }
+    .container { max-width: 100%; padding: 0; }
+    .section-block { break-inside: avoid; border: 1px solid #ccc; box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Top Toolbar -->
+  <header class="top-toolbar">
+    <div class="brand-badge">
+      <div class="brand-logo">OG</div>
+      <div>
+        <span>OfferGet · <span data-lang="en">Strategy OS</span><span data-lang="zh">录用策略操作系统</span></span>
+      </div>
+    </div>
+    <div class="toolbar-actions">
+      <button class="btn-tool" onclick="window.print()" title="Print / PDF">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/></svg>
+        <span data-lang="en">Print / PDF</span><span data-lang="zh">打印 / PDF</span>
+      </button>
+      <button class="btn-tool btn-primary" onclick="exportDOMToMarkdown()" title="Export Markdown">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+        <span data-lang="en">Export MD</span><span data-lang="zh">导出 Markdown</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Report Header -->
+  <div class="report-header">
+    <div class="header-meta">
+      <span>{{COMPANY}}</span>
+      <span>•</span>
+      <span>{{ROLE}}</span>
+      <span>•</span>
+      <span>{{LEVEL}}</span>
+      <span>•</span>
+      <span>{{LOCATION}}</span>
+    </div>
+    <h1 class="header-title">{{ROLE_TITLE}}</h1>
+    <p class="header-subtitle">
+      <span data-lang="en">Strategic Job Description & Candidate Alignment Report for</span><span data-lang="zh">岗位深度解码与候选人全景匹配战略报告，面向</span>
+      <strong>{{CANDIDATE_NAME}}</strong>
+    </p>
+    <div class="meta-grid">
+      <div class="meta-item">
+        <div class="meta-label"><span data-lang="en">Target Comp Band</span><span data-lang="zh">目标薪资带宽</span></div>
+        <div class="meta-val">{{COMP_BAND}}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label"><span data-lang="en">Assessment Date</span><span data-lang="zh">评估基准时间</span></div>
+        <div class="meta-val">{{REPORT_DATE}}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label"><span data-lang="en">Target Department</span><span data-lang="zh">目标业务部门</span></div>
+        <div class="meta-val">{{DEPARTMENT}}</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label"><span data-lang="en">Architecture Layer</span><span data-lang="zh">架构定位图层</span></div>
+        <div class="meta-val">{{ARCHITECTURE_LAYER}}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Verdict Banner -->
+  <div class="verdict-banner">
+    <div class="verdict-left">
+      <div class="verdict-tag">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <span data-lang="en">Executive Verdict · Go / No-Go</span><span data-lang="zh">核心结论 · 投递决策建议</span>
+      </div>
+      <h2>
+        <span data-lang="en">{{VERDICT_TITLE_EN}}</span><span data-lang="zh">{{VERDICT_TITLE_ZH}}</span>
+      </h2>
+      <p>
+        <span data-lang="en">{{VERDICT_DESC_EN}}</span><span data-lang="zh">{{VERDICT_DESC_ZH}}</span>
+      </p>
+    </div>
+    <div class="verdict-score">
+      <div class="score-badge-large">{{MATCH_SCORE_NUM}}%</div>
+      <div class="score-label"><span data-lang="en">Overall Fit Score</span><span data-lang="zh">综合契合指数</span></div>
+    </div>
+  </div>
+
+  <!-- Metric Gauges Row -->
+  <div class="gauges-row">
+    <!-- Match Score Gauge -->
+    <div class="gauge-card">
+      <div class="gauge-card-header">
+        <span class="gauge-title"><span data-lang="en">Core Match Score</span><span data-lang="zh">能力匹配指数</span></span>
+        <span class="tag-status tag-success"><span data-lang="en">High Match</span><span data-lang="zh">高度匹配</span></span>
+      </div>
+      <div class="gauge-svg-wrap">
+        <svg width="200" height="100" viewBox="0 0 200 100">
+          <path d="M 20 90 A 70 70 0 0 1 180 90" fill="none" stroke="#e2e8f0" stroke-width="16" stroke-linecap="round"/>
+          <path d="M 20 90 A 70 70 0 0 1 180 90" fill="none" stroke="#10b981" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="251.3" stroke-dashoffset="{{MATCH_GAUGE_OFFSET}}"/>
+        </svg>
+        <div class="gauge-inner-val">
+          <div class="gauge-num">{{MATCH_SCORE_NUM}}%</div>
+        </div>
+      </div>
+      <div class="gauge-desc">
+        <span data-lang="en">Composite score weighted across Must-Haves (60%), Nice-to-Haves (20%), and Culture Fit (20%).</span><span data-lang="zh">综合加权计算：硬性要求占 60%，加分项占 20%，团队与隐性契合占 20%。</span>
+      </div>
+      <div class="gauge-breakdown">
+        <div class="sub-metric">
+          <div class="sub-num">{{MUST_HAVE_SCORE}}%</div>
+          <div class="sub-lbl"><span data-lang="en">Must-Have</span><span data-lang="zh">硬性指标</span></div>
+        </div>
+        <div class="sub-metric">
+          <div class="sub-num">{{NICE_HAVE_SCORE}}%</div>
+          <div class="sub-lbl"><span data-lang="en">Nice-Have</span><span data-lang="zh">加分指标</span></div>
+        </div>
+        <div class="sub-metric">
+          <div class="sub-num">{{HIDDEN_FIT_SCORE}}%</div>
+          <div class="sub-lbl"><span data-lang="en">Culture Fit</span><span data-lang="zh">隐性契合</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interview Probability Gauge -->
+    <div class="gauge-card">
+      <div class="gauge-card-header">
+        <span class="gauge-title"><span data-lang="en">Interview Pass Probability</span><span data-lang="zh">面试通关预估</span></span>
+        <span class="tag-status tag-success"><span data-lang="en">Prime Tier</span><span data-lang="zh">极高概率</span></span>
+      </div>
+      <div class="gauge-svg-wrap">
+        <svg width="200" height="100" viewBox="0 0 200 100">
+          <path d="M 20 90 A 70 70 0 0 1 180 90" fill="none" stroke="#e2e8f0" stroke-width="16" stroke-linecap="round"/>
+          <path d="M 20 90 A 70 70 0 0 1 180 90" fill="none" stroke="#2563eb" stroke-width="16" stroke-linecap="round"
+                stroke-dasharray="251.3" stroke-dashoffset="{{PROB_GAUGE_OFFSET}}"/>
+        </svg>
+        <div class="gauge-inner-val">
+          <div class="gauge-num">{{INTERVIEW_PROB_NUM}}%</div>
+        </div>
+      </div>
+      <div class="gauge-desc">
+        <span data-lang="en">Estimated probability of passing technical rounds and receiving an offer with strategic narrative alignment.</span><span data-lang="zh">基于证据链完备度、顶会背书及工程踩坑深度预估的技术终面通过率。</span>
+      </div>
+      <div class="gauge-breakdown">
+        <div class="sub-metric">
+          <div class="sub-num">4.8 / 5.0</div>
+          <div class="sub-lbl"><span data-lang="en">Pedigree</span><span data-lang="zh">背景背书</span></div>
+        </div>
+        <div class="sub-metric">
+          <div class="sub-num">4.9 / 5.0</div>
+          <div class="sub-lbl"><span data-lang="en">Hard Tech</span><span data-lang="zh">硬核技术</span></div>
+        </div>
+        <div class="sub-metric">
+          <div class="sub-num">4.7 / 5.0</div>
+          <div class="sub-lbl"><span data-lang="en">Architecture</span><span data-lang="zh">架构广度</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 1: 5-Layer JD Decomposition -->
+  <section class="section-block" id="jd-layers">
+    <div class="section-header">
+      <div class="section-title-wrap">
+        <span class="section-idx">01</span>
+        <h3 class="section-title"><span data-lang="en">5-Layer Job Description Decoding</span><span data-lang="zh">五图层职位深度穿透解码</span></h3>
+      </div>
+      <span class="section-badge"><span data-lang="en">Methodology</span><span data-lang="zh">方法论映射</span></span>
+    </div>
+    <div class="table-responsive">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width: 20%;"><span data-lang="en">Layer</span><span data-lang="zh">图层名称</span></th>
+            <th style="width: 40%;"><span data-lang="en">JD Text & Stated Objective</span><span data-lang="zh">JD 文字与表层诉求</span></th>
+            <th style="width: 40%;"><span data-lang="en">Unspoken Reality & Core Priority</span><span data-lang="zh">组织潜台词与真实考核重心</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Layer 1: <span data-lang="en">Organization & Mission</span><span data-lang="zh">组织坐标与使命</span></strong></td>
+            <td><span data-lang="en">{{L1_JD_TEXT_EN}}</span><span data-lang="zh">{{L1_JD_TEXT_ZH}}</span></td>
+            <td><span data-lang="en">{{L1_REALITY_EN}}</span><span data-lang="zh">{{L1_REALITY_ZH}}</span></td>
+          </tr>
+          <tr>
+            <td><strong>Layer 2: <span data-lang="en">Hard Tech Architecture</span><span data-lang="zh">核心硬性技术架构</span></strong></td>
+            <td><span data-lang="en">{{L2_JD_TEXT_EN}}</span><span data-lang="zh">{{L2_JD_TEXT_ZH}}</span></td>
+            <td><span data-lang="en">{{L2_REALITY_EN}}</span><span data-lang="zh">{{L2_REALITY_ZH}}</span></td>
+          </tr>
+          <tr>
+            <td><strong>Layer 3: <span data-lang="en">Product & Business Impact</span><span data-lang="zh">业务落地与协同</span></strong></td>
+            <td><span data-lang="en">{{L3_JD_TEXT_EN}}</span><span data-lang="zh">{{L3_JD_TEXT_ZH}}</span></td>
+            <td><span data-lang="en">{{L3_REALITY_EN}}</span><span data-lang="zh">{{L3_REALITY_ZH}}</span></td>
+          </tr>
+          <tr>
+            <td><strong>Layer 4: <span data-lang="en">Implicit Filters</span><span data-lang="zh">隐性门槛与黑话</span></strong></td>
+            <td><span data-lang="en">{{L4_JD_TEXT_EN}}</span><span data-lang="zh">{{L4_JD_TEXT_ZH}}</span></td>
+            <td><span data-lang="en">{{L4_REALITY_EN}}</span><span data-lang="zh">{{L4_REALITY_ZH}}</span></td>
+          </tr>
+          <tr>
+            <td><strong>Layer 5: <span data-lang="en">Red Flags & KPI Reality</span><span data-lang="zh">红旗陷阱与考核底线</span></strong></td>
+            <td><span data-lang="en">{{L5_JD_TEXT_EN}}</span><span data-lang="zh">{{L5_JD_TEXT_ZH}}</span></td>
+            <td><span data-lang="en">{{L5_REALITY_EN}}</span><span data-lang="zh">{{L5_REALITY_ZH}}</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 2: Must-Have Credential Match Cards -->
+  <section class="section-block" id="match-cards">
+    <div class="section-header">
+      <div class="section-title-wrap">
+        <span class="section-idx">02</span>
+        <h3 class="section-title"><span data-lang="en">Must-Have Credential Match Matrix</span><span data-lang="zh">核心硬性要求凭证比对</span></h3>
+      </div>
+      <span class="section-badge"><span data-lang="en">Evidence-Based</span><span data-lang="zh">事实链核验</span></span>
+    </div>
+    <div class="card-grid">
+      <!-- Card 1 -->
+      <div class="cred-card match-full">
+        <div class="cred-card-header">
+          <div class="cred-req">
+            <span data-lang="en">1. Distributed Training & Megatron-LM Internals</span><span data-lang="zh">1. 大规模分布式并行训练与 Megatron 源码定制</span>
+          </div>
+          <span class="tag-status tag-success"><span data-lang="en">Full Match · 100%</span><span data-lang="zh">完全命中 · 100%</span></span>
+        </div>
+        <div class="cred-evidence">
+          <strong><span data-lang="en">Candidate Claim & Evidence:</span><span data-lang="zh">候选人凭证与量化战果：</span></strong>
+          <span data-lang="en">Led 64B Dense and 230B MoE pre-training on 1,024 H800 GPUs using customized Megatron-LM; fused Sequence & Context Parallelism to boost MFU from 38.5% to 54.2%.</span><span data-lang="zh">主导 64B Dense 及 230B MoE 在 1024 卡 H800 集群预训练，深度融合 SP 与 CP，模型 MFU 从 38.5% 跃升至 54.2%，提前 3 周交付。</span>
+        </div>
+        <div class="cred-nuance">
+          <span data-lang="en">HM Nuance: Evaluator will probe for NCCL timeout root causes and straggler isolation latency in multi-node topologies.</span><span data-lang="zh">面试官关注点：将深度追问跨节点通信超时根因排查及秒级自动隔离容错机制。</span>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="cred-card match-full">
+        <div class="cred-card-header">
+          <div class="cred-req">
+            <span data-lang="en">2. Post-Training RL Alignment (GRPO / PPO / DPO)</span><span data-lang="zh">2. 后训练强化学习推理对齐 (GRPO / PPO / DPO)</span>
+          </div>
+          <span class="tag-status tag-success"><span data-lang="en">Full Match · 100%</span><span data-lang="zh">完全命中 · 100%</span></span>
+        </div>
+        <div class="cred-evidence">
+          <strong><span data-lang="en">Candidate Claim & Evidence:</span><span data-lang="zh">候选人凭证与量化战果：</span></strong>
+          <span data-lang="en">Pioneered Critic-free GRPO alignment pipeline with step-level process reward models (PRM), cutting VRAM by 48% and boosting MATH accuracy by +11.6%.</span><span data-lang="zh">落地无 Critic 网络的 GRPO 纯强化学习管线与过程奖励模型，训练显存骤降 48%，MATH 准确率净增 11.6%。</span>
+        </div>
+        <div class="cred-nuance">
+          <span data-lang="en">HM Nuance: Highlight your hands-on mathematical derivation of group relative advantage normalization.</span><span data-lang="zh">面试官关注点：展现组内相对优势归一化的数学推导及长思考链语言一致性惩罚设计。</span>
+        </div>
+      </div>
+
+      <!-- Card 3 -->
+      <div class="cred-card match-full">
+        <div class="cred-card-header">
+          <div class="cred-req">
+            <span data-lang="en">3. High-Throughput Serving & FP8 Quantization</span><span data-lang="zh">3. 高性能推理服务化与 FP8 混合精度量化</span>
+          </div>
+          <span class="tag-status tag-success"><span data-lang="en">Full Match · 95%</span><span data-lang="zh">完全命中 · 95%</span></span>
+        </div>
+        <div class="cred-evidence">
+          <strong><span data-lang="en">Candidate Claim & Evidence:</span><span data-lang="zh">候选人凭证与量化战果：</span></strong>
+          <span data-lang="en">Customized vLLM with FP8 (E4M3) and Speculative Decoding, driving 62% per-token cost drop and saving 38M RMB annually.</span><span data-lang="zh">自研基于 vLLM 的 FP8 权重/KV-Cache 动态量化与投机采样服务中台，单 Token 成本降 62%，年均省算力开销 3800 万元。</span>
+        </div>
+        <div class="cred-nuance">
+          <span data-lang="en">HM Nuance: Prepare detailed comparison between Chunked Prefill and Continuous Batching trade-offs.</span><span data-lang="zh">面试官关注点：准备好应对 Chunked Prefill 调度与首字响应时间 (TTFT) 优化的细节盘问。</span>
+        </div>
+      </div>
+
+      <!-- Card 4 -->
+      <div class="cred-card match-full">
+        <div class="cred-card-header">
+          <div class="cred-req">
+            <span data-lang="en">4. Agent Architecture, MCP & GraphRAG</span><span data-lang="zh">4. 工业级 Agent 智能体架构、MCP 协议与 GraphRAG</span>
+          </div>
+          <span class="tag-status tag-success"><span data-lang="en">Full Match · 95%</span><span data-lang="zh">完全命中 · 95%</span></span>
+        </div>
+        <div class="cred-evidence">
+          <strong><span data-lang="en">Candidate Claim & Evidence:</span><span data-lang="zh">候选人凭证与量化战果：</span></strong>
+          <span data-lang="en">Created Enterprise-Agent-OS (3.4k GitHub Stars) with Model Context Protocol (MCP) and Grammar-Guided Decoding for 100% compliant JSON Schema output.</span><span data-lang="zh">主导开源 Enterprise-Agent-OS（GitHub 3400+ Star），基于 MCP 协议与语法引导解码实现 100% 结构化输出保证。</span>
+        </div>
+        <div class="cred-nuance">
+          <span data-lang="en">HM Nuance: Explain how you prevent deadlocks and infinite reflection loops in multi-agent workflows.</span><span data-lang="zh">面试官关注点：重点阐述多智能体协同中的死循环检测及确定性降级 Fallback 机制。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Gap Analysis & 4-Week Remediation -->
+  <section class="section-block" id="gap-remediation">
+    <div class="section-header">
+      <div class="section-title-wrap">
+        <span class="section-idx">03</span>
+        <h3 class="section-title"><span data-lang="en">Gap Analysis & 4-Week Actionable Remediation</span><span data-lang="zh">潜在缺口分析与 4 周靶向修复方案</span></h3>
+      </div>
+      <span class="section-badge"><span data-lang="en">Mitigation</span><span data-lang="zh">风险防御</span></span>
+    </div>
+    <div class="gap-grid">
+      <!-- Gap Card 1 -->
+      <div class="gap-card high">
+        <div class="gap-card-top">
+          <span class="tag-status tag-danger"><span data-lang="en">High Priority</span><span data-lang="zh">高优先级</span></span>
+          <div class="gap-card-title"><span data-lang="en">Proprietary Mobile / Edge NPU Deployment</span><span data-lang="zh">端侧移动芯片/NPU 极端轻量化部署经验</span></div>
+          <p class="gap-card-probe">
+            <span data-lang="en">Why HM will probe: JD mentions potential edge-side multimodal deployment; candidate profile focuses predominantly on cloud server clusters.</span><span data-lang="zh">面试官质疑点：JD 提及部分端云协同多模态场景，候选人背景偏向云端超大集群，缺乏端侧 NPU 经验。</span>
+          </p>
+        </div>
+        <div class="gap-fix-plan">
+          <strong><span data-lang="en">4-Week Fix:</span><span data-lang="zh">4周补齐方案：</span></strong>
+          <span data-lang="en">Review Apple MLX / Qualcomm NPU quantization runtimes; prepare a concrete architectural narrative on cloud-edge collaborative distillation.</span><span data-lang="zh">精读 MLX 及高通 NPU 量化运行时，准备一套云端千亿基座蒸馏至端侧 2B 模型的协同架构方案。</span>
+        </div>
+      </div>
+
+      <!-- Gap Card 2 -->
+      <div class="gap-card med">
+        <div class="gap-card-top">
+          <span class="tag-status tag-warning"><span data-lang="en">Medium Priority</span><span data-lang="zh">中优先级</span></span>
+          <div class="gap-card-title"><span data-lang="en">Domain-Specific Financial / Medical Corpus</span><span data-lang="zh">特定金融或医疗垂直领域语料深度清洗</span></div>
+          <p class="gap-card-probe">
+            <span data-lang="en">Why HM will probe: Team's upcoming quarter emphasizes vertical enterprise data flywheels where uncurated noise degrades domain reasoning.</span><span data-lang="zh">面试官质疑点：团队下季度侧重垂直行业落地，需验证是否具备处理真实高噪声业务语料的清洗能力。</span>
+          </p>
+        </div>
+        <div class="gap-fix-plan">
+          <strong><span data-lang="en">4-Week Fix:</span><span data-lang="zh">4周补齐方案：</span></strong>
+          <span data-lang="en">Formalize your synthetic data Evol-Instruct pipeline into a reusable domain adaptation framework with automated schema verifiers.</span><span data-lang="zh">将开源项目中的高质量合成数据清洗管线提炼为标准化行业数据飞轮方案，突出自动化语法校验器。</span>
+        </div>
+      </div>
+
+      <!-- Gap Card 3 -->
+      <div class="gap-card low">
+        <div class="gap-card-top">
+          <span class="tag-status tag-success"><span data-lang="en">Low / Polish</span><span data-lang="zh">润色优化</span></span>
+          <div class="gap-card-title"><span data-lang="en">Cross-Functional Executive Storytelling</span><span data-lang="zh">面向非技术高管的商业 ROI 叙事表达</span></div>
+          <p class="gap-card-probe">
+            <span data-lang="en">Why HM will probe: VP-level round will evaluate whether the candidate can translate complex loss metrics into tangible P&L gains.</span><span data-lang="zh">面试官质疑点：VP 轮将考核候选人能否跳脱出纯算法术语，用商业语言向高层阐述技术投入产出比。</span>
+          </p>
+        </div>
+        <div class="gap-fix-plan">
+          <strong><span data-lang="en">4-Week Fix:</span><span data-lang="zh">4周补齐方案：</span></strong>
+          <span data-lang="en">Rehearse the '38M RMB Annual Savings' case study with explicit cost-per-query breakdown charts.</span><span data-lang="zh">演练“年均节省 3800 万元算力”的商业案例，强化单 Query 综合推理成本对比图表。</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 4: Top 20 Technical Interview Predictions -->
+  <section class="section-block" id="interview-bank">
+    <div class="section-header">
+      <div class="section-title-wrap">
+        <span class="section-idx">04</span>
+        <h3 class="section-title"><span data-lang="en">Top 20 Technical Interview Predictions</span><span data-lang="zh">大厂大模型技术面试 Top 20 深度押题</span></h3>
+      </div>
+      <span class="section-badge"><span data-lang="en">Deep Probing</span><span data-lang="zh">高频硬核题库</span></span>
+    </div>
+    
+    <div class="questions-container">
+      <!-- Q01 -->
+      <details class="q-card" open>
+        <summary class="q-header">
+          <span>Q01: <span data-lang="en">3D/4D Parallel Configuration & Communication Theory</span><span data-lang="zh">千卡集群 3D/4D 并行维度配置与通信量推导</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Pre-training</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Why Hiring Manager Asks This:</span><span data-lang="zh">面试官考核意图：</span></div>
+            <div class="q-field-content"><span data-lang="en">Verifies whether candidate can balance NVLink intra-node bandwidth with inter-node InfiniBand topology to avoid pipeline bubbles.</span><span data-lang="zh">考核候选人是否能精确权衡机内 NVLink 与机间 IB 通信瓶颈，避免流水线气泡浪费昂贵算力。</span></div>
+          </div>
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Answer Framework:</span><span data-lang="zh">标准回答骨架与加分点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Map TP to intra-node (TP8), distribute PP and DP/ZeRO across nodes. Cite 1F1B bubble ratio formula (p-1)/m and Interleaved schedule gains.</span><span data-lang="zh">机内满打 TP8，机间走 PP+DP(ZeRO-1)。推导 1F1B 气泡率公式 (p-1)/m，并说明交错式 1F1B 对显存与气泡的优化。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q02 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q02: <span data-lang="en">Megatron-LM Sequence Parallelism & Comm Primitives</span><span data-lang="zh">Megatron-LM Sequence Parallel 原理与底层通信算子</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Megatron</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Why Hiring Manager Asks This:</span><span data-lang="zh">面试官考核意图：</span></div>
+            <div class="q-field-content"><span data-lang="en">Checks if candidate has modified Megatron source code to eliminate LayerNorm/Dropout activation bottlenecks.</span><span data-lang="zh">考察候选人是否通读并改造过源码，理解 LayerNorm 和 Dropout 显存切分机制。</span></div>
+          </div>
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Answer Framework:</span><span data-lang="zh">标准回答骨架与加分点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Explain how Reduce-Scatter replaces All-Reduce after Attention, and All-Gather precedes MLP, achieving zero extra communication overhead.</span><span data-lang="zh">阐明 Reduce-Scatter 代替 All-Reduce，Attention 前用 All-Gather 收集激活值，通信总量保持恒定。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q03 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q03: <span data-lang="en">Diagnosing 1,000-GPU Loss Spikes & Hardware Stragglers</span><span data-lang="zh">千卡训练中 Loss Spike 发散与 Straggler 慢卡秒级定位</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Reliability</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Why Hiring Manager Asks This:</span><span data-lang="zh">面试官考核意图：</span></div>
+            <div class="q-field-content"><span data-lang="en">Differentiates academic theorists from industrial battle-tested infra leads who keep clusters alive.</span><span data-lang="zh">区分纸上谈兵与真正经历过生产环境万卡集群灾难恢复的工程骨干。</span></div>
+          </div>
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Answer Framework:</span><span data-lang="zh">标准回答骨架与加分点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Data batch backtrack via DataLoader index; QK-Norm insertion to clamp attention logits; NCCL heartbeat probe for sub-minute node ejection.</span><span data-lang="zh">数据回溯定位坏批次；引入 QK-Norm 抑制注意力爆炸；基于 NCCL 耗时插桩与 ECC 探针秒级自动剔除慢卡。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q04 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q04: <span data-lang="en">Multi-Head Latent Attention (MLA) Architecture</span><span data-lang="zh">Multi-Head Latent Attention (MLA) 机制与低秩 KV 吸收</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Modeling</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Why Hiring Manager Asks This:</span><span data-lang="zh">面试官考核意图：</span></div>
+            <div class="q-field-content"><span data-lang="en">Tests deep understanding of DeepSeek-V2/V3 low-rank KV compression and RoPE decoupling.</span><span data-lang="zh">考察对前沿低秩 KV 缓存压缩、矩阵乘法结合律吸收及解耦 RoPE 机制的理论深度。</span></div>
+          </div>
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Answer Framework:</span><span data-lang="zh">标准回答骨架与加分点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Cache only compressed latent vector c_KV; absorb projection matrices into Query weights at inference; decouple RoPE into separate small vector.</span><span data-lang="zh">推理只存微小低秩潜在向量；利用矩阵结合律将权重矩阵折叠进 Query；分立小维度向量携带 RoPE。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q05 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q05: <span data-lang="en">MoE Router Collapse & Auxiliary-Loss Balancing</span><span data-lang="zh">MoE 门控路由崩溃与无辅助损失负载均衡设计</span></span>
+          <div class="q-meta">
+            <span class="q-badge">MoE</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Why Hiring Manager Asks This:</span><span data-lang="zh">面试官考核意图：</span></div>
+            <div class="q-field-content"><span data-lang="en">Evaluates candidate's grasp of sparse expert activation dynamics and hardware utilization balancing.</span><span data-lang="zh">考核稀疏专家激活中的负载倾斜问题与对最终模型性能的折中理解。</span></div>
+          </div>
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Answer Framework:</span><span data-lang="zh">标准回答骨架与加分点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Explain GShard/Switch aux loss; contrast with modern bias-driven Auxiliary-Loss-Free routing to maximize reasoning performance.</span><span data-lang="zh">对比传统 Switch 辅助损失，推导通过给专家添加动态偏置（Expert Bias）实现无损失负载均衡的创新。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q06 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q06: <span data-lang="en">RLHF PPO Reward Hacking & Policy Degeneration</span><span data-lang="zh">RLHF (PPO) 训练稳定性陷阱与 Reward Hacking 抑制</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Alignment</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Ensemble reward models (worst-case scoring), dynamic adaptive KL penalty controller, and verbosity length penalties.</span><span data-lang="zh">采用多 RM 取下界、自适应动态 KL 控制器及针对废话膨胀的长度显式惩罚项。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q07 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q07: <span data-lang="en">DPO vs Online RL (PPO/GRPO) in Complex Reasoning</span><span data-lang="zh">DPO 与 在线强化学习 (PPO/GRPO) 在复杂推理中的本质差异</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Alignment</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">DPO is offline binary contrastive loss bounded by static datasets; online RL explores novel self-correcting reasoning trajectories.</span><span data-lang="zh">DPO 局限于离线静态二元偏好，在线 RL 才能自主探索出此前未见的高质量自纠错长推理链。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q08 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q08: <span data-lang="en">GRPO Mathematics & Critic-Free Advantage Estimation</span><span data-lang="zh">GRPO 算法数学原理与无 Critic 优势估计机制</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Reasoning</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Sample group of G outputs per prompt; normalize rewards across group (R_i - mean)/std to obtain baseline-free advantage; cuts 50% VRAM.</span><span data-lang="zh">同 Prompt 采样 G 个输出，对组内打分计算 (r_i - mean)/std 作为相对优势，移除整个 Critic 网络。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q09 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q09: <span data-lang="en">Context Length Extension: Linear vs YaRN vs RingAttention</span><span data-lang="zh">长文本上下文扩展：线性插值、YaRN 与 RingAttention</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Long Context</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">YaRN decomposes frequency spectrum into un-interpolated high freqs and interpolated low freqs; RingAttention parallelizes KV along ring.</span><span data-lang="zh">YaRN 对高低频分别插值保留短程语意，RingAttention 在环状通信中分发序列突破单卡显存墙。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q10 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q10: <span data-lang="en">Synthetic Data Generation & Evol-Instruct Decontamination</span><span data-lang="zh">高质量合成数据 Evol-Instruct 与防污染去重飞轮</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Data Flywheel</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Automated rule-based verification (SymPy for math, Python unit tests for code) creates verifiable synthetic supervision ground truth.</span><span data-lang="zh">基于代码沙箱单元测试与代数规则验证器构建真值闭环，结合 MinHash 与 8-gram 过滤消除同质废话。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q11 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q11: <span data-lang="en">vLLM PagedAttention & Block Fragmentation Elimination</span><span data-lang="zh">vLLM PagedAttention 显存分页与碎片消除机制</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Inference</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Mimics OS virtual paging; dynamically maps logical token blocks to non-contiguous GPU RAM, unlocking 96%+ memory utilization.</span><span data-lang="zh">模拟操作系统虚存，逻辑连续映射物理离散显存块，显存利用率逼近 96%，允许 2-4 倍并发提升。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q12 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q12: <span data-lang="en">Speculative Decoding Proof of Distribution Invariance</span><span data-lang="zh">投机采样 (Speculative Decoding) 分布无偏性数学证明</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Serving</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Modified rejection sampling accepts with prob min(1, p/q) and resamples residual max(0, p-q), guaranteeing exact mathematical parity.</span><span data-lang="zh">修正拒绝采样概率 min(1, p/q)，残差分布重采样保证边际概率与大模型直接自回归严格一致。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q13 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q13: <span data-lang="en">FP8 Quantization: E4M3 vs E5M2 & Outlier Protection</span><span data-lang="zh">FP8 混合精度量化 (E4M3 vs E5M2) 与离群值处理</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Quantization</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">E4M3 for forward weights and activations (precision-sensitive); E5M2 for backward gradients (range-sensitive); per-tensor dynamic scale.</span><span data-lang="zh">前向计算与权重选用 E4M3 保证精度，反向梯度选用 E5M2 覆盖宽动态范围，配合动态缩放因子。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q14 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q14: <span data-lang="en">Compute-Bound Prefill vs Memory-Bound Decode Scheduling</span><span data-lang="zh">计算密集 Prefill 与带宽密集 Decode 协同调度</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Serving</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Chunked Prefill breaks lengthy prompts into slices co-scheduled with decode steps to eliminate decode starvation and TTFT spikes.</span><span data-lang="zh">Chunked Prefill 将超长 Prompt 分片，与 Decode 步混合打包，平抑首字延迟尖峰并打满算力。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q15 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q15: <span data-lang="en">KV-Cache Eviction Policies: StreamingLLM, H2O & SnapKV</span><span data-lang="zh">KV-Cache 驱逐策略对比：StreamingLLM、H2O 与 SnapKV</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Optimization</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">StreamingLLM retains initial 4 Attention Sinks + rolling window; H2O tracks cumulative attention; SnapKV anchors key prompts.</span><span data-lang="zh">StreamingLLM 保留前4个注意力汇聚槽位+滑动窗口；H2O 驱逐冷门注意力；SnapKV 锚定提示词指纹。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q16 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q16: <span data-lang="en">Model Context Protocol (MCP) Standard Architecture</span><span data-lang="zh">Model Context Protocol (MCP) 标准协议架构解耦</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Agent Infra</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">JSON-RPC 2.0 based protocol; splits ecosystem into Server and Client; standardizes Resources, Prompts, and executable Tools.</span><span data-lang="zh">基于 JSON-RPC 2.0，将生态解耦为 Client/Server，标准化三大原语（资源、模板与工具），杜绝胶水代码。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q17 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q17: <span data-lang="en">Multi-Agent Deadlock & Infinite Reflection Loop Defense</span><span data-lang="zh">多智能体协同死锁与死循环反思防御治理</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Agentic OS</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Finite state graphs (LangGraph), deterministic retry caps (N=3), negative diff prompting, and rule-based fallback gates.</span><span data-lang="zh">严格状态机图引擎控制最大重试步数；提取失败哈希注入负向约束；设立独立仲裁 Critic 打破自说自话。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q18 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q18: <span data-lang="en">Enterprise GraphRAG Hybrid Fusion with Cross-Encoder</span><span data-lang="zh">企业级 GraphRAG 混合召回与 Cross-Encoder 重排</span></span>
+          <div class="q-meta">
+            <span class="q-badge">RAG</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Three-way recall (Dense Vector + BM25 + Knowledge Graph Community Summaries), fused via Reciprocal Rank Fusion & Reranker.</span><span data-lang="zh">三路召回（稠密向量+BM25+实体社区图谱摘要），通过 RRF 与深度 Cross-Encoder 重排过滤幻觉。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q19 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q19: <span data-lang="en">Grammar-Guided Decoding & 100% JSON Schema Adherence</span><span data-lang="zh">语法引导解码 (Grammar-Guided Decoding) 与 JSON 强约束</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Structured Output</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Compiles JSON Schema into DFA; applies logit mask (-inf) to invalid vocabulary tokens per step, guaranteeing mathematical adherence.</span><span data-lang="zh">将 Schema 编译为确定性有限自动机 DFA，运行期动态对非法 Token 的 Logit 实施 -inf 掩码。</span></div>
+          </div>
+        </div>
+      </details>
+
+      <!-- Q20 -->
+      <details class="q-card">
+        <summary class="q-header">
+          <span>Q20: <span data-lang="en">Prompt Injection, Jailbreak Defense & Output Guardrails</span><span data-lang="zh">生产级 Prompt 注入攻击防御与输出安全护栏</span></span>
+          <div class="q-meta">
+            <span class="q-badge">Safety</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </summary>
+        <div class="q-body">
+          <div class="q-field">
+            <div class="q-field-label"><span data-lang="en">Strategic Takeaway:</span><span data-lang="zh">核心答题要点：</span></div>
+            <div class="q-field-content"><span data-lang="en">Input XML tag boundaries; least-privilege sandboxed tool callers; real-time PII regex filtering and NLI hallucination detectors.</span><span data-lang="zh">结构化 XML 防伪标签隔离输入；工具执行器遵循最小特权原则；实时敏感数据脱敏与事实一致性校验。</span></div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <!-- Report Footer -->
+  <footer class="report-footer">
+    <div class="footer-brand">OfferGet · Strategy OS</div>
+    <div>
+      <span data-lang="en">Generated by OfferGet Master Engine · Evidence Ledger SSOT Verified</span><span data-lang="zh">由 OfferGet 总控引擎生成 · 凭证账本真值链严格校验</span>
+    </div>
+    <div style="margin-top: 4px; color: var(--ink-faint);">
+      <span data-lang="en">Built with clean modern tech aesthetics. No fabricated facts.</span><span data-lang="zh">现代极简纯净科技美学构建。绝不伪造未经核实的数据事实。</span>
+    </div>
+  </footer>
+
+</div>
+
+<!-- Floating Language Switcher -->
+<div class="floating-lang-toggle" role="region" aria-label="Language Selector">
+  <button class="lang-btn lang-btn-en" onclick="setLanguage('en')">EN</button>
+  <button class="lang-btn lang-btn-zh" onclick="setLanguage('zh')">中文</button>
+</div>
+
+<script>
+  // Language switcher state handling
+  function setLanguage(lang) {
+    document.documentElement.lang = lang;
+    try { localStorage.setItem('offerget-lang', lang); } catch (e) {}
+  }
+
+  (function initLang() {
+    try {
+      const saved = localStorage.getItem('offerget-lang');
+      if (saved === 'en' || saved === 'zh') {
+        document.documentElement.lang = saved;
+      }
+    } catch (e) {}
+  })();
+
+  // Pure JS DOM to Clean Markdown Exporter
+  function exportDOMToMarkdown() {
+    const activeLang = document.documentElement.lang || 'en';
+    const SKIP_TAGS = ['SCRIPT', 'STYLE', 'SVG', 'BUTTON'];
+
+    function serializeNode(node) {
+      if (!node) return '';
+      if (node.nodeType === 3) {
+        return node.textContent.replace(/\s+/g, ' ');
+      }
+      if (node.nodeType !== 1) return '';
+
+      if (SKIP_TAGS.includes(node.tagName)) return '';
+      if (node.classList && node.classList.contains('floating-lang-toggle')) return '';
+      if (node.classList && node.classList.contains('top-toolbar')) return '';
+
+      // Skip the alternate language twin span
+      if (node.dataset && node.dataset.lang && node.dataset.lang !== activeLang) {
+        return '';
+      }
+
+      const tag = node.tagName.toLowerCase();
+      const childrenMarkdown = Array.from(node.childNodes).map(serializeNode).join('');
+      const text = node.textContent.trim().replace(/\s+/g, ' ');
+
+      switch (tag) {
+        case 'h1': return `\n\n# ${text}\n\n`;
+        case 'h2': return `\n\n## ${text}\n\n`;
+        case 'h3': return `\n\n### ${text}\n\n`;
+        case 'h4': return `\n\n#### ${text}\n\n`;
+        case 'p':  return `\n\n${childrenMarkdown.trim()}\n\n`;
+        case 'br': return '\n';
+        case 'hr': return '\n\n---\n\n';
+        case 'strong': case 'b': return `**${childrenMarkdown.trim()}**`;
+        case 'em': case 'i':     return `*${childrenMarkdown.trim()}*`;
+        case 'code': return `\`${node.textContent}\``;
+        case 'summary': return `\n\n#### ${text}\n`;
+        case 'ul':
+        case 'ol': {
+          const items = Array.from(node.children).filter(c => c.tagName === 'LI');
+          return '\n' + items.map((li, idx) => {
+            const prefix = tag === 'ol' ? `${idx + 1}.` : '-';
+            const content = Array.from(li.childNodes).map(serializeNode).join('').trim();
+            return `${prefix} ${content}`;
+          }).join('\n') + '\n';
+        }
+        case 'table': {
+          const rows = Array.from(node.querySelectorAll('tr'));
+          if (!rows.length) return '';
+          const getCells = r => Array.from(r.children).map(c => {
+            return Array.from(c.childNodes).map(serializeNode).join('').trim().replace(/\|/g, '\\|');
+          });
+          const head = getCells(rows[0]);
+          const lines = [
+            '| ' + head.join(' | ') + ' |',
+            '| ' + head.map(() => '---').join(' | ') + ' |',
+            ...rows.slice(1).map(r => '| ' + getCells(r).join(' | ') + ' |')
+          ];
+          return '\n\n' + lines.join('\n') + '\n\n';
+        }
+        default:
+          return childrenMarkdown;
+      }
+    }
+
+    const root = document.querySelector('.container') || document.body;
+    let md = `# Offer Strategy Report · ${activeLang.toUpperCase()}\n\n` + serializeNode(root);
+    md = md.replace(/\n{3,}/g, '\n\n').trim() + '\n';
+
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `offer-strategy-${activeLang}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+</script>
+</body>
+</html>

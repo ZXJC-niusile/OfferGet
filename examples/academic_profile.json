@@ -1,0 +1,244 @@
+{
+  "profile_version": "2.0.0",
+  "profile_type": "academic_baoyan",
+  "candidate": {
+    "name": "林书扬",
+    "en_name": "Shuyang Lin",
+    "gender": "男",
+    "political_status": "中共党员",
+    "birth_year_month": "2003.05",
+    "university": "南京大学 (Nanjing University)",
+    "college": "计算机科学与技术系 (Department of Computer Science and Technology)",
+    "major": "计算机科学与技术 (拔尖人才培养计划)",
+    "major_en": "Computer Science and Technology (Elite CS Program)",
+    "enrollment_year": 2021,
+    "expected_graduation": 2025,
+    "email": "shuyang.lin@smail.nju.edu.cn",
+    "phone": "+86 138-1234-5678",
+    "location": "江苏·南京",
+    "github": "https://github.com/shuyang-lin",
+    "homepage": "https://shuyang-lin.github.io"
+  },
+  "academic_standing": {
+    "gpa": 3.92,
+    "max_gpa": 4.0,
+    "gpa_display": "3.92/4.0",
+    "rank": "2/150",
+    "rank_total": 150,
+    "rank_number": 2,
+    "rank_percent": "Top 1.5%",
+    "english": {
+      "cet6": 618,
+      "cet4": 652,
+      "toefl": 108,
+      "toefl_breakdown": "R30 L29 S24 W25"
+    },
+    "core_courses": [
+      { "course_name": "高等数学 (Advanced Mathematics)", "grade": 99, "credits": 5.0 },
+      { "course_name": "线性代数 (Linear Algebra)", "grade": 98, "credits": 4.0 },
+      { "course_name": "离散数学 (Discrete Mathematics)", "grade": 98, "credits": 4.0 },
+      { "course_name": "数据结构与算法 (Data Structures & Algorithms)", "grade": 99, "credits": 4.5 },
+      { "course_name": "计算机系统基础 (Introduction to Computer Systems)", "grade": 97, "credits": 4.0 },
+      { "course_name": "操作系统 (Operating Systems)", "grade": 96, "credits": 4.0 },
+      { "course_name": "计算机体系结构 (Computer Architecture)", "grade": 98, "credits": 3.5 },
+      { "course_name": "计算机网络 (Computer Networks)", "grade": 95, "credits": 3.5 },
+      { "course_name": "编译原理 (Compiler Principles)", "grade": 94, "credits": 3.5 },
+      { "course_name": "深度学习与大模型导论 (Deep Learning & Foundation Models)", "grade": 99, "credits": 3.0 }
+    ]
+  },
+  "publications": [
+    {
+      "paper_id": "PUB-01",
+      "title": "Scaling Sparse Mixture-of-Experts with Dual-Gated Speculative Routing",
+      "venue": "NeurIPS 2024",
+      "venue_full": "38th Annual Conference on Neural Information Processing Systems",
+      "ccf_rank": "CCF-A",
+      "author_role": "co_first_author",
+      "author_role_display": "共同第一作者 (Co-first author, 排名第2/共2名并列一作)",
+      "status": "accepted",
+      "oral_or_spotlight": "Spotlight Presentation (Top 3%)",
+      "arxiv_id": "arXiv:2409.12345",
+      "code_repo": "https://github.com/shuyang-lin/dual-gated-moe",
+      "summary": "针对万亿参数稀疏专家模型 (MoE) 在推理阶段面临的路由负载倾斜与通信高延迟瓶颈，提出双门控投机路由算法 (Dual-Gated Speculative Routing)，在保证零模型精度损失的前提下将 Token 路由通信开销降低 42%，端到端推理吞吐提升 1.85x。",
+      "individual_contribution": "独立设计投机路由通信隐藏协议，重写 Triton 自定义稀疏专家内核算子，在 64 卡 NVIDIA H800 集群上完成全部大规模对比实验与消融分析，执笔论文 Methodology 与 Evaluation 核心章节。"
+    },
+    {
+      "paper_id": "PUB-02",
+      "title": "AdaOffload: Adaptive Memory-Constrained Model Offloading on Heterogeneous Edge-Cloud Clusters",
+      "venue": "IEEE ICDCS 2025",
+      "venue_full": "IEEE 45th International Conference on Distributed Computing Systems",
+      "ccf_rank": "CCF-B",
+      "author_role": "first_author",
+      "author_role_display": "第一作者 (First Author)",
+      "status": "under_review",
+      "arxiv_id": "arXiv:2412.08765",
+      "code_repo": "https://github.com/shuyang-lin/ada-offload",
+      "summary": "针对异构边缘云集群中显存极度受限场景，设计基于动态工作负载感知的层级化模型卸载与激活重计算管线，实现受限显存下的百亿参数模型低延迟推理。",
+      "individual_contribution": "提出动态规划与分支定界融合的内存调度算法，基于实际物理边缘计算节点 (Jetson AGX Orin) 与服务器云端集群搭建完整实验床，撰写全部手稿初稿。"
+    }
+  ],
+  "graduation_thesis": {
+    "title": "面向长序列大语言模型的高效分布式 KV-Cache 压缩与层级换页机制研究",
+    "advisor": "陈建平 教授 (清华大学计算机系客座指导 / 本校合作导师)",
+    "status": "提前开展中 (进行至中期实验阶段)",
+    "role": "独立课题研究者 (Individual Researcher)",
+    "experiment_type": "real_experiment",
+    "tags": ["graduation_thesis", "real_experiment", "distributed_systems", "vllm_cluster"],
+    "individual_contribution": "独立负责从论文选题、算法建模到系统落地全流程。重写 vLLM 底层 PagedAttention 算子以支持动态秩自适应量化，并在 8x A100 物理集群真实负载下进行基准压测，相比原始 vLLM 实现 2.6x 显存换页带宽提升。",
+    "simulation_vs_real": {
+      "type": "real_experiment",
+      "hardware": "8x NVIDIA A100 80GB SXM4, NVLink 600GB/s, RoCE v2 100Gbps",
+      "benchmark": "Real Wikipedia & ShareGPT traces (4k-64k context lengths)"
+    }
+  },
+  "projects": [
+    {
+      "project_id": "PROJ-01",
+      "name": "面向长序列大语言模型的高效分布式 KV-Cache 压缩与换页机制",
+      "category": "毕业设计 / 学术科研",
+      "period": "2024.03 - 至今",
+      "role": "课题负责人 (独立研究)",
+      "experiment_type": "real_experiment",
+      "tags": ["graduation_thesis", "real_experiment", "cuda_triton", "distributed_inference"],
+      "individual_contribution": "独立提出层级化 KV 换页置换算法，编写 CUDA/Triton 自定义内核，在物理 8 卡 GPU 集群上完成真实环境评测，显存占用降低 68%，TTFT 首字延迟降低 35%。",
+      "simulation_vs_real": {
+        "type": "real_experiment",
+        "description": "真实硬件环境测试，部署于 8x A100 80GB 独立集群，非仿真模拟。"
+      }
+    },
+    {
+      "project_id": "PROJ-02",
+      "name": "SimuCore: 周期精确的多核异构处理器缓存层次结构仿真器",
+      "category": "计算机系统综合大作业 / 优秀项目",
+      "period": "2023.09 - 2024.01",
+      "role": "项目负责人 / Tech Lead (3人团队)",
+      "experiment_type": "simulation",
+      "tags": ["course_big_project", "simulation", "gem5_extension", "c++20"],
+      "individual_contribution": "设计多核缓存一致性协议状态机（MESI/MOESI），编写基于 trace-driven 的指令流仿真器，负责总线仲裁与时延建模核心代码（贡献占代码总量 65%），指导两名组员完成分支预测模块。",
+      "simulation_vs_real": {
+        "type": "simulation",
+        "description": "基于 gem5 trace 与自定义周期精确仿真器进行软件模拟，运行 SPEC CPU 2017 基准测试集。"
+      }
+    }
+  ],
+  "competitions": [
+    {
+      "competition_id": "COMP-01",
+      "name": "美国大学生数学建模竞赛 (MCM/ICM)",
+      "organizer": "COMAP",
+      "year": 2024,
+      "award": "Finalist (特等奖提名, 全球前 1%)",
+      "role": "队长兼主力建模手",
+      "summary": "负责高维非线性优化建模与蒙特卡洛仿真算法编写，撰写全英文参赛论文。"
+    },
+    {
+      "competition_id": "COMP-02",
+      "name": "全国大学生电子设计竞赛 (NUEDC)",
+      "organizer": "教育部高教司 / 工业和信息化部人教司",
+      "year": 2023,
+      "award": "国家一等奖 (National First Prize)",
+      "role": "核心嵌入式算法负责人",
+      "summary": "负责 FPGA 高速数字信号处理与微控制器控制算法架构设计，完成实时硬件在环闭环控制。"
+    },
+    {
+      "competition_id": "COMP-03",
+      "name": "ACM-ICPC 国际大学生程序设计竞赛 (亚洲区域赛)",
+      "organizer": "ICPC Foundation",
+      "year": 2023,
+      "award": "区域赛银奖 (Silver Medal)",
+      "role": "算法主力",
+      "summary": "负责图论、动态规划与高难度计算几何题目的攻坚。"
+    }
+  ],
+  "honors": [
+    {
+      "honor_id": "HONOR-01",
+      "name": "国家奖学金 (National Scholarship)",
+      "level": "国家级 (教育部颁发)",
+      "year": 2023,
+      "quota_ratio": "< 0.2%",
+      "description": "本专业仅 2 名学生获此殊荣，奖励综合学术与学术竞赛表现顶级学生。"
+    },
+    {
+      "honor_id": "HONOR-02",
+      "name": "国家奖学金 (National Scholarship)",
+      "level": "国家级 (教育部颁发)",
+      "year": 2024,
+      "quota_ratio": "< 0.2%",
+      "description": "连续两年蝉联国家奖学金，专业综合评价排名第 1。"
+    },
+    {
+      "honor_id": "HONOR-03",
+      "name": "校级三好学生标兵 (Pacesetter of Merit Student)",
+      "level": "校级顶级荣誉",
+      "year": 2024,
+      "description": "全校仅 20 名本科生获评，表彰德智体美劳全方位卓越榜样。"
+    },
+    {
+      "honor_id": "HONOR-04",
+      "name": "校一等优秀学生奖学金",
+      "level": "校级一等",
+      "year": 2022,
+      "description": "连续三学年获得校一等学业优秀奖学金。"
+    }
+  ],
+  "target_schools": [
+    {
+      "target_id": "TARGET-01",
+      "school_name": "清华大学 (Tsinghua University)",
+      "college": "计算机科学与技术系",
+      "major": "计算机科学与技术 (081200)",
+      "track": "直博",
+      "target_advisor": "陈建平 教授",
+      "lab_name": "高可用智能计算与分布式系统实验室 (PACMAN & Intelligent Computing Lab)",
+      "research_direction": "大模型分布式系统与体系结构",
+      "com_type": "弱com",
+      "current_stage": "CONTACTING_ADVISOR",
+      "status_detail": "已完成首轮邮件套磁，导师回复积极并约谈 1-on-1 线上学术交流。"
+    },
+    {
+      "target_id": "TARGET-02",
+      "school_name": "北京大学 (Peking University)",
+      "college": "计算机学院",
+      "major": "计算机系统结构 (081201)",
+      "track": "直博",
+      "target_advisor": "李明睿 教授",
+      "lab_name": "高能效计算与微处理器国家重点实验室",
+      "research_direction": "异构计算系统与 AI 编译优化",
+      "com_type": "强com",
+      "current_stage": "COLLECTING_NOTICES",
+      "status_detail": "关注北大夏令营通知，等待机试与院系初审开放。"
+    },
+    {
+      "target_id": "TARGET-03",
+      "school_name": "浙江大学 (Zhejiang University)",
+      "college": "计算机科学与技术学院",
+      "major": "计算机科学与技术 (081200)",
+      "track": "直博",
+      "target_advisor": "王绍华 教授",
+      "lab_name": "智能计算系统与大规模并行计算课题组",
+      "research_direction": "高性能分布式系统与云原生 AI",
+      "com_type": "弱com",
+      "current_stage": "COLLECTING_NOTICES",
+      "status_detail": "已锁定浙大智能计算课题组夏令营报名批次。"
+    },
+    {
+      "target_id": "TARGET-04",
+      "school_name": "上海交通大学 (Shanghai Jiao Tong University)",
+      "college": "电子信息与电气工程学院 (电院)",
+      "major": "计算机系统结构 (081201)",
+      "track": "学硕",
+      "target_advisor": "张弘 教授",
+      "lab_name": "约翰·霍普克罗夫特计算机科学中心",
+      "research_direction": "分布式机器学习系统",
+      "com_type": "强com",
+      "current_stage": "COLLECTING_NOTICES",
+      "status_detail": "已准备备选保底电院学硕通道。"
+    }
+  ],
+  "skills": {
+    "programming_languages": ["C/C++ (C++20)", "Python", "CUDA", "Triton", "Rust (熟悉)", "Shell"],
+    "systems_and_frameworks": ["PyTorch", "vLLM", "Megatron-LM", "DeepSpeed", "Linux Kernel Internals", "Git", "LaTeX"],
+    "hardware_and_profiling": ["NVIDIA Nsight Systems / Compute", "gem5 Simulator", "Perf", "Wireshark", "RDMA/RoCE v2"]
+  }
+}
