@@ -82,15 +82,8 @@ class ResumeBuilder:
         self.profile = normalize_candidate_profile(raw_data)
         self.academic_exporter = AcademicExporter()
 
-        self.template_dir = None
-        if template_dir:
-            self.template_dir = Path(template_dir).resolve()
-        else:
-            cand_tpl = PROJECT_ROOT / "templates" / "resumes"
-            if cand_tpl.exists():
-                self.template_dir = cand_tpl
-            else:
-                self.template_dir = PROJECT_ROOT / "ApexResume" / "themes"
+        self.template_dir = Path(template_dir).resolve() if template_dir else (PROJECT_ROOT / "ApexResume" / "themes")
+
 
         self.renderer = renderer or BrowserRenderer()
         self.autofit_engine = autofit_engine or AutoFitEngine(self.renderer)
