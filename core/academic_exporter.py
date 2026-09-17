@@ -150,15 +150,22 @@ class AcademicExporter:
             ])
 
         # 1. Education
+        edu_rows = cand.get("education_rows", [])
+        if not edu_rows and cand.get("education_badges"):
+            from core.profile_adapter import group_education_badges_into_rows
+            edu_rows = group_education_badges_into_rows(cand["education_badges"])
+
         lines.extend([
             r"\section*{教育背景}",
-            r"\begin{itemize}[leftmargin=*,itemsep=2pt]",
         ])
-        edu_meta = f" ({edu_time})" if edu_time else ""
-        lines.append(f"  \\item \\textbf{{{school}}} \\hfill {degree}{edu_meta}")
-        for badge in cand.get("education_badges", []):
-            lines.append(f"  \\item {escape_latex(badge)}")
-        lines.append(r"\end{itemize}")
+        time_part = f" \\hfill {escape_latex(edu_time)}" if edu_time else ""
+        degree_disp = re.sub(r"\s*[｜|]\s*", r" \\quad | \\quad ", escape_latex(degree))
+        degree_part = f" \\quad | \\quad {degree_disp}" if degree else ""
+        lines.append(f"\\noindent \\textbf{{{escape_latex(school)}}}{degree_part}{time_part} \\\\[2pt]")
+        for i, row in enumerate(edu_rows):
+            escaped_row = re.sub(r"\s*[｜|]\s*", r" \\quad | \\quad ", escape_latex(row))
+            trailing = r" \\[1pt]" if i < len(edu_rows) - 1 else r" \vspace{2pt}"
+            lines.append(f"\\noindent {escaped_row}{trailing}")
 
         # 2. Work / Internship Experience
         experiences = profile.get("experience", [])
@@ -303,12 +310,20 @@ class AcademicExporter:
 
 
         # Education
+        edu_rows = cand.get("education_rows", [])
+        if not edu_rows and cand.get("education_badges"):
+            from core.profile_adapter import group_education_badges_into_rows
+            edu_rows = group_education_badges_into_rows(cand["education_badges"])
+
+        edu_meta = f" #h(1fr) {edu_time}" if edu_time else ""
+        degree_meta = f" | {degree}" if degree else ""
         lines.extend([
             "== 教育背景",
-            f"- *{school}* -- {degree} ({edu_time})",
+            f"*{school}*{degree_meta}{edu_meta} \\",
         ])
-        for b in cand.get("education_badges", []):
-            lines.append(f"  - {b}")
+        for i, row in enumerate(edu_rows):
+            trailing = " \\" if i < len(edu_rows) - 1 else ""
+            lines.append(f"{row}{trailing}")
         lines.append("")
 
         # Experience
@@ -375,6 +390,11 @@ class AcademicExporter:
         location = cand.get("location", "")
         edu_time = cand.get("edu_time", "")
         edu_badges = cand.get("education_badges", [])
+        edu_rows = cand.get("education_rows", [])
+        if not edu_rows and edu_badges:
+            from core.profile_adapter import group_education_badges_into_rows
+            edu_rows = group_education_badges_into_rows(edu_badges)
+        edu_rows_html = "".join([f'<div style="margin-top:2pt;">{r}</div>' for r in edu_rows])
         exp_list = profile.get("experience", [])
         proj_list = profile.get("projects", [])
         comps = profile.get("competencies", {})
@@ -486,10 +506,12 @@ class AcademicExporter:
 
   <h2>教育背景</h2>
   <div class="item-header">
-    <span>{school} · {degree}</span>
+    <span>{school} ｜ {degree}</span>
     <span>{edu_time}</span>
   </div>
-  <ul>{"".join([f'<li>{b}</li>' for b in edu_badges])}</ul>
+  <div class="edu-content" style="font-size: 10pt; color: #333333; line-height: 1.45; margin-top: 2pt; margin-bottom: 4pt;">
+    {edu_rows_html}
+  </div>
 """
 
         if exp_list:

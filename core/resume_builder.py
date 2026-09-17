@@ -146,16 +146,26 @@ class ResumeBuilder:
         prof = profile or self.profile
         cand = prof.get("candidate", {})
         edu_badges = cand.get("education_badges", [])
+        edu_rows = cand.get("education_rows", [])
+        if not edu_rows and edu_badges:
+            from core.profile_adapter import group_education_badges_into_rows
+            edu_rows = group_education_badges_into_rows(edu_badges)
+
         exp_list = prof.get("experience", [])
         proj_list = prof.get("projects", [])
         comps = prof.get("competencies", {})
 
-        badge_spans = "".join([
-            f'<span style="font-size:10.5px; color:var(--color-muted, #4B5563); background:var(--color-bg-bar, #F3F4F6); padding:1px 6px; border-radius:2px; border:1px solid var(--color-bar-border, #E5E7EB);">{b}</span>'
-            for b in edu_badges
+        edu_rows_html = "".join([
+            f'<div class="edu-row" style="font-size:10.5px; color:var(--color-muted, #4B5563); line-height:1.45; margin-top:1.5px;">{r}</div>'
+            for r in edu_rows
         ])
 
         sections = []
+
+        school_str = cand.get('school', '')
+        degree_str = cand.get('degree', '')
+        sep_span = '<span style="color:var(--color-bar-border, #CBD5E1); font-size:10.5px;">｜</span>' if degree_str and school_str else ''
+        role_span = f'<span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
 
         # 1. Education
         edu_html = f"""
@@ -164,15 +174,16 @@ class ResumeBuilder:
         <h2>教育背景</h2>
         <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
       </div>
-      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:3px; margin-bottom:3px;">
+      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:3px; margin-bottom:2px;">
         <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
-          <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{cand.get('school', '')}</span>
-          <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{cand.get('degree', '')}</span>
+          <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
+          {sep_span}
+          {role_span}
         </div>
         <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
       </div>
-      <div style="display:flex; flex-wrap:wrap; gap:5px; margin-top:2px; margin-bottom:2px;">
-        {badge_spans}
+      <div class="edu-details" style="margin-top:1px; margin-bottom:2px;">
+        {edu_rows_html}
       </div>
     </section>
     """
@@ -399,6 +410,10 @@ class ResumeBuilder:
         exp_list = prof.get("experience", [])
         proj_list = prof.get("projects", [])
         edu_badges = cand.get("education_badges", [])
+        edu_rows = cand.get("education_rows", [])
+        if not edu_rows and edu_badges:
+            from core.profile_adapter import group_education_badges_into_rows
+            edu_rows = group_education_badges_into_rows(edu_badges)
 
         # 1. Markdown file
         photo_tag = f" | 照片：{eff_photo_path}" if (photo_enabled and eff_photo_path) else (" | 照片：预留证件照位置" if photo_enabled else "")
@@ -412,8 +427,8 @@ class ResumeBuilder:
             "## 教育背景",
             f"### {cand.get('school', '')} ｜ {cand.get('degree', '')} ｜ {cand.get('edu_time', '')}",
         ]
-        for b in edu_badges:
-            md_lines.append(f"- {b}")
+        for r in edu_rows:
+            md_lines.append(f"{r}  ")
 
         if exp_list:
             md_lines.extend(["", "---", "", "## 实习经历"])
@@ -551,10 +566,12 @@ class ResumeBuilder:
 
   <h2>教育背景</h2>
   <div class="item-header">
-    <span>{cand.get('school', '')} · {cand.get('degree', '')}</span>
+    <span>{cand.get('school', '')} ｜ {cand.get('degree', '')}</span>
     <span>{cand.get('edu_time', '')}</span>
   </div>
-  <ul>{"".join([f'<li>{b}</li>' for b in edu_badges])}</ul>
+  <div class="edu-content" style="font-size: 10pt; line-height: 1.45; margin-top: 2pt; margin-bottom: 4pt;">
+    {"".join([f'<div style="margin-top:2pt;">{r}</div>' for r in edu_rows])}
+  </div>
 """
         if exp_list:
             ats_html += "  <h2>实习经历</h2>\n"
