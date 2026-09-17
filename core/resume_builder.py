@@ -206,12 +206,16 @@ class ResumeBuilder:
           </div>
         """]
             for exp in exp_list:
-                bullets_li = "".join([f"<li>{b}</li>" for b in exp.get("bullets", [])])
+                dept_str = exp.get("dept", "")
+                role_str = exp.get("role", "")
+                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
+                formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in exp.get("bullets", [])]
+                bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
                 exp_parts.append(f"""
             <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
               <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
                 <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{exp.get('org', '')}</span>
-                <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{exp.get('role', '')}</span>
+                <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{role_label}</span>
               </div>
               <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">{exp.get('time', '')}</div>
             </div>
@@ -230,7 +234,8 @@ class ResumeBuilder:
           </div>
         """]
             for proj in proj_list:
-                bullets_li = "".join([f"<li>{b}</li>" for b in proj.get("bullets", [])])
+                formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in proj.get("bullets", [])]
+                bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
                 proj_parts.append(f"""
             <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
               <div style="display:flex; align-items:baseline; gap:8px;">
@@ -249,10 +254,11 @@ class ResumeBuilder:
             skill_rows = []
             for k, v in comps.items():
                 val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
+                val_formatted = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", val)
                 skill_rows.append(f"""
             <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
-              <span style="font-weight:700; min-width:85px; color:var(--color-primary-dark, #0F172A);">{k}：</span>
-              <span style="color:var(--color-text, #1E293B);">{val}</span>
+              <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">{k}：</span>
+              <span style="color:var(--color-text, #1E293B);">{val_formatted}</span>
             </li>
             """)
             skills_html = f"""
@@ -469,8 +475,11 @@ class ResumeBuilder:
         if exp_list:
             md_lines.extend(["", "---", "", "## 实习经历"])
             for exp in exp_list:
+                dept_str = exp.get("dept", "")
+                role_str = exp.get("role", "")
+                role_label = f"{dept_str} ｜ {role_str}" if dept_str else role_str
                 md_lines.extend([
-                    f"### {exp.get('org', '')} ｜ {exp.get('role', '')}",
+                    f"### {exp.get('org', '')} ｜ {role_label}",
                     f"**任职时间**：{exp.get('time', '')}",
                     "",
                 ])
@@ -528,7 +537,7 @@ class ResumeBuilder:
   <style>
     @page {{
       size: A4 portrait;
-      margin: 12mm 15mm;
+      margin: 10mm 12mm;
     }}
     * {{
       box-sizing: border-box;
@@ -537,8 +546,8 @@ class ResumeBuilder:
     }}
     body {{
       font-family: Arial, Helvetica, "SimSun", sans-serif;
-      font-size: 10.5pt;
-      line-height: 1.5;
+      font-size: 9.5pt;
+      line-height: 1.4;
       color: #000000;
       background: #FFFFFF;
       -webkit-print-color-adjust: exact;
@@ -548,43 +557,44 @@ class ResumeBuilder:
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 10pt;
+      margin-bottom: 6pt;
       border-bottom: 1pt solid #000000;
-      padding-bottom: 6pt;
+      padding-bottom: 4pt;
     }}
     h1 {{
-      font-size: 20pt;
+      font-size: 18pt;
       font-weight: bold;
-      margin: 0 0 3pt 0;
+      margin: 0 0 2pt 0;
     }}
     .contact {{
-      font-size: 10pt;
+      font-size: 9.5pt;
       color: #222222;
     }}
     h2 {{
-      font-size: 12pt;
+      font-size: 11pt;
       font-weight: bold;
       border-bottom: 0.8pt solid #333333;
-      padding-bottom: 2pt;
-      margin-top: 10pt;
-      margin-bottom: 4pt;
+      padding-bottom: 1.5pt;
+      margin-top: 6pt;
+      margin-bottom: 3pt;
       text-transform: uppercase;
     }}
     .item-header {{
       display: flex;
       justify-content: space-between;
-      font-size: 10.5pt;
+      font-size: 10pt;
       font-weight: bold;
-      margin-top: 4pt;
+      margin-top: 3pt;
     }}
     ul {{
-      margin: 2pt 0 6pt 0;
-      padding-left: 18pt;
+      margin: 1.5pt 0 3pt 0;
+      padding-left: 16pt;
     }}
     li {{
-      font-size: 10pt;
-      margin-bottom: 2pt;
+      font-size: 9.5pt;
+      margin-bottom: 1.5pt;
       text-align: justify;
+      line-height: 1.38;
     }}
   </style>
 </head>
@@ -605,22 +615,25 @@ class ResumeBuilder:
     <span>{school_str} &nbsp;&nbsp;&nbsp;&nbsp; {degree_str}</span>
     <span>{edu_time_str}</span>
   </div>
-  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3pt; font-size:10pt; line-height:1.45; margin-top:3pt; margin-bottom:5pt;">
+  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2pt; font-size:9.5pt; line-height:1.4; margin-top:2pt; margin-bottom:3pt;">
     {"".join(grid_cells_html)}
   </div>
 """
         if exp_list:
             ats_html += "  <h2>实习经历</h2>\n"
             for exp in exp_list:
-                bullets = "".join([f"<li>{b}</li>" for b in exp.get("bullets", [])])
-                ats_html += f"""  <div class='item-header'><span>{exp.get('org', '')} · {exp.get('role', '')}</span><span>{exp.get('time', '')}</span></div>
+                dept_str = exp.get("dept", "")
+                role_str = exp.get("role", "")
+                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
+                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in exp.get("bullets", [])])
+                ats_html += f"""  <div class='item-header'><span>{exp.get('org', '')} · {role_label}</span><span>{exp.get('time', '')}</span></div>
   <ul>{bullets}</ul>
 """
 
         if proj_list:
             ats_html += "  <h2>校园与实践经历</h2>\n"
             for p in proj_list:
-                bullets = "".join([f"<li>{b}</li>" for b in p.get("bullets", [])])
+                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in p.get("bullets", [])])
                 ats_html += f"""  <div class='item-header'><span>{p.get('name', '')} · {p.get('role', '')}</span><span>{p.get('time', '')}</span></div>
   <ul>{bullets}</ul>
 """

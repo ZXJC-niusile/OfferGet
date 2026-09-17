@@ -2,30 +2,38 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>范增煜 - 运营岗 个人简历</title>
+  <title>Resume - Modern Navy Theme</title>
   <style>
     :root {
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      --font-serif: Georgia, "Times New Roman", "Songti SC", serif;
-      --font-mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      /* Typography Stack - Modern Serif for Headings & Metric Numbers, Refined Sans for Body */
+      --font-serif: "Playfair Display", Georgia, "Times New Roman", "Songti SC", "Source Han Serif SC", serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      
+      /* Modern Navy Executive Color Palette */
+      --color-primary: #0F172A;          /* Deep Slate / Dark Navy (主色调 商务深藏蓝) */
+      --color-primary-light: #1E293B;    /* Navy Charcoal */
+      --color-accent: #0284C7;           /* Sky / Cerulean Blue (强调色 亮蓝) */
+      --color-accent-dark: #0369A1;      /* Deep Cerulean */
+      --color-accent-subtle: #E0F2FE;    /* Soft Sky Tint */
+      --color-text: #1E293B;             /* Primary Text */
+      --color-muted: #64748B;            /* Muted Slate Text */
+      --color-rule: #E2E8F0;             /* Delicate Section Rule Line */
+      --color-rule-accent: #0284C7;      /* Section Accent Pin */
+      --color-bg-bar: #F8FAFC;          /* Sophisticated Executive Band */
+      --color-bar-border: #E2E8F0;       /* Border for Org Band */
+      --color-code-bg: #F1F5F9;         /* Inline Code Background */
+      --color-code-border: #CBD5E1;     /* Inline Code Border */
+      --color-todo-bg: #FEF3C7;          /* Warning Yellow Tint */
+      --color-todo-text: #92400E;        /* Warning Amber Text */
 
-      --color-primary: #1E3A8A;        /* Classic Executive Navy */
-      --color-primary-dark: #0F172A;   /* Slate Deep Header */
-      --color-accent: #0284C7;         /* Cerulean Blue */
-      --color-text: #1E293B;           /* Dark Slate Body Text */
-      --color-muted: #64748B;          /* Muted Secondary Gray */
-      --color-border: #E2E8F0;         /* Section Divider Line */
-      --color-bg-bar: #F8FAFC;         /* Light Bar Accent */
-      --color-tag-bg: #F1F5F9;         /* Tag Badge Background */
-      --color-tag-text: #334155;       /* Tag Badge Text */
-
-      /* A4 Layout Tokens - optimized for 1 page */
-      --page-padding-y: 8.5mm;
-      --page-padding-x: 11mm;
-      --body-font-size: 11px;
-      --body-line-height: 1.50;
-      --item-gap: 3.2px;
-      --section-gap: 8.5px;
+      /* Dynamic Layout Tokens for Auto-Fit Compaction Engine */
+      --page-padding-y: 9mm;
+      --page-padding-x: 10.6mm;
+      --body-font-size: 11.5px;
+      --body-line-height: 1.58;
+      --item-gap: 4px;
+      --section-gap: 10px;
     }
 
     @page {
@@ -57,137 +65,190 @@
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
       background: #FFFFFF;
+      position: relative;
     }
 
-    /* Header Layout with Photo Box */
+    /* Numbers & Metrics Typography - Luxury Serif High-Impact Numbers */
+    .en, .num, .metric {
+      font-family: var(--font-serif);
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+
+    /* Inline Code & CLI Terminals */
+    code, .cli {
+      font-family: var(--font-mono);
+      font-size: 0.92em;
+      background: var(--color-code-bg);
+      color: var(--color-primary);
+      padding: 1px 5px;
+      border-radius: 2px;
+      border: 1px solid var(--color-code-border);
+      word-break: break-all;
+    }
+
+    /* Links */
+    a {
+      color: var(--color-accent-dark);
+      text-decoration: none;
+      transition: color 0.15s ease;
+      border-bottom: 1px dotted rgba(2, 132, 199, 0.4);
+    }
+
+    a:hover {
+      color: var(--color-accent);
+      border-bottom-style: solid;
+    }
+
+    /* ==========================================================================
+       Header Block
+       ========================================================================== */
     header {
+      margin-bottom: 8px;
+    }
+
+    .header-top {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid var(--color-primary);
-      padding-bottom: 8px;
-      margin-bottom: 6px;
-    }
-
-    .header-left {
-      flex: 1;
-      padding-right: 18px;
-    }
-
-    .name-row {
-      display: flex;
-      align-items: baseline;
-      gap: 12px;
+      align-items: flex-end;
+      border-bottom: 1.5px solid var(--color-primary);
+      padding-bottom: 4px;
       margin-bottom: 5px;
     }
 
     h1 {
-      font-size: 21px;
+      font-family: var(--font-serif);
+      font-size: 22px;
       font-weight: 700;
-      color: var(--color-primary-dark);
-      letter-spacing: 1px;
+      letter-spacing: 0.3px;
+      color: var(--color-primary);
       line-height: 1.1;
     }
 
-    .intent-badge {
-      font-size: 11.5px;
-      font-weight: 600;
-      color: var(--color-accent);
-      background: #E0F2FE;
-      padding: 2px 8px;
-      border-radius: 3px;
-      letter-spacing: 0.5px;
-    }
-
-    .contact-info {
+    .contacts {
       font-size: 11px;
       color: var(--color-muted);
       display: flex;
-      flex-wrap: wrap;
+      gap: 9px;
       align-items: center;
-      gap: 8px;
-      margin-top: 4px;
     }
 
-    .contact-info span.sep {
-      color: #CBD5E1;
-    }
-
-    .contact-info a {
-      color: var(--color-text);
-      text-decoration: none;
-    }
-
-    /* Photo Placeholder Slot */
-    .photo-wrapper {
-      width: 78px;
-      height: 104px; /* Standard 1-inch / 2-inch ID photo ratio (3:4) */
-      border: 1.5px dashed #94A3B8;
-      border-radius: 4px;
-      background-color: #F8FAFC;
-      display: flex;
-      flex-direction: column;
+    .contacts span {
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      flex-shrink: 0;
-      text-align: center;
-      position: relative;
-      transition: all 0.2s ease;
     }
 
-    .photo-wrapper:hover {
-      border-color: var(--color-accent);
-      background-color: #F0F9FF;
-    }
-
-    .photo-wrapper img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: none; /* Shows when src is valid */
-    }
-
-    .photo-icon {
-      width: 22px;
-      height: 22px;
-      fill: #94A3B8;
-      margin-bottom: 3px;
-    }
-
-    .photo-tip {
-      font-size: 9.5px;
-      color: #64748B;
-      line-height: 1.25;
+    .headline {
+      font-size: 11.5px;
+      color: var(--color-primary-light);
       font-weight: 500;
+      line-height: 1.45;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
     }
 
-    /* Section Headers */
+    .headline b {
+      color: var(--color-accent-dark);
+      font-weight: 600;
+    }
+
+    /* ==========================================================================
+       Section Headers
+       ========================================================================== */
     .section-header {
       display: flex;
       align-items: center;
       margin-top: var(--section-gap);
-      margin-bottom: 3.5px;
+      margin-bottom: 4px;
     }
 
     h2 {
-      font-size: 12.5px;
+      font-family: var(--font-serif);
+      font-size: 12.8px;
       font-weight: 700;
       color: var(--color-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
       white-space: nowrap;
-      margin-right: 8px;
+      margin-right: 10px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      position: relative;
+      padding-left: 8px;
     }
 
-    .section-rule {
+    h2::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 12px;
+      background-color: var(--color-accent);
+      border-radius: 1px;
+    }
+
+    .rule {
       flex: 1;
       height: 1px;
-      background-color: var(--color-border);
+      background: linear-gradient(to right, var(--color-rule), rgba(226, 232, 240, 0.3));
+      border: none;
     }
 
-    /* Item Sub-headers */
-    .item-header {
+    /* ==========================================================================
+       Organization / Experience Bar
+       ========================================================================== */
+    .org-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      background-color: var(--color-bg-bar);
+      border-left: 2.5px solid var(--color-accent);
+      border-top: 1px solid var(--color-bar-border);
+      border-right: 1px solid var(--color-bar-border);
+      border-bottom: 1px solid var(--color-bar-border);
+      padding: 3px 8px;
+      border-radius: 0 2px 2px 0;
+      margin-top: 5px;
+      margin-bottom: 3px;
+      font-size: 11.5px;
+    }
+
+    .org-left {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .org-title {
+      font-weight: 700;
+      color: var(--color-primary);
+    }
+
+    .org-role {
+      font-weight: 600;
+      color: var(--color-accent-dark);
+    }
+
+    .org-right {
+      font-family: var(--font-serif);
+      font-size: 11px;
+      color: var(--color-muted);
+      font-weight: 500;
+    }
+
+    /* Lead Paragraph */
+    .lead {
+      font-weight: 600;
+      color: var(--color-primary-light);
+      margin-bottom: 3px;
+    }
+
+    /* ==========================================================================
+       Project Header Block
+       ========================================================================== */
+    .project-header {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
@@ -195,264 +256,219 @@
       margin-bottom: 2px;
     }
 
-    .item-title-group {
-      display: flex;
-      align-items: baseline;
-      gap: 6px;
-    }
-
-    .item-title {
-      font-size: 11.8px;
+    h3 {
+      font-size: 12px;
       font-weight: 700;
-      color: var(--color-primary-dark);
-    }
-
-    .item-role {
-      font-size: 11.2px;
-      font-weight: 600;
-      color: var(--color-accent);
-    }
-
-    .item-date {
-      font-size: 10.5px;
-      color: var(--color-muted);
-      font-weight: 500;
-      font-family: var(--font-sans);
-    }
-
-    /* Badges & Tags */
-    .badges-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      margin-top: 3px;
-      margin-bottom: 2px;
-    }
-
-    .badge {
-      font-size: 10.2px;
-      color: var(--color-tag-text);
-      background-color: var(--color-tag-bg);
-      border: 1px solid #E2E8F0;
-      padding: 1.5px 6px;
-      border-radius: 3px;
-      font-weight: 500;
-    }
-
-    .badge b {
       color: var(--color-primary);
     }
 
-    /* Bullets */
+    .project-tag {
+      font-family: var(--font-sans);
+      font-size: 10.5px;
+      color: var(--color-muted);
+      font-weight: 500;
+      background: var(--color-accent-subtle);
+      color: var(--color-accent-dark);
+      padding: 0 5px;
+      border-radius: 2px;
+    }
+
+    /* ==========================================================================
+       Bullet Lists & Item Hierarchy
+       ========================================================================== */
     ul {
       list-style-type: none;
       padding-left: 0;
-      margin-top: 1.5px;
-      margin-bottom: 2px;
     }
 
     li {
       position: relative;
-      padding-left: 13px;
+      padding-left: 14px;
       margin-bottom: var(--item-gap);
       text-align: justify;
-      color: #334155;
     }
 
     li::before {
       content: "▪";
       position: absolute;
       left: 2px;
-      top: -1px;
       color: var(--color-accent);
-      font-size: 10px;
+      font-size: 9px;
+      line-height: 1.7;
     }
 
+    li.sub {
+      padding-left: 24px;
+    }
+
+    li.sub::before {
+      content: "▫";
+      left: 12px;
+      color: var(--color-muted);
+      font-size: 8px;
+    }
+
+    /* Highlight Key Terms & Numbers */
     b, strong {
-      font-weight: 700;
-      color: #0F172A;
-    }
-
-    /* Skills Grid */
-    .skills-block {
-      background: var(--color-bg-bar);
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      padding: 5px 8px;
-      margin-top: 3px;
-    }
-
-    .skill-row {
-      display: flex;
-      margin-bottom: 2.5px;
-      line-height: 1.45;
-    }
-
-    .skill-row:last-child {
-      margin-bottom: 0;
-    }
-
-    .skill-label {
-      width: 76px;
-      font-weight: 700;
       color: var(--color-primary);
-      flex-shrink: 0;
+      font-weight: 700;
     }
 
-    .skill-content {
-      flex: 1;
-      color: #334155;
+    /* TODO Warning Marker */
+    .todo {
+      background-color: var(--color-todo-bg);
+      color: var(--color-todo-text);
+      padding: 0 4px;
+      border-radius: 2px;
+      border: 1px dashed var(--color-todo-text);
+      font-weight: 600;
     }
   </style>
 </head>
 <body>
   <div class="page">
-    <!-- Header with Photo -->
-    <header>
-      <div class="header-left">
-        <div class="name-row">
-          <h1>范增煜</h1>
-          <span class="intent-badge">求职意向：运营岗</span>
+    <!-- Header -->
+    
+    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1.5px solid var(--color-primary, #0F172A); padding-bottom:5px;">
+      <div style="flex:1; padding-right:12px;">
+        <div class="header-top" style="display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;">
+          <h1 style="font-size:22px; font-weight:700; margin-bottom:2px;">范增煜</h1>
+          <span style="font-size:12px; font-weight:600; color:var(--color-accent, #0284C7);">求职意向：运营岗</span>
         </div>
-        <div class="contact-info">
-          <span>电话：+86 183-9708-4690</span>
-          <span class="sep">|</span>
-          <span>邮箱：<a href="mailto:3027812108@qq.com">3027812108@qq.com</a></span>
-          <span class="sep">|</span>
-          <span>现居城市：杭州</span>
-        </div>
-      </div>
-
-      <!-- Right Photo Slot -->
-      <div class="photo-wrapper" title="支持在此处替换个人1寸/2寸免冠职业照">
-        <!-- If you have photo.jpg, set src="photo.jpg" and display:block -->
-        <img id="profile-img" src="avatar.jpg" alt="证件照" onerror="this.style.display='none'; document.getElementById('placeholder-box').style.display='flex';" onload="this.style.display='block'; document.getElementById('placeholder-box').style.display='none';">
-        <div id="placeholder-box" style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
-          <svg class="photo-icon" viewBox="0 0 24 24">
-            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-          </svg>
-          <span class="photo-tip">预留证件照<br>一寸 / 二寸</span>
+        <div class="contacts" style="display:flex; gap:8px; font-size:11px; color:var(--color-muted, #64748B); margin-top:2px;">
+          <span>+86 183-9708-4690</span>
+          <span>•</span>
+          <span><a href="mailto:3027812108@qq.com" style="color:inherit; text-decoration:none;">3027812108@qq.com</a></span>
+          <span>•</span><span>现居城市：杭州</span>
         </div>
       </div>
+      
+      <div class="photo-placeholder" style="width:72px; height:96px; border:1.5px dashed var(--color-border, #CBD5E1); background:var(--color-bg-subtle, #F8FAFC); border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; flex-shrink:0;" title="预留证件照位置">
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
+          <span style="font-size:8.5px; color:var(--color-muted, #64748B); line-height:1.2;">预留证件照<br>一寸 / 二寸</span>
+        </div>
+      </div>
+                
     </header>
+    
 
-    <!-- 1. 教育背景 -->
+    <!-- Content Sections injected here -->
+    
     <section id="education">
       <div class="section-header">
         <h2>教育背景</h2>
-        <div class="section-rule"></div>
+        <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
       </div>
-      <div class="item-header">
-        <div class="item-title-group">
-          <span class="item-title">青岛理工大学</span>
-          <span class="item-role">土木工程 · 本科在读</span>
+      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:3px; margin-bottom:2px;">
+        <div class="org-left" style="display:flex; align-items:baseline; gap:16px;">
+          <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">青岛理工大学</span>
+          <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">土木工程  本科在读</span>
         </div>
-        <span class="item-date">2023.09 — 2027.06</span>
+        <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">2023.09—2027.06</div>
       </div>
-      <div class="badges-row">
-        <span class="badge">GPA <b>3.12</b> (专业前15%)</span>
-        <span class="badge">文体优秀奖学金</span>
-        <span class="badge">大学英语四级 (CET-4 <b>506分</b>)</span>
-        <span class="badge">全国计算机等级考试二级 (WPS Office)</span>
-        <span class="badge">普通话水平测试二级乙等</span>
+      
+      <div class="edu-grid" style="display:grid; grid-template-columns:38% 28% 1fr; row-gap:2.5px; font-size:10.5px; color:var(--color-muted, #4B5563); line-height:1.45; margin-top:2.5px;">
+        <div>GPA 3.12，专业前15%</div><div>文体优秀奖学金</div><div>CET-4 506分</div><div>全国计算机等级考试二级（WPS Office）</div><div>普通话水平测试二级乙等</div><div></div>
       </div>
     </section>
+    
 
-    <!-- 2. 实习经历 -->
-    <section id="internship">
-      <div class="section-header">
-        <h2>实习经历</h2>
-        <div class="section-rule"></div>
-      </div>
+        <section id="experience">
+          <div class="section-header">
+            <h2>实习经历</h2>
+            <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
+          </div>
+        
 
-      <!-- 交个朋友 -->
-      <div class="item-header">
-        <div class="item-title-group">
-          <span class="item-title">交个朋友（杭州）</span>
-          <span class="item-role">直播运营</span>
-        </div>
-        <span class="item-date">2026.06 — 至今</span>
-      </div>
-      <ul>
-        <li>负责美妆直播开播前的全流程筹备，月均统筹 <b>20 余场</b> 直播；结合活动节奏参与直播主题及互动环节设计，独立撰写开场、福袋、憋单等直播话术，并跟进贴片、KT板、直播 PPT 等物料的制作、校对和现场调试，保障场次按计划开播。</li>
-        <li>负责直播现场场控、公屏互动及关键节点提醒，实时跟踪 <b>GMV、转化率、5分钟点击率</b> 等指标，协同主播根据流量和成交变化调整讲解节奏及促单策略；单场最高同时在线人数约 <b>500 人</b>，单场最高 GMV 超过 <b>30 万元</b>。</li>
-        <li>建立并维护直播场次数据台账，围绕 <b>GMV、ROI、点击率和转化率</b> 开展复盘，梳理流量承接及成交转化环节的问题并提出优化建议；协助完成千川投放素材整理和基础数据支持。</li>
-        <li>协同商务团队完成直播选品及样品测评，从用户需求、产品卖点、价格机制和直播适配度等维度评估商品，提炼核心销售卖点，并提出排品和商品组合建议。</li>
-      </ul>
+            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+              <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
+                <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">交个朋友（杭州）</span>
+                <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">美妆爆品组 · 直播运营</span>
+              </div>
+              <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">2026.06—至今</div>
+            </div>
+            <ul><li>累计参与 <strong>150+场</strong>美妆直播，其中<strong>独立运营 90+场</strong>；负责开播筹备、直播主题及互动环节设计、商品链接与活动机制核对、现场执行及下播复盘，单日最高参与<strong>3场</strong>直播。</li><li>从零撰写开场、商品讲解、福袋、憋单及促单等<strong>直播话术</strong>，累计覆盖约<strong>90场</strong>直播；负责贴片、KT板、直播PPT等物料的制作、校对和现场调试，保障直播按计划开播。</li><li><strong>独立负责现场场控</strong>、公屏互动、实时数据监控及主播提示，根据GMV、转化率、5分钟点击率等数据调整讲解及促单节奏；所负责场次单场<strong>最高GMV超过 30万元</strong>，单场<strong>最高同时在线人数约 500人</strong>。</li><li>每场<strong>独立建立数据台账并输出复盘报告</strong>，围绕<strong>GMV、ROI、点击率和转化率</strong>定位流量及成交环节问题，提出后续优化建议；同时参与商品选品、样品测评、卖点提炼、排品建议及千川投放素材整理。</li></ul>
+            
 
-      <!-- 桃蹊礼品 -->
-      <div class="item-header" style="margin-top: 5px;">
-        <div class="item-title-group">
-          <span class="item-title">桃蹊礼品</span>
-          <span class="item-role">新媒体运营与线下推广</span>
-        </div>
-        <span class="item-date">2024.10 — 2025.01</span>
-      </div>
-      <ul>
-        <li>负责线下用户拓展、核心客户关系维护、回访调研和需求沟通，记录客户需求及反馈，支持复购跟进和潜在礼品定制需求挖掘。</li>
-        <li>参与品牌线下推广活动执行，负责用户触达、活动引导、信息收集和反馈整理，协助团队优化推广流程，为用户画像完善及后续运营策略调整提供参考。</li>
-      </ul>
-    </section>
+            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+              <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
+                <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">桃蹊礼品</span>
+                <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">新媒体运营与线下推广</span>
+              </div>
+              <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">2024.10—2025.01</div>
+            </div>
+            <ul><li>负责线下用户拓展、核心客户关系维护、回访调研及需求沟通，记录客户采购偏好与反馈，跟进复购需求及潜在礼品定制需求。</li><li>参与品牌线下推广活动，负责用户触达、活动引导、信息收集及反馈整理，协助团队完善用户信息并优化后续推广和运营流程。</li></ul>
+            
+</section>
 
-    <!-- 3. 校园与实践经历 -->
-    <section id="campus">
-      <div class="section-header">
-        <h2>校园与实践经历</h2>
-        <div class="section-rule"></div>
-      </div>
+        <section id="projects">
+          <div class="section-header">
+            <h2>校园与实践经历</h2>
+            <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
+          </div>
+        
 
-      <!-- 新媒体中心 -->
-      <div class="item-header">
-        <div class="item-title-group">
-          <span class="item-title">青岛理工大学新媒体中心</span>
-          <span class="item-role">编辑部成员</span>
-        </div>
-        <span class="item-date">2023.09 — 至今</span>
-      </div>
-      <ul>
-        <li>参与学校新媒体平台日常内容运营，负责公众号文案撰写、内容校审、活动宣传策划及现场摄影，协助完成校园活动宣传内容制作。</li>
-        <li>根据活动主题完成信息整理、宣传文案撰写和内容检查，熟悉公众号内容从素材收集、文案整理到审核发布的基本流程。</li>
-      </ul>
+            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <span style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">青岛理工大学新媒体中心</span>
+                <span style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">编辑部成员</span>
+              </div>
+              <div style="font-size:10.5px; color:var(--color-muted, #64748B);">2023.09—至今</div>
+            </div>
+            <ul><li>参与学校新媒体平台日常内容运营，负责公众号文案撰写、内容校审、活动宣传策划及现场摄影，协助完成校园活动宣传内容制作。</li><li>根据活动主题完成资料收集、信息整理、宣传文案撰写及内容检查，熟悉公众号内容从素材收集、文案制作到审核发布的基本流程。</li></ul>
+            
 
-      <!-- 个人电商实践 -->
-      <div class="item-header" style="margin-top: 5px;">
-        <div class="item-title-group">
-          <span class="item-title">个人电商及本地 IP 推广实践</span>
-          <span class="item-role">主理人 / 实践成员</span>
-        </div>
-        <span class="item-date">2023.09 — 至今</span>
-      </div>
-      <ul>
-        <li>独立运营闲鱼店铺，负责商品选品、信息上架、标题关键词优化、用户沟通、价格协商及售后处理。</li>
-        <li>参与青岛本地文创 IP“小海鸥谢谢”的推广活动，负责潜在用户沟通、线下活动执行、反馈收集及数据整理，积累从用户触达到订单处理和售后维护的基础运营经验。</li>
-      </ul>
-    </section>
+            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <span style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">个人闲鱼店铺</span>
+                <span style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">店铺运营</span>
+              </div>
+              <div style="font-size:10.5px; color:var(--color-muted, #64748B);">2023.09—至今</div>
+            </div>
+            <ul><li>独立负责商品选品、信息上架、标题关键词优化、用户沟通、价格协商及售后处理，覆盖商品发布、咨询转化、订单处理和售后维护等环节。</li></ul>
+            
 
-    <!-- 4. 专业技能 -->
-    <section id="skills">
-      <div class="section-header">
-        <h2>专业技能</h2>
-        <div class="section-rule"></div>
-      </div>
-      <div class="skills-block">
-        <div class="skill-row">
-          <span class="skill-label">内容运营：</span>
-          <span class="skill-content">具备直播话术、公众号文案、活动宣传及内容校审经验，能够根据产品和活动信息整理核心卖点。</span>
-        </div>
-        <div class="skill-row">
-          <span class="skill-label">直播运营：</span>
-          <span class="skill-content">熟悉直播前筹备、现场场控、互动节点执行、选品协同及基础数据复盘流程。</span>
-        </div>
-        <div class="skill-row">
-          <span class="skill-label">用户运营：</span>
-          <span class="skill-content">能够完成客户信息登记、回访提醒、需求记录和用户反馈整理。</span>
-        </div>
-        <div class="skill-row">
-          <span class="skill-label">办公工具：</span>
-          <span class="skill-content">熟练使用 Word、Excel、PowerPoint 和 WPS Office，可完成文档排版、表格制作、数据整理及基础汇总分析。</span>
-        </div>
-      </div>
-    </section>
+            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+              <div style="display:flex; align-items:baseline; gap:8px;">
+                <span style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">青岛本地文创IP“小海鸥谢谢”</span>
+                <span style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">推广成员</span>
+              </div>
+              <div style="font-size:10.5px; color:var(--color-muted, #64748B);">2023.09—至今</div>
+            </div>
+            <ul><li>参与本地文创IP线下推广活动，负责潜在用户沟通、活动执行、反馈收集及数据整理，积累本地推广、用户触达和活动运营经验。</li></ul>
+            
+</section>
+
+        <section id="skills">
+          <div class="section-header">
+            <h2>专业技能</h2>
+            <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
+          </div>
+          <ul style="list-style:none; padding-left:0; margin-top:3px;">
+            
+            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+              <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">直播运营：</span>
+              <span style="color:var(--color-text, #1E293B);">具备直播筹备、主题及互动环节设计、直播话术撰写、现场场控、主播提示、数据监控、场次复盘及选品协同经验。</span>
+            </li>
+            
+            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+              <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">内容与用户运营：</span>
+              <span style="color:var(--color-text, #1E293B);">具备公众号文案、活动宣传、内容校审、产品卖点提炼、用户回访、需求记录及反馈整理经验。</span>
+            </li>
+            
+            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+              <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">平台及数据工具：</span>
+              <span style="color:var(--color-text, #1E293B);">具备巨量千川、巨量百应后台使用经验；可使用Excel、Word、PowerPoint、WPS Office及飞书完成数据台账、复盘报告、文档制作和团队协作。</span>
+            </li>
+            
+            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+              <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">内容制作工具：</span>
+              <span style="color:var(--color-text, #1E293B);">使用剪映、Canva及稿定设计完成基础视频剪辑、图文内容和直播物料制作。</span>
+            </li>
+            
+          </ul>
+        </section>
+        
   </div>
 </body>
 </html>

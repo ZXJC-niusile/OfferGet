@@ -184,6 +184,16 @@ class AcademicExporter:
             lines.append(r"\vspace{2pt}")
 
         # 2. Work / Internship Experience
+        def format_latex_bullet(text: str) -> str:
+            parts = re.split(r"\*\*(.+?)\*\*", str(text))
+            res = []
+            for idx, part in enumerate(parts):
+                if idx % 2 == 1:
+                    res.append(r"\textbf{" + escape_latex(part) + "}")
+                else:
+                    res.append(escape_latex(part))
+            return "".join(res)
+
         experiences = profile.get("experience", [])
         if experiences:
             lines.extend([
@@ -192,14 +202,17 @@ class AcademicExporter:
             for exp in experiences:
                 lines.append(r"\begin{itemize}[leftmargin=*,itemsep=2pt]")
                 org = escape_latex(exp.get("org", ""))
-                role = escape_latex(exp.get("role", ""))
+                dept_str = exp.get("dept", "")
+                role_str = exp.get("role", "")
+                role_combined = f"{dept_str} · {role_str}" if dept_str else role_str
+                role = escape_latex(role_combined)
                 time_str = escape_latex(exp.get("time", ""))
                 lines.append(f"  \\item \\textbf{{{org}}} \\hfill \\textbf{{{role}}} ({time_str})")
                 bullets = exp.get("bullets", [])
                 if bullets:
                     lines.append(r"  \begin{itemize}[leftmargin=*,itemsep=1pt]")
                     for b in bullets:
-                        lines.append(f"    \\item {escape_latex(b)}")
+                        lines.append(f"    \\item {format_latex_bullet(b)}")
                     lines.append(r"  \end{itemize}")
                 lines.append(r"\end{itemize}")
 
@@ -221,7 +234,7 @@ class AcademicExporter:
                 if bullets:
                     lines.append(r"  \begin{itemize}[leftmargin=*,itemsep=1pt]")
                     for b in bullets:
-                        lines.append(f"    \\item {escape_latex(b)}")
+                        lines.append(f"    \\item {format_latex_bullet(b)}")
                     lines.append(r"  \end{itemize}")
                 lines.append(r"\end{itemize}")
 
@@ -362,9 +375,13 @@ class AcademicExporter:
         if experiences:
             lines.append("== 实习经历")
             for exp in experiences:
-                lines.append(f"=== {exp.get('org', '')} ({exp.get('role', '')}) -- {exp.get('time', '')}")
+                dept_str = exp.get("dept", "")
+                role_str = exp.get("role", "")
+                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
+                lines.append(f"=== {exp.get('org', '')} ({role_label}) -- {exp.get('time', '')}")
                 for b in exp.get("bullets", []):
-                    lines.append(f"- {b}")
+                    b_typst = re.sub(r"\*\*(.+?)\*\*", r"*\1*", b)
+                    lines.append(f"- {b_typst}")
             lines.append("")
 
         # Projects
@@ -379,7 +396,8 @@ class AcademicExporter:
                 time_disp = f" -- {p_time}" if p_time else ""
                 lines.append(f"=== {p_name} ({p_role}){time_disp}")
                 for b in proj.get("bullets", []):
-                    lines.append(f"- {b}")
+                    b_typst = re.sub(r"\*\*(.+?)\*\*", r"*\1*", b)
+                    lines.append(f"- {b_typst}")
             lines.append("")
 
         # Publications
@@ -561,8 +579,11 @@ class AcademicExporter:
         if exp_list:
             html += "  <h2>实习经历</h2>\n"
             for exp in exp_list:
-                bullets = "".join([f"<li>{b}</li>" for b in exp.get("bullets", [])])
-                html += f"""  <div class='item-header'><span>{exp.get('org', '')} · {exp.get('role', '')}</span><span>{exp.get('time', '')}</span></div>
+                dept_str = exp.get("dept", "")
+                role_str = exp.get("role", "")
+                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
+                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in exp.get("bullets", [])])
+                html += f"""  <div class='item-header'><span>{exp.get('org', '')} · {role_label}</span><span>{exp.get('time', '')}</span></div>
   <ul>{bullets}</ul>
 """
 
@@ -570,7 +591,7 @@ class AcademicExporter:
             p_title = "科研与架构项目经历" if profile.get("publications") else "校园与实践经历"
             html += f"  <h2>{p_title}</h2>\n"
             for p in proj_list:
-                bullets = "".join([f"<li>{b}</li>" for b in p.get("bullets", [])])
+                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in p.get("bullets", [])])
                 html += f"""  <div class='item-header'><span>{p.get('name', '')} · {p.get('role', '')}</span><span>{p.get('time', '')}</span></div>
   <ul>{bullets}</ul>
 """
