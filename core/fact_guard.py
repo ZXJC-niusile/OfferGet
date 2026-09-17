@@ -291,18 +291,40 @@ class FactVerificationGuard:
 
             # 5. Annual Savings / Compute Cost (e.g. 38,000,000 RMB / 3800 万元)
             elif "savings" in key or "annual_savings" in key:
-                self.baseline_anchors.append({
-                    "anchor_id": f"{claim_id}:{key}",
-                    "topic": "savings",
-                    "keywords": list(context_keywords | {"节省", "降本", "成本", "开销", "savings", "cost", "算力开销", "云算力", "万元"}),
-                    "baseline_value": 3800.0,
-                    "baseline_raw": "3800 万元",
-                    "unit": "万元",
-                    "metric_type": "currency"
-                })
-                self.all_verified_numbers.add(3800.0)
-                self.all_verified_numbers.add(38.0)
-                self.all_verified_numbers.add(38000000.0)
+                # Dynamically parse value and unit from val_str
+                # e.g., "38,000,000 RMB" -> 3800.0 万元 (normalized to 万元 for comparison) or "3800 万元"
+                raw_num = val_str.replace(",", "").strip()
+                m_curr = re.search(r"(\d+(?:\.\d+)?)\s*(万元|万|亿元|M\s*RMB|m\s*rmb|million\s*rmb|RMB|usd|美元)?", raw_num, re.IGNORECASE)
+                if m_curr:
+                    amount = float(m_curr.group(1))
+                    curr_unit = (m_curr.group(2) or "").strip().lower()
+                    # Normalize to 万元
+                    if "亿" in curr_unit:
+                        baseline_wan = amount * 10000.0
+                    elif "million" in curr_unit or "m rmb" in curr_unit or curr_unit.startswith("m"):
+                        # e.g. 38M RMB, 38m -> 38 * 100 = 3800 万元
+                        baseline_wan = amount * 100.0
+                    elif "万" in curr_unit:
+                        baseline_wan = amount
+                    elif amount >= 10000.0:  # e.g. 38,000,000 RMB -> 3800 万元
+                        baseline_wan = amount / 10000.0
+                    else:
+                        baseline_wan = amount
+
+                    self.baseline_anchors.append({
+                        "anchor_id": f"{claim_id}:{key}",
+                        "topic": "savings",
+                        "keywords": list(context_keywords | {"节省", "降本", "成本", "开销", "savings", "cost", "算力开销", "云算力", "万元"}),
+                        "baseline_value": baseline_wan,
+                        "baseline_raw": f"{int(baseline_wan) if baseline_wan.is_integer() else baseline_wan} 万元",
+                        "unit": "万元",
+                        "metric_type": "currency"
+                    })
+                    self.all_verified_numbers.add(baseline_wan)
+                    self.all_verified_numbers.add(amount)
+                    if baseline_wan > 0:
+                        self.all_verified_numbers.add(baseline_wan * 10000.0)
+                        self.all_verified_numbers.add(baseline_wan / 100.0)
 
             elif "cost" in key:
                 m_pct = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
@@ -763,9 +785,6 @@ class FactVerificationGuard:
             else:
                 # Check if exact number exists in SSOT
                 if val in self.all_verified_numbers:
-                    continue
-
-                if met_type == "currency" and (val == 3800 or val == 38):
                     continue
 
                 # No anchor and number not verified -> UNVERIFIED_NUMERICAL_CLAIM

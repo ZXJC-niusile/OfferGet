@@ -2,6 +2,7 @@
 Predictor: Interview probability calculator & Top 20 interview questions predictor.
 """
 
+import re
 from typing import List, Dict, Tuple, Optional
 from .models import (
     DecodedJD,
@@ -13,6 +14,7 @@ from .models import (
     InterviewQuestion,
     PredictionResult,
     TechDomain,
+    GapState,
 )
 
 
@@ -444,3 +446,170 @@ class JDPredictor:
             probability_forecast=prob_forecast,
             top20_questions=questions,
         )
+
+    def predict_targeted_questions(
+        self,
+        jd: DecodedJD,
+        matcher_result: MatcherResult,
+        count: int = 3,
+    ) -> List[InterviewQuestion]:
+        """
+        Rank and select exactly `count` targeted interview questions from the generated pool.
+        Ranking criteria:
+        1. Relevance to detected gaps (REAL_GAP / INSUFFICIENT_EVIDENCE / EXPRESSION_GAP).
+        2. Direct alignment with detected implicit signals / core responsibilities.
+        3. Breadth across categories (architecture / principles / BQ / reverse).
+        Guarantees returning exactly `count` questions with 1-based sequential IDs.
+        """
+        all_qs = self.top20_pred.predict(jd, matcher_result)
+        if not all_qs:
+            return []
+
+        def gap_question(gap, question_id: int) -> InterviewQuestion:
+            requirement = gap.requirement_name.replace("技能-", "").replace("职责-", "").replace("硬门槛-", "").replace("门槛要求-", "").replace("隐性考核-", "")
+            if gap.state == GapState.REAL_GAP:
+                question = f"目标岗位要求【{requirement}】，但当前材料没有直接证据。你如何诚实说明这一缺口，并用真实的相邻经验说明可迁移能力？"
+                intent = "确认候选人是否会划清事实边界，而不是为了匹配 JD 临场编造经历。"
+                prep = "先明确未做过的范围，再说明最接近的真实项目、底层共性、已经完成的学习验证和入职后的补齐步骤。"
+            elif gap.state == GapState.INSUFFICIENT_EVIDENCE:
+                question = f"你在材料中提到过【{requirement}】，请选一个真实项目，说明背景、个人动作、方案取舍、结果口径以及证据来源。"
+                intent = "核实技能是否落到具体行动和结果，而不是只停留在技能清单。"
+                prep = "按背景、目标、个人动作、替代方案、baseline、结果、统计周期、团队边界和失败复盘组织回答。"
+            elif gap.state == GapState.EXPRESSION_GAP:
+                question = f"当前材料只有与【{requirement}】相邻的经验。两者哪些底层能力可迁移，哪些部分你尚未实际做过？"
+                intent = "检验候选人能否准确区分可迁移能力与真实经历，避免把相邻技术偷换成直接经验。"
+                prep = "分别列出共同原理、已做过的模块、未做过的模块和一个可验证的迁移计划。"
+            else:
+                question = f"针对【{requirement}】，请说明当前材料中可核验的事实、仍待确认的信息，以及面试时你会如何划定边界。"
+                intent = "补齐缺失事实并检查候选人的边界意识。"
+                prep = "只使用能回到简历底稿或证据文件的内容；未知内容明确标为待确认。"
+            return InterviewQuestion(
+                question_id=question_id,
+                category_cn="岗位缺口与事实防守",
+                category_en="Role Gap & Evidence Defense",
+                category_type=QuestionCategory.BQ,
+                question_cn=question,
+                question_en=f"Explain the evidence and honest boundary for this job requirement: {requirement}.",
+                jd_signal=requirement,
+                interviewer_intent=intent,
+                prep_keypoints=prep,
+            )
+
+        priority = {
+            GapState.REAL_GAP: 0,
+            GapState.INSUFFICIENT_EVIDENCE: 1,
+            GapState.EXPRESSION_GAP: 2,
+            GapState.TO_BE_CONFIRMED: 3,
+        }
+        actionable_gaps = [
+            gap for gap in getattr(matcher_result, "gap_matrix", [])
+            if gap.state in priority and gap.category in {"skill", "responsibility", "threshold"}
+        ]
+        category_priority = {"skill": 0, "responsibility": 1, "threshold": 2}
+        actionable_gaps.sort(key=lambda gap: (
+            priority[gap.state],
+            category_priority.get(gap.category, 3),
+            0 if str(gap.importance).lower() in {"mandatory", "must_have"} else 1,
+        ))
+
+        generated: List[InterviewQuestion] = []
+        seen_requirements: set[str] = set()
+        for gap in actionable_gaps:
+            requirement = gap.requirement_name.lower()
+            if requirement in seen_requirements:
+                continue
+            seen_requirements.add(requirement)
+            generated.append(gap_question(gap, len(generated) + 1))
+            if len(generated) >= count:
+                return generated
+
+        def terms(value: str) -> set[str]:
+            stopwords = {"负责", "熟悉", "掌握", "能力", "经验", "要求", "相关", "优先", "系统", "技术"}
+            return {
+                token.lower()
+                for token in re.split(r"[^A-Za-z0-9+#.\-一-鿿]+", value or "")
+                if len(token) >= 2 and token not in stopwords
+            }
+
+        # Candidate-gap terms carry the most weight, followed by the JD's own
+        # responsibilities, skills and implicit signals.  This keeps selection
+        # deterministic while avoiding a category-first generic Top-20 sample.
+        gap_keywords: set[str] = set()
+        for gap in getattr(matcher_result, "gap_matrix", []):
+            if getattr(gap.state, "value", str(gap.state)) == "MATCHED":
+                continue
+            req = gap.requirement_name.replace("技能-", "").replace("职责-", "").replace("隐性考核-", "")
+            gap_keywords.update(terms(req))
+
+        jd_keywords: set[str] = set()
+        for skill in getattr(jd, "core_skills", []):
+            jd_keywords.update(terms(skill.name))
+        for responsibility in getattr(jd, "core_responsibilities", []):
+            jd_keywords.update(terms(responsibility.description))
+
+        signal_keywords: set[str] = set()
+        for signal in getattr(jd, "implicit_signals", []):
+            signal_keywords.update(terms(signal.original_text))
+
+        scored_qs = []
+        for q in all_qs:
+            score = 0.0
+            q_text = (q.question_cn + " " + q.jd_signal + " " + q.interviewer_intent).lower()
+            # Gap match weight
+            for gk in gap_keywords:
+                if gk and gk in q_text:
+                    score += 5.0
+            # Direct JD match weight
+            for keyword in jd_keywords:
+                if keyword and keyword in q_text:
+                    score += 2.0
+            # Signal match weight
+            for sk in signal_keywords:
+                if sk and sk in q_text:
+                    score += 3.0
+            # Prefer breadth only as a tie-breaker; relevance to the JD and
+            # the candidate's gaps must dominate category preference.
+            if q.category_type == QuestionCategory.BQ:
+                score += 0.25
+            elif q.category_type == QuestionCategory.REVERSE:
+                score += 0.1
+
+            scored_qs.append((score, q))
+
+        # Sort descending by relevance score
+        scored_qs.sort(key=lambda item: item[0], reverse=True)
+
+        # Select remaining questions with category diversity if possible.
+        selected: List[InterviewQuestion] = list(generated)
+        seen_categories = {question.category_type for question in generated}
+
+        for _, q in scored_qs:
+            if len(selected) >= count:
+                break
+            if q.category_type not in seen_categories or len(selected) + 1 >= count:
+                selected.append(q)
+                seen_categories.add(q.category_type)
+
+        # If still need more to reach `count`, fill from remainder
+        if len(selected) < count:
+            for _, q in scored_qs:
+                if q not in selected:
+                    selected.append(q)
+                if len(selected) >= count:
+                    break
+
+        # Re-index question IDs sequentially 1..count
+        result: List[InterviewQuestion] = []
+        for idx, q in enumerate(selected[:count], 1):
+            result.append(InterviewQuestion(
+                question_id=idx,
+                category_cn=q.category_cn,
+                category_en=q.category_en,
+                category_type=q.category_type,
+                question_cn=q.question_cn,
+                question_en=q.question_en,
+                jd_signal=q.jd_signal,
+                interviewer_intent=q.interviewer_intent,
+                prep_keypoints=q.prep_keypoints,
+            ))
+        return result

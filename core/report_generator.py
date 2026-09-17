@@ -4,6 +4,7 @@ Renders industrial-grade bilingual HTML reports with dynamic SVG gauges, credent
 """
 
 import os
+import html as html_lib
 from datetime import date
 from typing import Dict, Any
 
@@ -23,8 +24,10 @@ def generate_report(decoded_jd: Dict[str, Any], match_result: Dict[str, Any], te
     verdict = match_result.get("verdict", {})
     breakdown = match_result.get("breakdown", {})
 
-    match_score = match_result.get("overall_match_score", 92)
-    interview_prob = match_result.get("interview_prob", 88)
+    match_score = match_result.get("overall_match_score")
+    interview_prob = match_result.get("interview_prob")
+    match_score = float(match_score) if isinstance(match_score, (int, float)) else 0.0
+    interview_prob = float(interview_prob) if isinstance(interview_prob, (int, float)) else 0.0
 
     # Semi-circle gauge stroke calculation:
     # Full arc length = 251.32. Offset = 251.32 * (1 - score / 100)
@@ -34,30 +37,30 @@ def generate_report(decoded_jd: Dict[str, Any], match_result: Dict[str, Any], te
     today_str = date.today().strftime("%Y-%m-%d")
 
     replacements = {
-        "{{COMPANY}}": meta.get("company", "Frontier AI Lab"),
-        "{{ROLE}}": meta.get("role", "大模型算法架构师"),
-        "{{ROLE_TITLE}}": meta.get("role", "大模型算法架构师 / 负责人 (Staff LLM Algorithm Architect)"),
-        "{{LEVEL}}": meta.get("level", "Staff / Principal Level"),
-        "{{LOCATION}}": meta.get("location", "北京 / 杭州 / 深圳"),
-        "{{COMP_BAND}}": meta.get("comp_band", "150W - 260W RMB"),
-        "{{DEPARTMENT}}": meta.get("department", "基础模型与智能体工程部"),
-        "{{ARCHITECTURE_LAYER}}": meta.get("architecture_layer", "Foundation Models & Inference Infra"),
-        "{{CANDIDATE_NAME}}": match_result.get("candidate_name", "张晨曦 (Dr. Alex Zhang)"),
+        "{{COMPANY}}": meta.get("company") or "未提供",
+        "{{ROLE}}": meta.get("role") or "未提供",
+        "{{ROLE_TITLE}}": meta.get("role") or "未提供",
+        "{{LEVEL}}": meta.get("level") or "未提供",
+        "{{LOCATION}}": meta.get("location") or "未提供",
+        "{{COMP_BAND}}": meta.get("comp_band") or "未提供",
+        "{{DEPARTMENT}}": meta.get("department") or "未提供",
+        "{{ARCHITECTURE_LAYER}}": meta.get("architecture_layer") or "未提供",
+        "{{CANDIDATE_NAME}}": match_result.get("candidate_name") or "未提供",
         "{{REPORT_DATE}}": today_str,
 
-        "{{VERDICT_TITLE_EN}}": verdict.get("title_en", "Strong Go · Benchmark Tier Candidate Match"),
-        "{{VERDICT_TITLE_ZH}}": verdict.get("title_zh", "强烈建议投递 (Strong Go) · 标杆级匹配候选人"),
-        "{{VERDICT_DESC_EN}}": verdict.get("desc_en", "Candidate achieves benchmark alignment across 1k-GPU cluster engineering and RL alignment."),
-        "{{VERDICT_DESC_ZH}}": verdict.get("desc_zh", "候选人在千卡集群训练、纯强化学习推理及高性能推理服务化上达到顶尖水准。"),
+        "{{VERDICT_TITLE_EN}}": verdict.get("title_en") or "Insufficient data",
+        "{{VERDICT_TITLE_ZH}}": verdict.get("title_zh") or "信息不足，无法判断",
+        "{{VERDICT_DESC_EN}}": verdict.get("desc_en") or "No conclusion is generated without matching evidence.",
+        "{{VERDICT_DESC_ZH}}": verdict.get("desc_zh") or "缺少匹配证据时不生成投递结论。",
 
         "{{MATCH_SCORE_NUM}}": str(match_score),
         "{{INTERVIEW_PROB_NUM}}": str(interview_prob),
         "{{MATCH_GAUGE_OFFSET}}": str(match_gauge_offset),
         "{{PROB_GAUGE_OFFSET}}": str(prob_gauge_offset),
 
-        "{{MUST_HAVE_SCORE}}": str(breakdown.get("must_have", 98)),
-        "{{NICE_HAVE_SCORE}}": str(breakdown.get("nice_have", 98)),
-        "{{HIDDEN_FIT_SCORE}}": str(breakdown.get("hidden_fit", 92)),
+        "{{MUST_HAVE_SCORE}}": str(breakdown.get("must_have", 0)),
+        "{{NICE_HAVE_SCORE}}": str(breakdown.get("nice_have", 0)),
+        "{{HIDDEN_FIT_SCORE}}": str(breakdown.get("hidden_fit", 0)),
 
         # 5 Layers replacements
         "{{L1_JD_TEXT_ZH}}": layers.get("layer_1", {}).get("jd_text_zh", ""),
@@ -87,7 +90,9 @@ def generate_report(decoded_jd: Dict[str, Any], match_result: Dict[str, Any], te
     }
 
     for key, val in replacements.items():
-        html = html.replace(key, str(val))
+        # Values like offsets and numbers are safe; string fields escape special characters
+        safe_val = html_lib.escape(str(val)) if not key.endswith("_OFFSET}}") and not key.endswith("_NUM}}") and not key.endswith("_SCORE}}") else str(val)
+        html = html.replace(key, safe_val)
 
     # Ensure output directory exists
     out_dir = os.path.dirname(os.path.abspath(output_path))

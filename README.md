@@ -1,13 +1,13 @@
-# OfferGet · 工业级技术求职战略与学术保研全景决策操作系统 (Offer Strategy OS)
+# OfferGet · 本地确定性求职审查与学术材料工具箱
 
 <p align="center">
-  <b>面向大模型算法、分布式架构、高并发工程与学术保研深造的终极决策与工程交付平台</b><br>
-  穿透 JD 招聘修辞迷雾 · 锚定候选人真值事实链 · 严格守卫学术诚信与反夸大防线 · 生成单文件工业级战略报告、极简单页简历与导师外联信
+  <b>面向技术求职与学术申请的本地规则型分析工具</b><br>
+  拆解 JD · 映射候选人事实证据 · 给出可审计的简历建议 · 生成针对性面试问题与回答反馈
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Unit%20Tests-169%2F169%20Passing%20(100%25)-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-run%20locally-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Security-Reversible%20Anonymization-blue.svg" alt="Security">
   <img src="https://img.shields.io/badge/Integrity-Fact%20Verification%20Guard-red.svg" alt="Integrity">
@@ -86,35 +86,46 @@ OfferGet 在演进过程中，系统性研读了开源社区中 30 余个知名�
 ## 🛠️ 快速上手与 CLI 命令指南
 
 ### 1. 环境准备
-系统推荐 Python 3.9+，无外部强制 C++ 依赖：
+系统推荐 Python 3.9+。核心 `review` 流程只使用 Python 标准库；开发与测试可安装项目及 pytest：
 ```bash
 cd OfferGet
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-pip install -r requirements.txt
+python -m pip install -e . pytest
 ```
 
-### 2. 执行全链路自测
-一键运行统一自检（包含 OfferGet 169 项与 ApexResume 34 项测试）：
+### 2. 执行测试
+根测试与 ApexResume 子系统分开运行，实际收集数量以本机输出为准：
 ```bash
+python -m pytest tests -q
+python -m pytest ApexResume/tests -q
+# 或运行包含浏览器环境检查的统一自检
 python cli.py selftest
 ```
 
+> **定位说明**：当前实现是本地确定性规则型求职工作流，无外部 LLM/API 依赖。匹配分与渠道区间属于材料诊断启发式，不是 ATS、面试或录用概率承诺。
+
 ### 3. 企业求职核心指令
 ```bash
-# 1. 穿透解码企业 JD (提取 5 图层、6 大能力树与隐性黑话)
+# 1. 赛题二全闭环求职审查（脱敏、非完美样例）
+python cli.py review examples/sample_career_jd.txt --profile examples/candidate_profile_minimal.json --json
+
+# 2. 提交一轮回答并获得反馈
+python cli.py review examples/sample_career_jd.txt --profile examples/candidate_profile_minimal.json --answers examples/answers_example.json --output review.json --json
+
+# 2. 穿透解码企业 JD (提取 5 图层、6 大能力树与隐性黑话)
 python cli.py jd decode examples/sample_ai_jd.txt
 
-# 2. 严格匹配候选人画像 (输出加权匹配分与面试概率)
+# 3. 严格匹配候选人画像 (输出加权匹配分与面试概率)
 python cli.py jd match examples/sample_ai_jd.txt --profile examples/candidate_profile.json
 
-# 3. 生成双语 HTML 战略对战报告
+# 4. 生成双语 HTML 战略对战报告
 python cli.py jd report examples/sample_ai_jd.txt --profile examples/candidate_profile.json --output strategy_report.html
 
-# 4. 执行 ATS 质量门禁与三态技能台账审计
+# 5. 执行 ATS 质量门禁与三态技能台账审计
 python cli.py ats audit examples/candidate_profile.json --jd examples/sample_ai_jd.txt
 
-# 5. 事实防伪校验 (严格核查指标虚报与算术不一致)
+# 6. 事实防伪校验 (严格核查指标虚报与算术不一致)
 python cli.py fact verify examples/candidate_profile.json
 ```
 
@@ -146,8 +157,8 @@ OfferGet 拥有覆盖率极高的自动化测试工程，保证每一个规则�
 - **`tests/test_advisor_matcher.py`**：11 个测试覆盖导师画像抽取、范式交集加权、防鸽承诺矩阵与礼貌拒信；
 - **`tests/test_baoyan_pipeline.py`**：9 个测试覆盖保研全生命周期状态机与 21 项物料清单校验；
 - **`tests/test_fact_guard.py`**：测试指标防漂移、未锚定数字拦截与真实性台账；
-- **`ApexResume/tests/`**：34 个测试覆盖无头浏览器单页压制、DOM 测量与 CSS 视觉规范；
-- **当前测试基线**：OfferGet **169 passed**，ApexResume **34 passed**；运行时间和结果以本机环境为准。
+- **`ApexResume/tests/`**：覆盖无头浏览器单页压制、DOM 测量与 CSS 视觉规范；
+- **测试基线**：不在文档中硬编码数量；以 `python -m pytest tests -q` 与 `python -m pytest ApexResume/tests -q` 的当前输出为准。
 
 ---
 

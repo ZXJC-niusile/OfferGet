@@ -5,6 +5,7 @@ and predictions into a standalone bilingual interactive HTML report.
 
 import os
 import json
+import html as html_lib
 from typing import Optional, List, Dict
 from .models import (
     DecodedJD,
@@ -68,11 +69,11 @@ class OfferStrategyReporter:
         action_plan_html = self._build_action_plan_html()
 
         html_template = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OfferGet - JD 智能深度分析与通关策略报告 | {jd.job_title}</title>
+    <title>OfferGet - JD 智能深度分析与通关策略报告 | {html_lib.escape(jd.job_title)}</title>
     <style>
         :root {{
             --bg-body: #0b0f19;
@@ -369,9 +370,9 @@ class OfferStrategyReporter:
             <div class="header-title">
                 <h1>OfferGet 智能 JD 深度分析与通关策略报告</h1>
                 <div class="subtitle">
-                    <span>目标职位 / Target Role: <strong>{jd.job_title}</strong></span>
+                    <span>目标职位 / Target Role: <strong>{html_lib.escape(jd.job_title)}</strong></span>
                     <span>•</span>
-                    <span>团队部门 / Dept: <strong>{jd.company_or_dept}</strong></span>
+                    <span>团队部门 / Dept: <strong>{html_lib.escape(jd.company_or_dept)}</strong></span>
                 </div>
             </div>
             <div>
@@ -637,7 +638,7 @@ class OfferStrategyReporter:
             <div class="item-box" style="border-left: 4px solid { '#f43f5e' if redflags.risk_score >= 40 else '#10b981' };">
                 <div style="font-size: 12px; color: var(--text-muted);">红旗与陷阱预警 / Risk Radar</div>
                 <div style="font-size: 16px; font-weight: bold; margin: 4px 0;">{redflags.overall_risk_level} 风险级别</div>
-                <div style="font-size: 13px; color: #94a3b8;">侦测到 {len(redflags.flags)} 处关键警示：{redflags.summary[:50]}...</div>
+                <div style="font-size: 13px; color: #94a3b8;">侦测到 {len(redflags.flags)} 处关键警示：{html_lib.escape(redflags.summary[:50])}...</div>
             </div>
         </div>
         """
@@ -653,8 +654,8 @@ class OfferStrategyReporter:
             </div>
             """
 
-        reasons_li = "".join([f"<li>{r}</li>" for r in matcher.hard_veto_reasons])
-        advice_li = "".join([f"<li>{a}</li>" for a in matcher.breakthrough_advice])
+        reasons_li = "".join([f"<li>{html_lib.escape(r)}</li>" for r in matcher.hard_veto_reasons])
+        advice_li = "".join([f"<li>{html_lib.escape(a)}</li>" for a in matcher.breakthrough_advice])
 
         return f"""
         <div class="card" style="margin-bottom: 24px; border-left: 4px solid #f43f5e; background: #1a0f14;">
@@ -675,27 +676,27 @@ class OfferStrategyReporter:
 
     def _build_decoding_html(self, jd: DecodedJD) -> str:
         # Layer 1: Thresholds
-        th_html = "".join([f"<span class='badge badge-blue' style='margin: 4px;'>{t.requirement}</span>" for t in jd.hard_thresholds])
+        th_html = "".join([f"<span class='badge badge-blue' style='margin: 4px;'>{html_lib.escape(t.requirement)}</span>" for t in jd.hard_thresholds])
 
         # Layer 2: Responsibilities
         resp_html = "".join([
-            f"<div class='item-box'><div class='item-title'>{r.title}</div><div class='item-desc'>{r.description}</div><div class='badge badge-purple'>{r.domain}</div></div>"
+            f"<div class='item-box'><div class='item-title'>{html_lib.escape(r.title)}</div><div class='item-desc'>{html_lib.escape(r.description)}</div><div class='badge badge-purple'>{html_lib.escape(r.domain)}</div></div>"
             for r in jd.core_responsibilities[:4]
         ])
 
         # Layer 3: Core Skills
         must_skills = [s for s in jd.core_skills if s.importance == "MUST_HAVE"]
         nice_skills = [s for s in jd.core_skills if s.importance == "NICE_TO_HAVE"]
-        must_tags = "".join([f"<span class='badge badge-emerald' style='margin: 3px;'>{s.name} ({s.category})</span>" for s in must_skills])
-        nice_tags = "".join([f"<span class='badge badge-amber' style='margin: 3px;'>{s.name} ({s.category})</span>" for s in nice_skills])
+        must_tags = "".join([f"<span class='badge badge-emerald' style='margin: 3px;'>{html_lib.escape(s.name)} ({html_lib.escape(s.category)})</span>" for s in must_skills])
+        nice_tags = "".join([f"<span class='badge badge-amber' style='margin: 3px;'>{html_lib.escape(s.name)} ({html_lib.escape(s.category)})</span>" for s in nice_skills])
 
         # Layer 4: Jargon
         jargon_html = "".join([
             f"""<div class='item-box' style='border-left: 3px solid #f59e0b;'>
-                <div class='item-title' style='color:#fcd34d;'>原文黑话: &ldquo;{sig.original_text}&rdquo;</div>
-                <div class='item-desc' style='margin-top:4px;'><strong>底层真相 / Real Subtext:</strong> {sig.translated_meaning}</div>
-                <div style='font-size:12px; color:#f87171;'><strong>潜在风险:</strong> {sig.underlying_risk}</div>
-                <div class='item-meta'><strong>应对攻防:</strong> {sig.candidate_countermeasure}</div>
+                <div class='item-title' style='color:#fcd34d;'>原文黑话: &ldquo;{html_lib.escape(sig.original_text)}&rdquo;</div>
+                <div class='item-desc' style='margin-top:4px;'><strong>底层真相 / Real Subtext:</strong> {html_lib.escape(sig.translated_meaning)}</div>
+                <div style='font-size:12px; color:#f87171;'><strong>潜在风险:</strong> {html_lib.escape(sig.underlying_risk)}</div>
+                <div class='item-meta'><strong>应对攻防:</strong> {html_lib.escape(sig.candidate_countermeasure)}</div>
             </div>"""
             for sig in jd.implicit_signals
         ])
@@ -703,9 +704,9 @@ class OfferStrategyReporter:
         # Layer 5: Pain Points & KPIs
         pain_html = "".join([
             f"""<div class='item-box' style='border-left: 3px solid #3b82f6;'>
-                <div class='item-title'>{p.aspect}</div>
-                <div class='item-desc'>{p.description}</div>
-                <div class='item-meta'><strong>核心考核目标 (KPI/SLA):</strong> <code>{p.evaluation_metric}</code></div>
+                <div class='item-title'>{html_lib.escape(p.aspect)}</div>
+                <div class='item-desc'>{html_lib.escape(p.description)}</div>
+                <div class='item-meta'><strong>核心考核目标 (KPI/SLA):</strong> <code>{html_lib.escape(p.evaluation_metric)}</code></div>
             </div>"""
             for p in jd.business_pain_points
         ])
@@ -757,12 +758,12 @@ class OfferStrategyReporter:
             items_html.append(f"""
             <div class="item-box gap-item-row" data-state="{st_val}">
                 <div class="item-top">
-                    <div class="item-title">{g.requirement_name} <span class="badge {badge_cls}" style="margin-left: 8px;">{state_cn} / {state_en}</span></div>
+                    <div class="item-title">{html_lib.escape(g.requirement_name)} <span class="badge {badge_cls}" style="margin-left: 8px;">{state_cn} / {state_en}</span></div>
                     <div style="font-size: 13px; font-weight: bold; color: #94a3b8;">得分: {g.score}</div>
                 </div>
-                <div class="item-desc"><strong>候选人佐证:</strong> {g.candidate_evidence}</div>
-                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 4px;"><strong>差距诊断:</strong> {g.gap_explanation}</div>
-                <div class="item-meta"><strong>🛠️ 行动修改建议 / Actionable Advice:</strong> {g.actionable_advice}</div>
+                <div class="item-desc"><strong>候选人佐证:</strong> {html_lib.escape(g.candidate_evidence)}</div>
+                <div style="font-size: 13px; color: #94a3b8; margin-bottom: 4px;"><strong>差距诊断:</strong> {html_lib.escape(g.gap_explanation)}</div>
+                <div class="item-meta"><strong>🛠️ 行动修改建议 / Actionable Advice:</strong> {html_lib.escape(g.actionable_advice)}</div>
             </div>
             """)
 
@@ -794,11 +795,11 @@ class OfferStrategyReporter:
             flags_html.append(f"""
             <div class="item-box" style="border-left: 4px solid { '#f43f5e' if f.severity == 'HIGH' else '#f59e0b' };">
                 <div class="item-top">
-                    <div class="item-title">{f.title_cn} <span class="badge {sev_badge}">{f.severity} 风险</span></div>
+                    <div class="item-title">{html_lib.escape(f.title_cn)} <span class="badge {sev_badge}">{html_lib.escape(f.severity)} 风险</span></div>
                 </div>
-                <div style="font-size: 13px; color: #fca5a5; margin-bottom: 6px;"><strong>JD 敏感特征捕捉:</strong> &ldquo;{f.trigger_snippet}&rdquo;</div>
-                <div class="item-desc"><strong>深度危害剖析 / Risk Impact:</strong> {f.risk_analysis}</div>
-                <div class="item-meta" style="border-left-color: #f59e0b;"><strong>🛡️ 面试反击排查话术 / Interview Defense:</strong> {f.interview_defense}</div>
+                <div style="font-size: 13px; color: #fca5a5; margin-bottom: 6px;"><strong>JD 敏感特征捕捉:</strong> &ldquo;{html_lib.escape(f.trigger_snippet)}&rdquo;</div>
+                <div class="item-desc"><strong>深度危害剖析 / Risk Impact:</strong> {html_lib.escape(f.risk_analysis)}</div>
+                <div class="item-meta" style="border-left-color: #f59e0b;"><strong>🛡️ 面试反击排查话术 / Interview Defense:</strong> {html_lib.escape(f.interview_defense)}</div>
             </div>
             """)
 
@@ -845,13 +846,13 @@ class OfferStrategyReporter:
             qs_html.append(f"""
             <div class="item-box q-item-row" data-category="{cat_val}">
                 <div class="item-top">
-                    <div class="item-title">#{q.question_id}. {q.question_cn}</div>
-                    <span class="badge {cat_badge}">{q.category_cn}</span>
+                    <div class="item-title">#{q.question_id}. {html_lib.escape(q.question_cn)}</div>
+                    <span class="badge {cat_badge}">{html_lib.escape(q.category_cn)}</span>
                 </div>
-                <div style="font-size: 12px; color: #94a3b8; font-style: italic; margin-bottom: 6px;">{q.question_en}</div>
-                <div style="font-size: 12px; color: #38bdf8; margin-bottom: 4px;"><strong>🎯 关联 JD 信号:</strong> {q.jd_signal}</div>
-                <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>💡 面试官考察目的:</strong> {q.interviewer_intent}</div>
-                <div class="item-meta"><strong>📝 通关备考要点与答题框架:</strong> {q.prep_keypoints}</div>
+                <div style="font-size: 12px; color: #94a3b8; font-style: italic; margin-bottom: 6px;">{html_lib.escape(q.question_en)}</div>
+                <div style="font-size: 12px; color: #38bdf8; margin-bottom: 4px;"><strong>🎯 关联 JD 信号:</strong> {html_lib.escape(q.jd_signal)}</div>
+                <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 6px;"><strong>💡 面试官考察目的:</strong> {html_lib.escape(q.interviewer_intent)}</div>
+                <div class="item-meta"><strong>📝 通关备考要点与答题框架:</strong> {html_lib.escape(q.prep_keypoints)}</div>
             </div>
             """)
 

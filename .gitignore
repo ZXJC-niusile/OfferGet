@@ -11,10 +11,13 @@ htmlcov/
 .venv/
 venv/
 env/
+*.egg-info/
 
 # Generated reports and exports
 report.html
 *_report.html
+review*.json
+*_review.json
 *.pdf
 *.docx
 *.log
