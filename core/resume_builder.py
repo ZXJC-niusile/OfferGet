@@ -304,8 +304,8 @@ class ResumeBuilder:
             data_uri = _image_to_base64_data_uri(eff_photo_path)
             if data_uri:
                 photo_html = f"""
-      <div class="photo-placeholder" style="width:72px; height:96px; border:none; background:transparent; border-radius:3px; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;" title="证件照">
-        <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; object-fit:contain; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+      <div class="photo-placeholder" style="width:72px; height:96px; border:none !important; outline:none !important; box-shadow:none !important; background:transparent; border-radius:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;" title="证件照">
+        <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
         <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
           <span style="font-size:8.5px; color:var(--color-muted, #64748B); line-height:1.2;">预留证件照<br>一寸 / 二寸</span>
         </div>
@@ -527,8 +527,8 @@ class ResumeBuilder:
             data_uri = _image_to_base64_data_uri(eff_photo_path)
             if data_uri:
                 photo_box = f"""
-    <div style="width: 72px; height: 96px; border: none; background: transparent; border-radius: 2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; object-fit:contain; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+    <div style="width: 72px; height: 96px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
+      <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
       <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
         <span style="font-size: 8pt; color: #4b5563; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
       </div>
@@ -708,7 +708,17 @@ class ResumeBuilder:
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        typ_src = self.academic_exporter.generate_typst(prof, reserve_photo=photo, photo_path=eff_photo_path)
+        typ_photo = eff_photo_path
+        if eff_photo_path and Path(eff_photo_path).is_file():
+            try:
+                dest_photo = out_dir / Path(eff_photo_path).name
+                if dest_photo.resolve() != Path(eff_photo_path).resolve():
+                    shutil.copy(eff_photo_path, dest_photo)
+                typ_photo = dest_photo.name
+            except Exception:
+                typ_photo = eff_photo_path
+
+        typ_src = self.academic_exporter.generate_typst(prof, reserve_photo=photo, photo_path=typ_photo)
         typ_path = out_dir / "resume_academic_typst.typ"
         typ_path.write_text(typ_src, encoding="utf-8")
 

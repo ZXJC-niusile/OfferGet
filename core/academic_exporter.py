@@ -304,11 +304,11 @@ class AcademicExporter:
 
         if photo_needed:
             loc_disp = f" | {location}" if location else ""
-            if photo_path and Path(photo_path).is_file():
-                posix_path = Path(photo_path).resolve().as_posix()
+            if photo_path:
+                p_str = Path(photo_path).name if ":" in str(photo_path) else Path(photo_path).as_posix()
                 rect_body = (
                     "    #box(width: 2.1cm, height: 2.8cm, clip: false)[\n"
-                    f"      #image(\"{posix_path}\", width: 100%, height: 100%, fit: \"contain\")\n"
+                    f'      #image("{p_str}", width: 100%, height: 100%, fit: "contain")\n'
                     "    ]"
                 )
             else:
@@ -475,8 +475,8 @@ class AcademicExporter:
             photo_data_uri = _image_to_base64_data_uri(photo_path)
             if photo_data_uri:
                 photo_html = f"""
-    <div style="width: 72px; height: 96px; border: none; background: transparent; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{photo_data_uri}" alt="证件照" style="max-width:100%; max-height:100%; object-fit:contain; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+    <div style="width: 72px; height: 96px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
+      <img src="{photo_data_uri}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
       <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
         <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
       </div>

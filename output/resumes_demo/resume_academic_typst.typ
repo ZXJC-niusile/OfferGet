@@ -11,7 +11,7 @@
   ],
   [
     #box(width: 2.1cm, height: 2.8cm, clip: false)[
-      #image("C:/Users/26325/Desktop/81d2cd3e8862f04e701b65d4d8bf3122.jpg", width: 100%, height: 100%, fit: "contain")
+      #image("81d2cd3e8862f04e701b65d4d8bf3122.jpg", width: 100%, height: 100%, fit: "contain")
     ]
   ]
 )

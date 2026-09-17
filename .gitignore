@@ -25,6 +25,9 @@ review*.json
 *.docx
 *.log
 *.tmp
+*.jpg
+*.jpeg
+*.png
 
 
 # Local anonymization maps and derived profiles
