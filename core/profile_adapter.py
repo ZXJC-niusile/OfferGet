@@ -260,4 +260,125 @@ def claim_ref(claim: EvidenceClaim) -> Dict[str, str]:
     }
 
 
-__all__ = ["EvidenceClaim", "iter_profile_claims", "find_evidence", "claim_matches", "claim_ref", "canonical_terms"]
+def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalizes candidate profile into the standard SSOT schema.
+
+    Supports both full standard profiles (Track 1) and minimal/flat profiles (Track 2).
+    """
+    if not isinstance(raw_profile, dict):
+        raise TypeError(f"Expected dict for profile, got {type(raw_profile)}")
+
+    # Case A: Profile is already structured with standard top-level 'candidate'
+    if "candidate" in raw_profile and isinstance(raw_profile["candidate"], dict):
+        cand = dict(raw_profile["candidate"])
+        edu_badges = list(cand.get("education_badges", []))
+        if not edu_badges:
+            if cand.get("gpa"):
+                edu_badges.append(f"GPA: {cand['gpa']}")
+            if cand.get("awards"):
+                edu_badges.append(str(cand["awards"]))
+            if cand.get("certificates"):
+                edu_badges.append(str(cand["certificates"]))
+        cand["education_badges"] = edu_badges
+
+        return {
+            "candidate": cand,
+            "competencies": raw_profile.get("competencies", {}),
+            "experience": raw_profile.get("experience", []),
+            "projects": raw_profile.get("projects", []),
+            "publications": raw_profile.get("publications", []),
+            "narrative": raw_profile.get("narrative", {}),
+        }
+
+    # Case B: Minimal / Flat profile format (Track 2 / Career Review input)
+    cand_name = raw_profile.get("name") or raw_profile.get("candidate_name") or "候选人"
+    title = raw_profile.get("intent") or raw_profile.get("target_role") or raw_profile.get("title") or "运营岗"
+    phone = raw_profile.get("phone", "")
+    email = raw_profile.get("email", "")
+    location = raw_profile.get("city") or raw_profile.get("location", "")
+
+    edu = raw_profile.get("education", {})
+    school = edu.get("school", "")
+    major = edu.get("major", "")
+    degree = edu.get("degree", "")
+    edu_time = edu.get("time", "")
+
+    edu_badges = []
+    if edu.get("gpa"):
+        edu_badges.append(f"GPA: {edu['gpa']}")
+    if edu.get("awards"):
+        edu_badges.append(str(edu["awards"]))
+    if edu.get("certificates"):
+        # Split certificates if comma-separated
+        certs = str(edu["certificates"])
+        for c in re.split(r"[,，;；\n]", certs):
+            c_clean = c.strip()
+            if c_clean:
+                edu_badges.append(c_clean)
+
+    # Experience normalization
+    raw_exp = raw_profile.get("experience") or raw_profile.get("internships", [])
+    norm_exp = []
+    for e in raw_exp:
+        org = e.get("company") or e.get("org") or e.get("organization", "")
+        role = e.get("role") or e.get("title", "")
+        time_str = e.get("time") or e.get("period", "")
+        bullets = e.get("bullets", [])
+        norm_exp.append({
+            "org": org,
+            "company": org,
+            "role": role,
+            "time": time_str,
+            "bullets": bullets,
+        })
+
+    # Projects / Campus normalization
+    raw_proj = raw_profile.get("projects") or raw_profile.get("campus_experience", [])
+    norm_proj = []
+    for p in raw_proj:
+        p_name = p.get("name") or p.get("title") or "校园经历"
+        p_role = p.get("role", "")
+        p_time = p.get("time") or p.get("period", "")
+        bullets = p.get("bullets", [])
+        norm_proj.append({
+            "name": p_name,
+            "role": p_role,
+            "time": p_time,
+            "bullets": bullets,
+        })
+
+    # Competencies normalization
+    competencies = raw_profile.get("competencies") or raw_profile.get("skills", {})
+
+    return {
+        "candidate": {
+            "name": cand_name,
+            "title": title,
+            "phone": phone,
+            "email": email,
+            "location": location,
+            "school": school,
+            "major": major,
+            "degree": f"{major} ｜ {degree}" if major and degree else (degree or major),
+            "edu_time": edu_time,
+            "education_badges": edu_badges,
+            "reserve_photo": True,
+        },
+        "competencies": competencies,
+        "experience": norm_exp,
+        "projects": norm_proj,
+        "publications": raw_profile.get("publications", []),
+        "narrative": raw_profile.get("narrative", {}),
+    }
+
+
+__all__ = [
+    "EvidenceClaim",
+    "iter_profile_claims",
+    "find_evidence",
+    "claim_matches",
+    "claim_ref",
+    "canonical_terms",
+    "normalize_candidate_profile",
+]
+

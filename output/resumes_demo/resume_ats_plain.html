@@ -2,54 +2,102 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>范增煜 - 运营岗 ATS 简历</title>
+  <title>Resume - ATS Plain (范增煜)</title>
   <style>
-    @page { size: A4 portrait; margin: 10mm 14mm; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
-      font-size: 11px;
-      line-height: 1.5;
-      color: #111827;
-      background: #FFFFFF;
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
-    h1 { font-size: 19px; margin: 0 0 3px 0; color: #000000; }
-    .contact { font-size: 10.5px; color: #4B5563; margin-bottom: 4px; }
-    hr { border: none; border-top: 1px solid #D1D5DB; margin: 6px 0; }
-    h2 { font-size: 12.5px; text-transform: uppercase; margin: 6px 0 3px 0; color: #111827; letter-spacing: 0.5px; }
-    h3 { font-size: 11.5px; margin: 4px 0 2px 0; color: #1F2937; }
-    ul { margin: 2px 0 4px 0; padding-left: 16px; }
-    li { margin-bottom: 2.5px; text-align: justify; }
-    b, strong { color: #000000; }
+    body {
+      font-family: Arial, Helvetica, "SimSun", sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.5;
+      color: #000000;
+      background: #FFFFFF;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10pt;
+      border-bottom: 1pt solid #000000;
+      padding-bottom: 6pt;
+    }
+    h1 {
+      font-size: 20pt;
+      font-weight: bold;
+      margin: 0 0 3pt 0;
+    }
+    .contact {
+      font-size: 10pt;
+      color: #222222;
+    }
+    h2 {
+      font-size: 12pt;
+      font-weight: bold;
+      border-bottom: 0.8pt solid #333333;
+      padding-bottom: 2pt;
+      margin-top: 10pt;
+      margin-bottom: 4pt;
+      text-transform: uppercase;
+    }
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10.5pt;
+      font-weight: bold;
+      margin-top: 4pt;
+    }
+    ul {
+      margin: 2pt 0 6pt 0;
+      padding-left: 18pt;
+    }
+    li {
+      font-size: 10pt;
+      margin-bottom: 2pt;
+      text-align: justify;
+    }
   </style>
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 4px;">
+  <div class="header">
     <div>
-      <h1 style="margin-bottom: 3px;">范增煜</h1>
-      <div style="font-size: 11px; font-weight: 600; color: #1E40AF; margin-bottom: 4px;">求职意向：运营岗</div>
-      <div class="contact" style="margin-bottom: 0;">电话：+86 183-9708-4690 &nbsp;|&nbsp; 邮箱：3027812108@qq.com &nbsp;|&nbsp; 现居城市：杭州</div>
-    </div>
-    <div style="width: 72px; height: 96px; border: 1.5px dashed #9CA3AF; border-radius: 3px; background: #F9FAFB; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; text-align: center; overflow: hidden;" title="预留证件照位置">
-      <img src="avatar.jpg" alt="证件照" style="width: 100%; height: 100%; object-fit: cover; display: none;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" onload="this.style.display='block'; this.nextElementSibling.style.display='none';">
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
-        <svg style="width: 18px; height: 18px; fill: #9CA3AF; margin-bottom: 2px;" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-        <span style="font-size: 8.5px; color: #6B7280; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
+      <h1>范增煜</h1>
+      <div style="font-size: 11pt; font-weight: bold; margin-bottom: 3pt;">求职意向：运营岗</div>
+      <div class="contact">
+        电话：+86 183-9708-4690 &nbsp;|&nbsp; 邮箱：3027812108@qq.com &nbsp;|&nbsp; 现居城市：杭州
       </div>
     </div>
+    
+    <div style="width: 72px; height: 96px; border: 1.5px dashed #4b5563; background: #f9fafb; border-radius: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="预留证件照位置">
+      <span style="font-size: 8pt; color: #4b5563; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
+    </div>
+            
   </div>
-  <hr>
+
   <h2>教育背景</h2>
-  <h3>青岛理工大学 ｜ 土木工程 · 本科在读 <span style="float:right;">2023.09 — 2027.06</span></h3>
+  <div class="item-header">
+    <span>青岛理工大学 · 土木工程 · 本科在读</span>
+    <span>2023.09 — 2027.06</span>
+  </div>
   <ul><li>GPA 3.12 (专业前15%)</li><li>文体优秀奖学金</li><li>大学英语四级: 506分</li><li>全国计算机等级考试二级 (WPS Office)</li><li>普通话水平测试二级乙等</li></ul>
-  <hr>
   <h2>实习经历</h2>
-  <h3>交个朋友（杭州） ｜ 直播运营 <span style='float:right;'>2026.06 — 至今</span></h3><ul><li>负责美妆直播开播前的全流程筹备，月均统筹 20 余场直播；结合活动节奏参与直播主题及互动环节设计，独立撰写开场、福袋、憋单等直播话术，并跟进贴片、KT板、直播 PPT 等物料的制作、校对和现场调试，保障场次按计划开播。</li><li>负责直播现场场控、公屏互动及关键节点提醒，实时跟踪 GMV、转化率、5分钟点击率等指标，协同主播根据流量和成交变化调整讲解节奏及促单策略；单场最高同时在线人数约 500 人，单场最高 GMV 超过 30 万元。</li><li>建立并维护直播场次数据台账，围绕 GMV、ROI、点击率和转化率开展复盘，梳理流量承接及成交转化环节的问题并提出优化建议；协助完成千川投放素材整理和基础数据支持。</li><li>协同商务团队完成直播选品及样品测评，从用户需求、产品卖点、价格机制和直播适配度等维度评估商品，提炼核心销售卖点，并提出排品和商品组合建议。</li></ul><h3>桃蹊礼品 ｜ 新媒体运营与线下推广 <span style='float:right;'>2024.10 — 2025.01</span></h3><ul><li>负责线下用户拓展、核心客户关系维护、回访调研和需求沟通，记录客户需求及反馈，支持复购跟进和潜在礼品定制需求挖掘。</li><li>参与品牌线下推广活动执行，负责用户触达、活动引导、信息收集和反馈整理，协助团队优化推广流程，为用户画像完善及后续运营策略调整提供参考。</li></ul>
-  <hr>
+  <div class='item-header'><span>交个朋友（杭州） · 直播运营</span><span>2026.06 — 至今</span></div>
+  <ul><li>负责美妆直播开播前的全流程筹备，月均统筹 20 余场直播；结合活动节奏参与直播主题及互动环节设计，独立撰写开场、福袋、憋单等直播话术，并跟进贴片、KT板、直播 PPT 等物料的制作、校对和现场调试，保障场次按计划开播。</li><li>负责直播现场场控、公屏互动及关键节点提醒，实时跟踪 GMV、转化率、5分钟点击率等指标，协同主播根据流量和成交变化调整讲解节奏及促单策略；单场最高同时在线人数约 500 人，单场最高 GMV 超过 30 万元。</li><li>建立并维护直播场次数据台账，围绕 GMV、ROI、点击率和转化率开展复盘，梳理流量承接及成交转化环节的问题并提出优化建议；协助完成千川投放素材整理和基础数据支持。</li><li>协同商务团队完成直播选品及样品测评，从用户需求、产品卖点、价格机制和直播适配度等维度评估商品，提炼核心销售卖点，并提出排品和商品组合建议。</li></ul>
+  <div class='item-header'><span>桃蹊礼品 · 新媒体运营与线下推广</span><span>2024.10 — 2025.01</span></div>
+  <ul><li>负责线下用户拓展、核心客户关系维护、回访调研和需求沟通，记录客户需求及反馈，支持复购跟进和潜在礼品定制需求挖掘。</li><li>参与品牌线下推广活动执行，负责用户触达、活动引导、信息收集和反馈整理，协助团队优化推广流程，为用户画像完善及后续运营策略调整提供参考。</li></ul>
   <h2>校园与实践经历</h2>
-  <h3>青岛理工大学新媒体中心 ｜ 编辑部成员 <span style='float:right;'>2023.09 — 至今</span></h3><ul><li>参与学校新媒体平台日常内容运营，负责公众号文案撰写、内容校审、活动宣传策划及现场摄影，协助完成校园活动宣传内容制作。</li><li>根据活动主题完成信息整理、宣传文案撰写和内容检查，熟悉公众号内容从素材收集、文案整理到审核发布的基本流程。</li></ul><h3>个人电商及本地 IP 推广实践 ｜ 主理人 / 推广成员 <span style='float:right;'>2023.09 — 至今</span></h3><ul><li>独立运营闲鱼店铺，负责商品选品、信息上架、标题关键词优化、用户沟通、价格协商及售后处理。</li><li>参与青岛本地文创 IP“小海鸥谢谢”的推广活动，负责潜在用户沟通、线下活动执行、反馈收集及数据整理，积累从用户触达到订单处理和售后维护的基础运营经验。</li></ul>
-  <hr>
+  <div class='item-header'><span>青岛理工大学新媒体中心 · 编辑部成员</span><span>2023.09 — 至今</span></div>
+  <ul><li>参与学校新媒体平台日常内容运营，负责公众号文案撰写、内容校审、活动宣传策划及现场摄影，协助完成校园活动宣传内容制作。</li><li>根据活动主题完成信息整理、宣传文案撰写和内容检查，熟悉公众号内容从素材收集、文案整理到审核发布的基本流程。</li></ul>
+  <div class='item-header'><span>个人电商及本地 IP 推广实践 · 主理人 / 推广成员</span><span>2023.09 — 至今</span></div>
+  <ul><li>独立运营闲鱼店铺，负责商品选品、信息上架、标题关键词优化、用户沟通、价格协商及售后处理。</li><li>参与青岛本地文创 IP“小海鸥谢谢”的推广活动，负责潜在用户沟通、线下活动执行、反馈收集及数据整理，积累从用户触达到订单处理和售后维护的基础运营经验。</li></ul>
   <h2>专业技能</h2>
   <ul><li><b>内容运营：</b>具备直播话术、公众号文案、活动宣传及内容校审经验，能够根据产品和活动信息整理核心卖点。</li><li><b>直播运营：</b>熟悉直播前筹备、现场场控、互动节点执行、选品协同及基础数据复盘流程。</li><li><b>用户运营：</b>能够完成客户信息登记、回访提醒、需求记录和用户反馈整理。</li><li><b>办公工具：</b>熟练使用 Word、Excel、PowerPoint 和 WPS Office，可完成文档排版、表格制作、数据整理及基础汇总分析。</li></ul>
 </body>

@@ -16,11 +16,16 @@ env/
 # Generated reports and exports
 report.html
 *_report.html
+*_report.md
+test_*_report.*
+*_defense_report.*
 review*.json
 *_review.json
 *.pdf
 *.docx
 *.log
+*.tmp
+
 
 # Local anonymization maps and derived profiles
 *_map.json

@@ -960,6 +960,71 @@ def cmd_baoyan_checklist(args):
     print("=" * 68)
 
 
+def cmd_resume_build(args_list):
+    """Build multi-template resumes from candidate profile."""
+    from core.resume_builder import ResumeBuilder
+
+    build_parser = argparse.ArgumentParser(
+        prog="offerget resume build",
+        description="Build multi-template resumes (PDF & HTML) from candidate profile",
+    )
+    build_parser.add_argument("profile", help="Path to candidate profile JSON (minimal or standard)")
+    build_parser.add_argument(
+        "--theme",
+        default="all",
+        choices=["all", "modern-navy", "silicon-clean", "classic-tech", "ats-plain", "academic-latex", "academic-typst"],
+        help="Resume theme to build (default: all)",
+    )
+    build_parser.add_argument(
+        "--output-dir",
+        default="output/resumes",
+        help="Output directory to save generated resumes (default: output/resumes)",
+    )
+    build_parser.add_argument("--no-photo", action="store_true", help="Do not reserve photo slot")
+    build_parser.add_argument("--no-autofit", action="store_true", help="Disable single-page AutoFit compaction")
+
+    parsed = build_parser.parse_args(args_list)
+
+    profile_path = Path(parsed.profile)
+    if not profile_path.exists():
+        print(f"[-] Error: Profile file not found: {profile_path}", file=sys.stderr)
+        sys.exit(1)
+
+    out_dir = Path(parsed.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    builder = ResumeBuilder(profile_path)
+    cand_name = builder.profile["candidate"].get("name", "候选人")
+    target_role = builder.profile["candidate"].get("title", "运营岗")
+
+    print("=" * 68)
+    print("             OfferGet · Multi-Template Resume Builder            ")
+    print("=" * 68)
+    print(f"[*] Candidate:   {cand_name}")
+    print(f"[*] Target Role: {target_role}")
+    print(f"[*] Output Dir:  {out_dir}")
+    print(f"[*] Photo Slot:  {'Disabled' if parsed.no_photo else 'Enabled'}")
+    print(f"[*] AutoFit:     {'Disabled' if parsed.no_autofit else 'Enabled'}")
+    print("-" * 68)
+
+    photo = not parsed.no_photo
+    autofit = not parsed.no_autofit
+
+    if parsed.theme == "all":
+        results = builder.build_all(out_dir, photo=photo, autofit=autofit)
+        for theme_name, files in results.items():
+            pdf_name = files.get("pdf", Path("")).name
+            print(f"  ✓ [{theme_name:<16}] -> {pdf_name}")
+    else:
+        files = builder.build_theme(parsed.theme, out_dir, photo=photo, autofit=autofit)
+        pdf_name = files.get("pdf", Path("")).name
+        print(f"  ✓ [{parsed.theme:<16}] -> {pdf_name}")
+
+    print("=" * 68)
+    print(f"🎉 Successfully built resume variant(s) in {out_dir}")
+    print("=" * 68)
+
+
 def cmd_resume_passthrough(unknown_args):
     """Passes through any `offerget resume ...` command directly to ApexResume/cli.py."""
     apex_cli = CURRENT_DIR / "ApexResume" / "cli.py"
@@ -973,6 +1038,7 @@ def cmd_resume_passthrough(unknown_args):
 
 
 def cmd_selftest(args):
+
     """Runs OfferGet unified selftest: OfferGet core engines + ATS Auditor + ApexResume test suite."""
     print("=" * 68)
     print("              OfferGet Unified Environment Self-Test             ")
@@ -1293,8 +1359,12 @@ Examples:
 
     # Special handling for `offerget resume ...`
     if len(sys.argv) > 1 and sys.argv[1] == "resume":
+        if len(sys.argv) > 2 and sys.argv[2] == "build":
+            cmd_resume_build(sys.argv[3:])
+            return
         cmd_resume_passthrough(sys.argv[2:])
         return
+
 
     args = parser.parse_args()
 

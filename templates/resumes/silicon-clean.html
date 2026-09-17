@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume - Silicon Clean Theme</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+      
+      --color-primary: #0F172A;        /* Deep Charcoal / Slate */
+      --color-accent: #334155;         /* Medium Slate */
+      --color-text: #1E293B;           /* Dark Slate Text */
+      --color-muted: #64748B;          /* Muted Gray */
+      --color-border: #CBD5E1;         /* Refined Border */
+      --color-bg-subtle: #F8FAFC;      /* Subtle Light Slate Background */
+      --color-todo-bg: #FEF3C7;
+      --color-todo-text: #92400E;
+
+      --page-padding-y: 9mm;
+      --page-padding-x: 10.6mm;
+      --body-font-size: 11.5px;
+      --body-line-height: 1.6;
+      --item-gap: 4px;
+      --section-gap: 10px;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--body-font-size);
+      line-height: var(--body-line-height);
+      color: var(--color-text);
+      background: #FFFFFF;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: var(--page-padding-y) var(--page-padding-x);
+      margin: 0 auto;
+    }
+
+    code, .cli {
+      font-family: var(--font-mono);
+      font-size: 0.92em;
+      background: #F1F5F9;
+      padding: 1px 4px;
+      border-radius: 2px;
+      color: #0F172A;
+      border: 1px solid #E2E8F0;
+    }
+
+    a {
+      color: var(--color-accent);
+      text-decoration: none;
+      border-bottom: 1px dotted var(--color-muted);
+    }
+
+    /* Header */
+    header {
+      margin-bottom: 8px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      border-bottom: 1.5px solid var(--color-primary);
+      padding-bottom: 4px;
+      margin-bottom: 4px;
+    }
+
+    h1 {
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      color: var(--color-primary);
+    }
+
+    .contacts {
+      font-size: 11px;
+      color: var(--color-muted);
+      display: flex;
+      gap: 10px;
+    }
+
+    .headline {
+      font-size: 11.5px;
+      color: var(--color-accent);
+      font-weight: 500;
+      margin-top: 2px;
+    }
+
+    /* Section Headers */
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-top: var(--section-gap);
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--color-border);
+      padding-bottom: 2px;
+    }
+
+    h2 {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    /* Organization Bar */
+    .org-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 5px;
+      margin-bottom: 2px;
+      font-size: 11.5px;
+    }
+
+    .org-left {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .org-title {
+      font-weight: 700;
+      color: var(--color-primary);
+    }
+
+    .org-role {
+      font-weight: 600;
+      color: var(--color-accent);
+    }
+
+    .org-right {
+      font-size: 11px;
+      color: var(--color-muted);
+      font-weight: 500;
+    }
+
+    /* Lead Paragraph */
+    .lead {
+      font-weight: 600;
+      color: var(--color-primary);
+      margin-bottom: 3px;
+    }
+
+    /* Project Items */
+    .project-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 4px;
+      margin-bottom: 2px;
+    }
+
+    h3 {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--color-primary);
+    }
+
+    .project-tag {
+      font-size: 11px;
+      color: var(--color-muted);
+      font-weight: 500;
+    }
+
+    /* Bullet Lists */
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+    }
+
+    li {
+      position: relative;
+      padding-left: 14px;
+      margin-bottom: var(--item-gap);
+      text-align: justify;
+    }
+
+    li::before {
+      content: "▪";
+      position: absolute;
+      left: 2px;
+      color: var(--color-accent);
+      font-size: 10px;
+      top: -1px;
+    }
+
+    li.sub {
+      padding-left: 24px;
+    }
+
+    li.sub::before {
+      content: "▫";
+      left: 12px;
+      color: var(--color-muted);
+    }
+
+    /* Key Bold Words */
+    b, strong {
+      color: #000000;
+      font-weight: 700;
+    }
+
+    /* TODO Warning Marker */
+    .todo {
+      background-color: var(--color-todo-bg);
+      color: var(--color-todo-text);
+      padding: 0 4px;
+      border-radius: 2px;
+      border: 1px dashed var(--color-todo-text);
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="header-top">
+        <h1>{{NAME}}</h1>
+        <div class="contacts">
+          <span>{{PHONE}}</span>
+          <span>•</span>
+          <span>{{EMAIL}}</span>
+          <span>•</span>
+          <span><a href="{{GITHUB_URL}}">{{GITHUB_HANDLE}}</a></span>
+        </div>
+      </div>
+      <div class="headline">
+        <b>{{HEADLINE_BADGES}}</b>
+      </div>
+    </header>
+
+    {{SECTIONS_CONTENT}}
+  </div>
+</body>
+</html>
