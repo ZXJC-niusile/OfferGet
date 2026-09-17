@@ -167,7 +167,7 @@ class ResumeBuilder:
                 grid_cells_html.append(f'<div>{cell_clean}</div>')
 
         edu_grid_html = f"""
-      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3px; font-size:10.8px; color:var(--color-muted, #4B5563); line-height:1.48; margin-top:3px;">
+      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3.5px; font-size:11.2px; color:var(--color-muted, #4B5563); line-height:1.54; margin-top:3.5px;">
         {"".join(grid_cells_html)}
       </div>"""
 
@@ -175,7 +175,7 @@ class ResumeBuilder:
 
         school_str = cand.get('school', '')
         degree_str = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get('degree', ''))).strip()
-        role_span = f'<span class="org-role" style="font-weight:600; font-size:11.5px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
+        role_span = f'<span class="org-role" style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
 
         # 1. Education
         edu_html = f"""
@@ -184,12 +184,12 @@ class ResumeBuilder:
         <h2>教育背景</h2>
         <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
       </div>
-      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2.5px;">
+      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:3px;">
         <div class="org-left" style="display:flex; align-items:baseline; gap:16px;">
-          <span class="org-title" style="font-weight:700; font-size:12.2px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
+          <span class="org-title" style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
           {role_span}
         </div>
-        <div class="org-right" style="font-size:10.8px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
+        <div class="org-right" style="font-size:11.0px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
       </div>
       {edu_grid_html}
     </section>
@@ -212,12 +212,12 @@ class ResumeBuilder:
                 formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in exp.get("bullets", [])]
                 bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
                 exp_parts.append(f"""
-            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:2.5px;">
+            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:7px; margin-bottom:3px;">
               <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
-                <span class="org-title" style="font-weight:700; font-size:12.2px; color:var(--color-primary-dark, #0F172A);">{exp.get('org', '')}</span>
-                <span class="org-role" style="font-weight:600; font-size:11.5px; color:var(--color-accent, #0284C7);">{role_label}</span>
+                <span class="org-title" style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{exp.get('org', '')}</span>
+                <span class="org-role" style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{role_label}</span>
               </div>
-              <div class="org-right" style="font-size:10.8px; color:var(--color-muted, #64748B);">{exp.get('time', '')}</div>
+              <div class="org-right" style="font-size:11.0px; color:var(--color-muted, #64748B);">{exp.get('time', '')}</div>
             </div>
             <ul>{bullets_li}</ul>
             """)
@@ -237,12 +237,12 @@ class ResumeBuilder:
                 formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in proj.get("bullets", [])]
                 bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
                 proj_parts.append(f"""
-            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:2.5px;">
+            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:7px; margin-bottom:3px;">
               <div style="display:flex; align-items:baseline; gap:8px;">
-                <span style="font-weight:700; font-size:12.2px; color:var(--color-primary-dark, #0F172A);">{proj.get('name', '')}</span>
-                <span style="font-weight:600; font-size:11.5px; color:var(--color-accent, #0284C7);">{proj.get('role', '')}</span>
+                <span style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{proj.get('name', '')}</span>
+                <span style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{proj.get('role', '')}</span>
               </div>
-              <div style="font-size:10.8px; color:var(--color-muted, #64748B);">{proj.get('time', '')}</div>
+              <div style="font-size:11.0px; color:var(--color-muted, #64748B);">{proj.get('time', '')}</div>
             </div>
             <ul>{bullets_li}</ul>
             """)
@@ -256,7 +256,7 @@ class ResumeBuilder:
                 val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
                 val_formatted = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", val)
                 skill_rows.append(f"""
-            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:3.5px; line-height:1.52; font-size:11.2px;">
+            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:4.5px; line-height:1.58; font-size:11.6px;">
               <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">{k}：</span>
               <span style="color:var(--color-text, #1E293B);">{val_formatted}</span>
             </li>
@@ -558,8 +558,8 @@ class ResumeBuilder:
     }}
     body {{
       font-family: Arial, Helvetica, "SimSun", sans-serif;
-      font-size: 9.5pt;
-      line-height: 1.4;
+      font-size: 9.8pt;
+      line-height: 1.46;
       color: #000000;
       background: #FFFFFF;
       -webkit-print-color-adjust: exact;
@@ -569,44 +569,44 @@ class ResumeBuilder:
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: 6pt;
+      margin-bottom: 7pt;
       border-bottom: 1pt solid #000000;
       padding-bottom: 4pt;
     }}
     h1 {{
-      font-size: 18pt;
+      font-size: 18.5pt;
       font-weight: bold;
       margin: 0 0 2pt 0;
     }}
     .contact {{
-      font-size: 9.5pt;
+      font-size: 9.8pt;
       color: #222222;
     }}
     h2 {{
-      font-size: 11pt;
+      font-size: 11.2pt;
       font-weight: bold;
       border-bottom: 0.8pt solid #333333;
       padding-bottom: 1.5pt;
-      margin-top: 6pt;
-      margin-bottom: 3pt;
+      margin-top: 7pt;
+      margin-bottom: 3.5pt;
       text-transform: uppercase;
     }}
     .item-header {{
       display: flex;
       justify-content: space-between;
-      font-size: 10pt;
+      font-size: 10.2pt;
       font-weight: bold;
-      margin-top: 3pt;
+      margin-top: 4.5pt;
     }}
     ul {{
-      margin: 1.5pt 0 3pt 0;
+      margin: 2pt 0 4pt 0;
       padding-left: 16pt;
     }}
     li {{
-      font-size: 9.5pt;
-      margin-bottom: 1.5pt;
+      font-size: 9.8pt;
+      margin-bottom: 2.2pt;
       text-align: justify;
-      line-height: 1.38;
+      line-height: 1.44;
     }}
   </style>
 </head>
@@ -710,10 +710,11 @@ class ResumeBuilder:
 
         typ_photo = eff_photo_path
         if eff_photo_path and Path(eff_photo_path).is_file():
+            import shutil
             try:
                 dest_photo = out_dir / Path(eff_photo_path).name
                 if dest_photo.resolve() != Path(eff_photo_path).resolve():
-                    shutil.copy(eff_photo_path, dest_photo)
+                    shutil.copy2(eff_photo_path, dest_photo)
                 typ_photo = dest_photo.name
             except Exception:
                 typ_photo = eff_photo_path
