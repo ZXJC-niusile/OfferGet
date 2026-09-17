@@ -20,11 +20,16 @@ from core.resume_builder import ResumeBuilder
 def main():
     profile_path = DEMO_DIR / "candidate_profile.json"
     print("==================================================")
-    print("OfferGet Resume Generation Pipeline (范增煜 运营岗定制)")
+    print("OfferGet Resume Generation Pipeline (范增煜)")
     print("==================================================")
 
     builder = ResumeBuilder(profile_path)
-    results = builder.build_all(output_dir=DEMO_DIR, photo=True, autofit=True)
+    results = builder.build_all(
+        output_dir=DEMO_DIR,
+        photo=True,
+        autofit=True,
+        photo_path=r"C:\Users\26325\Desktop\81d2cd3e8862f04e701b65d4d8bf3122.jpg",
+    )
 
     print("-" * 50)
     for theme_name, files in results.items():

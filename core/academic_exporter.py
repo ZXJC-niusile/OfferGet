@@ -129,7 +129,10 @@ class AcademicExporter:
             lines.extend([
                 r"\begin{minipage}[c]{0.78\textwidth}",
                 f"  {{\\LARGE \\textbf{{{name}}}}} \\\\[4pt]",
-                f"  \\textbf{{\\color{{blue!70!black}}求职意向：{title}}} \\\\[3pt]",
+            ])
+            if title:
+                lines.append(f"  \\textbf{{\\color{{blue!70!black}}求职意向：{title}}} \\\\[3pt]")
+            lines.extend([
                 f"  电话：{phone} \\quad | \\quad 邮箱：\\href{{mailto:{email}}}{{{email}}}{loc_str}",
                 r"\end{minipage}%",
                 r"\hfill",
@@ -141,10 +144,11 @@ class AcademicExporter:
             ])
         else:
             loc_str = f" \\quad | \\quad {location}" if location else ""
+            title_part = f"{title} \\quad | \\quad " if title else ""
             lines.extend([
                 r"\begin{center}",
                 f"  {{\\LARGE \\textbf{{{name}}}}} \\\\[4pt]",
-                f"  {title} \\quad | \\quad {phone} \\quad | \\quad \\href{{mailto:{email}}}{{{email}}}{loc_str}",
+                f"  {title_part}{phone} \\quad | \\quad \\href{{mailto:{email}}}{{{email}}}{loc_str}",
                 r"\end{center}",
                 r"\vspace{-4pt}",
             ])
@@ -321,7 +325,10 @@ class AcademicExporter:
                 "  align: (left + top, right + top),",
                 "  [",
                 f"    #text(size: 18pt, weight: \"bold\")[{name}] \\",
-                f"    #v(2pt)#text(weight: \"bold\", fill: rgb(\"#1e3a8a\"))[求职意向：{title}] \\",
+            ])
+            if title:
+                lines.append(f"    #v(2pt)#text(weight: \"bold\", fill: rgb(\"#1e3a8a\"))[求职意向：{title}] \\")
+            lines.extend([
                 f"    #v(2pt)#text(fill: rgb(\"#555555\"))[电话：{phone} | 邮箱：{email_typst}{loc_disp}]",
                 "  ],",
                 "  [",
@@ -331,9 +338,10 @@ class AcademicExporter:
                 "#v(6pt)",
             ])
         else:
+            title_part = f"_{title}_ | " if title else ""
             lines.extend([
                 f"= {name}",
-                f"_{title}_ | {phone} | {email_typst}",
+                f"{title_part}{phone} | {email_typst}",
                 "",
             ])
 
@@ -558,7 +566,7 @@ class AcademicExporter:
   <div class="header">
     <div>
       <h1>{name}</h1>
-      <div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 3pt;">求职意向：{title}</div>
+      {'<div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 3pt;">求职意向：' + title + '</div>' if title else ''}
       <div class="contact">
         电话：{phone} &nbsp;|&nbsp; 邮箱：{email}{loc_str}
       </div>

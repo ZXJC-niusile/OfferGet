@@ -167,7 +167,7 @@ class ResumeBuilder:
                 grid_cells_html.append(f'<div>{cell_clean}</div>')
 
         edu_grid_html = f"""
-      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2.5px; font-size:10.5px; color:var(--color-muted, #4B5563); line-height:1.45; margin-top:2.5px;">
+      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3px; font-size:10.8px; color:var(--color-muted, #4B5563); line-height:1.48; margin-top:3px;">
         {"".join(grid_cells_html)}
       </div>"""
 
@@ -175,7 +175,7 @@ class ResumeBuilder:
 
         school_str = cand.get('school', '')
         degree_str = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get('degree', ''))).strip()
-        role_span = f'<span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
+        role_span = f'<span class="org-role" style="font-weight:600; font-size:11.5px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
 
         # 1. Education
         edu_html = f"""
@@ -184,12 +184,12 @@ class ResumeBuilder:
         <h2>教育背景</h2>
         <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
       </div>
-      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:3px; margin-bottom:2px;">
+      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2.5px;">
         <div class="org-left" style="display:flex; align-items:baseline; gap:16px;">
-          <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
+          <span class="org-title" style="font-weight:700; font-size:12.2px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
           {role_span}
         </div>
-        <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
+        <div class="org-right" style="font-size:10.8px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
       </div>
       {edu_grid_html}
     </section>
@@ -212,12 +212,12 @@ class ResumeBuilder:
                 formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in exp.get("bullets", [])]
                 bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
                 exp_parts.append(f"""
-            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:2.5px;">
               <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
-                <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{exp.get('org', '')}</span>
-                <span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{role_label}</span>
+                <span class="org-title" style="font-weight:700; font-size:12.2px; color:var(--color-primary-dark, #0F172A);">{exp.get('org', '')}</span>
+                <span class="org-role" style="font-weight:600; font-size:11.5px; color:var(--color-accent, #0284C7);">{role_label}</span>
               </div>
-              <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">{exp.get('time', '')}</div>
+              <div class="org-right" style="font-size:10.8px; color:var(--color-muted, #64748B);">{exp.get('time', '')}</div>
             </div>
             <ul>{bullets_li}</ul>
             """)
@@ -237,12 +237,12 @@ class ResumeBuilder:
                 formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in proj.get("bullets", [])]
                 bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
                 proj_parts.append(f"""
-            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:2px;">
+            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:2.5px;">
               <div style="display:flex; align-items:baseline; gap:8px;">
-                <span style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{proj.get('name', '')}</span>
-                <span style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{proj.get('role', '')}</span>
+                <span style="font-weight:700; font-size:12.2px; color:var(--color-primary-dark, #0F172A);">{proj.get('name', '')}</span>
+                <span style="font-weight:600; font-size:11.5px; color:var(--color-accent, #0284C7);">{proj.get('role', '')}</span>
               </div>
-              <div style="font-size:10.5px; color:var(--color-muted, #64748B);">{proj.get('time', '')}</div>
+              <div style="font-size:10.8px; color:var(--color-muted, #64748B);">{proj.get('time', '')}</div>
             </div>
             <ul>{bullets_li}</ul>
             """)
@@ -256,7 +256,7 @@ class ResumeBuilder:
                 val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
                 val_formatted = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", val)
                 skill_rows.append(f"""
-            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:2px;">
+            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:3.5px; line-height:1.52; font-size:11.2px;">
               <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">{k}：</span>
               <span style="color:var(--color-text, #1E293B);">{val_formatted}</span>
             </li>
@@ -267,7 +267,7 @@ class ResumeBuilder:
             <h2>专业技能</h2>
             <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
           </div>
-          <ul style="list-style:none; padding-left:0; margin-top:3px;">
+          <ul style="list-style:none; padding-left:0; margin-top:4px;">
             {"".join(skill_rows)}
           </ul>
         </section>
@@ -287,13 +287,17 @@ class ResumeBuilder:
         prof = profile or self.profile
         cand = prof.get("candidate", {})
         name = cand.get("name", "")
-        title = cand.get("title", "运营岗")
+        title = cand.get("title", "")
         phone = cand.get("phone", "")
         email = cand.get("email", "")
         location = cand.get("location", "")
 
         eff_photo_path = photo_path or self.photo_path
-        photo_enabled = photo or (eff_photo_path is not None)
+        cand_photo_pref = cand.get("reserve_photo", None)
+        if cand_photo_pref is not None:
+            photo_enabled = cand_photo_pref or (eff_photo_path is not None)
+        else:
+            photo_enabled = photo or (eff_photo_path is not None)
 
         photo_html = ""
         if photo_enabled:
@@ -317,15 +321,16 @@ class ResumeBuilder:
                 """
 
         loc_str = f"<span>•</span><span>{location}</span>" if location else ""
+        title_html = f'<span style="font-size:12px; font-weight:600; color:var(--color-accent, #0284C7);">求职意向：{title}</span>' if title else ''
 
         return f"""
     <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1.5px solid var(--color-primary, #0F172A); padding-bottom:5px;">
       <div style="flex:1; padding-right:12px;">
         <div class="header-top" style="display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;">
           <h1 style="font-size:22px; font-weight:700; margin-bottom:2px;">{name}</h1>
-          <span style="font-size:12px; font-weight:600; color:var(--color-accent, #0284C7);">求职意向：{title}</span>
+          {title_html}
         </div>
-        <div class="contacts" style="display:flex; gap:8px; font-size:11px; color:var(--color-muted, #64748B); margin-top:2px;">
+        <div class="contacts" style="display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;">
           <span>{phone}</span>
           <span>•</span>
           <span><a href="mailto:{email}" style="color:inherit; text-decoration:none;">{email}</a></span>
@@ -416,9 +421,12 @@ class ResumeBuilder:
 
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
-        photo_enabled = photo or (eff_photo_path is not None)
-
         cand = prof.get("candidate", {})
+        cand_photo_pref = cand.get("reserve_photo", None)
+        if cand_photo_pref is not None:
+            photo_enabled = cand_photo_pref or (eff_photo_path is not None)
+        else:
+            photo_enabled = photo or (eff_photo_path is not None)
         comps = prof.get("competencies", {})
         exp_list = prof.get("experience", [])
         proj_list = prof.get("projects", [])
@@ -448,16 +456,20 @@ class ResumeBuilder:
 
         # 1. Markdown file
         photo_tag = f" | 照片：{eff_photo_path}" if (photo_enabled and eff_photo_path) else (" | 照片：预留证件照位置" if photo_enabled else "")
+        ats_title = cand.get('title', '')
         md_lines = [
             f"# {cand.get('name', '')}",
-            f"求职意向：{cand.get('title', '运营岗')}",
+        ]
+        if ats_title:
+            md_lines.append(f"求职意向：{ats_title}")
+        md_lines.extend([
             f"电话：{cand.get('phone', '')} | 邮箱：{cand.get('email', '')} | {cand.get('location', '')}{photo_tag}",
             "",
             "---",
             "",
             "## 教育背景",
             f"### {head_edu_full}",
-        ]
+        ])
         for r in grid:
             c1 = r[0] if len(r) > 0 else ""
             c2 = r[1] if len(r) > 1 else ""
@@ -600,13 +612,13 @@ class ResumeBuilder:
 </head>
 <body>
   <div class="header">
-    <div>
-      <h1>{cand.get('name', '')}</h1>
-      <div style="font-size: 11pt; font-weight: bold; margin-bottom: 3pt;">求职意向：{cand.get('title', '运营岗')}</div>
-      <div class="contact">
-        电话：{cand.get('phone', '')} &nbsp;|&nbsp; 邮箱：{cand.get('email', '')} &nbsp;|&nbsp; {cand.get('location', '')}
+      <div>
+        <h1>{cand.get('name', '')}</h1>
+        {'<div style="font-size: 11pt; font-weight: bold; margin-bottom: 3pt;">求职意向：' + cand.get('title', '') + '</div>' if cand.get('title', '') else ''}
+        <div class="contact">
+          电话：{cand.get('phone', '')} &nbsp;|&nbsp; 邮箱：{cand.get('email', '')} &nbsp;|&nbsp; {cand.get('location', '')}
+        </div>
       </div>
-    </div>
     {photo_box}
   </div>
 
