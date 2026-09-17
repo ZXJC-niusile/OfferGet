@@ -304,8 +304,8 @@ class ResumeBuilder:
             data_uri = _image_to_base64_data_uri(eff_photo_path)
             if data_uri:
                 photo_html = f"""
-      <div class="photo-placeholder" style="width:72px; height:96px; border:1.5px dashed var(--color-border, #CBD5E1); background:var(--color-bg-subtle, #F8FAFC); border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; flex-shrink:0; overflow:hidden; position:relative;" title="预留证件照位置">
-        <img src="{data_uri}" alt="证件照" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+      <div class="photo-placeholder" style="width:72px; height:96px; border:none; background:transparent; border-radius:3px; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;" title="证件照">
+        <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; object-fit:contain; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
         <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
           <span style="font-size:8.5px; color:var(--color-muted, #64748B); line-height:1.2;">预留证件照<br>一寸 / 二寸</span>
         </div>
@@ -527,8 +527,8 @@ class ResumeBuilder:
             data_uri = _image_to_base64_data_uri(eff_photo_path)
             if data_uri:
                 photo_box = f"""
-    <div style="width: 72px; height: 96px; border: 1.5px dashed #4b5563; background: #f9fafb; border-radius: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0; overflow: hidden; position: relative;" title="预留证件照位置">
-      <img src="{data_uri}" alt="证件照" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+    <div style="width: 72px; height: 96px; border: none; background: transparent; border-radius: 2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
+      <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; object-fit:contain; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
       <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
         <span style="font-size: 8pt; color: #4b5563; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
       </div>
