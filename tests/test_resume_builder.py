@@ -264,18 +264,25 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertLess(dirty_report["health_score"], 70)
 
     def test_compact_education_formatting(self):
-        """Test that education details are formatted into compact rows across all templates."""
+        """Test that education details are formatted into compact rows across all templates without vertical pipes."""
         profile = {
             "name": "范增煜",
             "candidate": {
                 "name": "范增煜",
                 "title": "运营岗",
                 "school": "青岛理工大学",
-                "degree": "土木工程 ｜ 本科在读",
+                "degree": "土木工程  本科在读",
                 "edu_time": "2023.09—2027.06",
                 "education_rows": [
-                    "GPA 3.12，专业前15% ｜ 文体优秀奖学金 ｜ CET-4 506",
-                    "全国计算机二级（WPS Office） ｜ 普通话二级乙等",
+                    [
+                        "GPA 3.12，专业前15%",
+                        "文体优秀奖学金",
+                        "CET-4 506",
+                    ],
+                    [
+                        "全国计算机二级（WPS Office）",
+                        "普通话二级乙等",
+                    ],
                 ],
             },
             "experience": [],
@@ -286,26 +293,36 @@ class TestResumeBuilder(unittest.TestCase):
         res_html = builder.build_html_theme("modern-navy", self.test_dir)
         html_text = res_html["html"].read_text(encoding="utf-8")
         self.assertIn("青岛理工大学", html_text)
-        self.assertIn("土木工程 ｜ 本科在读", html_text)
+        self.assertIn("土木工程", html_text)
         self.assertIn("2023.09—2027.06", html_text)
-        self.assertIn("GPA 3.12，专业前15% ｜ 文体优秀奖学金 ｜ CET-4 506", html_text)
-        self.assertIn("全国计算机二级（WPS Office） ｜ 普通话二级乙等", html_text)
+        self.assertIn("edu-grid", html_text)
+        self.assertIn("GPA 3.12，专业前15%", html_text)
+        self.assertIn("文体优秀奖学金", html_text)
+        self.assertIn("CET-4 506", html_text)
+        self.assertIn("全国计算机二级（WPS Office）", html_text)
+        self.assertIn("普通话二级乙等", html_text)
+        # Ensure no vertical bar in education section header or grid
+        edu_sec = html_text[html_text.find('<section id="education">'):html_text.find('</section>')]
+        self.assertNotIn("｜", edu_sec)
 
         # 2. ATS plain
         res_ats = builder.build_ats_plain(self.test_dir)
         ats_md = res_ats["md"].read_text(encoding="utf-8")
         ats_html = res_ats["html"].read_text(encoding="utf-8")
-        self.assertIn("青岛理工大学 ｜ 土木工程 ｜ 本科在读 ｜ 2023.09—2027.06", ats_md)
-        self.assertIn("GPA 3.12，专业前15% ｜ 文体优秀奖学金 ｜ CET-4 506", ats_md)
-        self.assertIn("全国计算机二级（WPS Office） ｜ 普通话二级乙等", ats_md)
-        self.assertIn("青岛理工大学 ｜ 土木工程 ｜ 本科在读", ats_html)
-        self.assertIn("GPA 3.12，专业前15% ｜ 文体优秀奖学金 ｜ CET-4 506", ats_html)
+        self.assertIn("青岛理工大学", ats_md)
+        self.assertIn("GPA 3.12，专业前15%", ats_md)
+        self.assertIn("全国计算机二级（WPS Office）", ats_md)
+        self.assertIn("edu-grid", ats_html)
+        # Ensure ATS HTML education section has no vertical bars
+        ats_edu_sec = ats_html[ats_html.find('<h2>教育背景</h2>'):ats_html.find('<h2>实习经历</h2>') if '<h2>实习经历</h2>' in ats_html else len(ats_html)]
+        self.assertNotIn("｜", ats_edu_sec)
 
         # 3. Academic LaTeX
         res_latex = builder.build_academic_latex(self.test_dir)
         tex_text = res_latex["tex"].read_text(encoding="utf-8")
         self.assertIn(r"\textbf{青岛理工大学}", tex_text)
         self.assertIn(r"2023.09—2027.06", tex_text)
+        self.assertIn(r"\begin{tabular}", tex_text)
         self.assertIn(r"GPA 3.12，专业前15\%", tex_text)
         self.assertIn(r"全国计算机二级（WPS Office）", tex_text)
 
@@ -314,8 +331,9 @@ class TestResumeBuilder(unittest.TestCase):
         typ_text = res_typ["typ"].read_text(encoding="utf-8")
         self.assertIn("*青岛理工大学*", typ_text)
         self.assertIn("2023.09—2027.06", typ_text)
-        self.assertIn("GPA 3.12，专业前15% ｜ 文体优秀奖学金 ｜ CET-4 506", typ_text)
-        self.assertIn("全国计算机二级（WPS Office） ｜ 普通话二级乙等", typ_text)
+        self.assertIn("#grid(", typ_text)
+        self.assertIn("[GPA 3.12，专业前15%]", typ_text)
+        self.assertIn("[全国计算机二级（WPS Office）]", typ_text)
 
 
 if __name__ == "__main__":

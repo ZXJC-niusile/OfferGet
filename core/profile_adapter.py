@@ -260,16 +260,48 @@ def claim_ref(claim: EvidenceClaim) -> Dict[str, str]:
     }
 
 
-def group_education_badges_into_rows(badges: Iterable[str]) -> List[str]:
-    """Groups badge items into 1-2 compact piped rows to conserve vertical resume space."""
-    clean_badges = [str(b).strip() for b in badges if str(b).strip()]
-    if not clean_badges:
+def extract_education_grid(cand: Dict[str, Any]) -> List[List[str]]:
+    """Extracts a normalized 2D grid of education items for column-aligned rendering without vertical pipes."""
+    raw_grid = cand.get("education_grid") or cand.get("education_rows")
+    if raw_grid and isinstance(raw_grid, list):
+        rows: List[List[str]] = []
+        for item in raw_grid:
+            if isinstance(item, (list, tuple)):
+                cells = [str(c).strip() for c in item if str(c).strip()]
+                if cells:
+                    rows.append(cells)
+            elif isinstance(item, str):
+                item_str = item.strip()
+                if not item_str:
+                    continue
+                if "|" in item_str or "｜" in item_str:
+                    cells = [s.strip() for s in re.split(r"\s*[｜|]\s*", item_str) if s.strip()]
+                elif "\t" in item_str:
+                    cells = [s.strip() for s in item_str.split("\t") if s.strip()]
+                elif "  " in item_str:
+                    cells = [s.strip() for s in re.split(r"\s{2,}", item_str) if s.strip()]
+                else:
+                    cells = [item_str]
+                if cells:
+                    rows.append(cells)
+        if rows:
+            return rows
+
+    # Fallback to badges
+    badges = [str(b).strip() for b in cand.get("education_badges", []) if str(b).strip()]
+    if not badges:
         return []
-    if len(clean_badges) <= 3:
-        return [" ｜ ".join(clean_badges)]
-    if len(clean_badges) == 4:
-        return [" ｜ ".join(clean_badges[:2]), " ｜ ".join(clean_badges[2:])]
-    return [" ｜ ".join(clean_badges[:3]), " ｜ ".join(clean_badges[3:])]
+    if len(badges) <= 3:
+        return [badges]
+    if len(badges) == 4:
+        return [badges[:2], badges[2:]]
+    return [badges[:3], badges[3:]]
+
+
+def group_education_badges_into_rows(badges: Iterable[str]) -> List[str]:
+    """Groups badge items into compact rows to conserve vertical resume space."""
+    grid = extract_education_grid({"education_badges": list(badges)})
+    return ["    ".join(r) for r in grid]
 
 
 def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -283,30 +315,18 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
     # Case A: Profile is already structured with standard top-level 'candidate'
     if "candidate" in raw_profile and isinstance(raw_profile["candidate"], dict):
         cand = dict(raw_profile["candidate"])
-        edu_badges = list(cand.get("education_badges", []))
-        edu_rows = list(cand.get("education_rows", []))
-        if not edu_rows and edu_badges:
-            edu_rows = group_education_badges_into_rows(edu_badges)
-        elif not edu_badges and edu_rows:
-            for r in edu_rows:
-                for item in re.split(r"\s*[｜|]\s*", str(r)):
-                    if item.strip():
-                        edu_badges.append(item.strip())
-        elif not edu_badges and not edu_rows:
-            raw_badges = []
-            if cand.get("gpa"):
-                raw_badges.append(f"GPA: {cand['gpa']}")
-            if cand.get("awards"):
-                raw_badges.append(str(cand["awards"]))
-            if cand.get("certificates"):
-                raw_badges.append(str(cand["certificates"]))
-            edu_rows = group_education_badges_into_rows(raw_badges)
-            edu_badges = raw_badges
+        grid = extract_education_grid(cand)
+        cand["education_grid"] = grid
+        cand["education_rows"] = grid
 
+        edu_badges = list(cand.get("education_badges", []))
+        if not edu_badges:
+            for r in grid:
+                edu_badges.extend(r)
         cand["education_badges"] = edu_badges
-        cand["education_rows"] = edu_rows
+
         if "degree" in cand and isinstance(cand["degree"], str):
-            cand["degree"] = cand["degree"].replace(" · ", " ｜ ")
+            cand["degree"] = re.sub(r"\s*[｜|·]\s*", "  ", cand["degree"]).strip()
 
         if "school" not in cand and "institution" in cand:
             cand["school"] = cand["institution"]
@@ -376,29 +396,11 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
     degree = edu.get("degree", "")
     edu_time = edu.get("time", "")
 
+    grid = extract_education_grid(edu)
     edu_badges = list(edu.get("education_badges", []))
-    edu_rows = list(edu.get("education_rows", []))
-    if not edu_rows and not edu_badges:
-        raw_badges = []
-        if edu.get("gpa"):
-            raw_badges.append(f"GPA: {edu['gpa']}")
-        if edu.get("awards"):
-            raw_badges.append(str(edu["awards"]))
-        if edu.get("certificates"):
-            certs = str(edu["certificates"])
-            for c in re.split(r"[,，;；\n]", certs):
-                c_clean = c.strip()
-                if c_clean:
-                    raw_badges.append(c_clean)
-        edu_badges = raw_badges
-        edu_rows = group_education_badges_into_rows(raw_badges)
-    elif not edu_rows and edu_badges:
-        edu_rows = group_education_badges_into_rows(edu_badges)
-    elif not edu_badges and edu_rows:
-        for r in edu_rows:
-            for item in re.split(r"\s*[｜|]\s*", str(r)):
-                if item.strip():
-                    edu_badges.append(item.strip())
+    if not edu_badges:
+        for r in grid:
+            edu_badges.extend(r)
 
     # Experience normalization
     raw_exp = raw_profile.get("experience") or raw_profile.get("internships", [])
@@ -434,6 +436,9 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
     # Competencies normalization
     competencies = raw_profile.get("competencies") or raw_profile.get("skills", {})
 
+    clean_degree = f"{major}  {degree}" if major and degree else (degree or major)
+    clean_degree = re.sub(r"\s*[｜|·]\s*", "  ", clean_degree).strip()
+
     return {
         "candidate": {
             "name": cand_name,
@@ -443,10 +448,11 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
             "location": location,
             "school": school,
             "major": major,
-            "degree": f"{major} ｜ {degree}" if major and degree else (degree or major),
+            "degree": clean_degree,
             "edu_time": edu_time,
             "education_badges": edu_badges,
-            "education_rows": edu_rows,
+            "education_rows": grid,
+            "education_grid": grid,
             "reserve_photo": True,
         },
         "competencies": competencies,
@@ -466,5 +472,6 @@ __all__ = [
     "canonical_terms",
     "normalize_candidate_profile",
     "group_education_badges_into_rows",
+    "extract_education_grid",
 ]
 

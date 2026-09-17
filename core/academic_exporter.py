@@ -150,22 +150,38 @@ class AcademicExporter:
             ])
 
         # 1. Education
-        edu_rows = cand.get("education_rows", [])
-        if not edu_rows and cand.get("education_badges"):
-            from core.profile_adapter import group_education_badges_into_rows
-            edu_rows = group_education_badges_into_rows(cand["education_badges"])
+        from core.profile_adapter import extract_education_grid
+        grid = extract_education_grid(cand)
+        max_cols = max((len(r) for r in grid), default=1)
+
+        school_esc = escape_latex(school)
+        degree_clean = re.sub(r"\s*[｜|·]\s*", "  ", escape_latex(degree)).strip()
+        degree_part = f" \\quad \\quad {degree_clean}" if degree_clean else ""
+        time_part = f" \\hfill {escape_latex(edu_time)}" if edu_time else ""
 
         lines.extend([
             r"\section*{教育背景}",
+            f"\\noindent \\textbf{{{school_esc}}}{degree_part}{time_part} \\\\[3pt]",
         ])
-        time_part = f" \\hfill {escape_latex(edu_time)}" if edu_time else ""
-        degree_disp = re.sub(r"\s*[｜|]\s*", r" \\quad | \\quad ", escape_latex(degree))
-        degree_part = f" \\quad | \\quad {degree_disp}" if degree else ""
-        lines.append(f"\\noindent \\textbf{{{escape_latex(school)}}}{degree_part}{time_part} \\\\[2pt]")
-        for i, row in enumerate(edu_rows):
-            escaped_row = re.sub(r"\s*[｜|]\s*", r" \\quad | \\quad ", escape_latex(row))
-            trailing = r" \\[1pt]" if i < len(edu_rows) - 1 else r" \vspace{2pt}"
-            lines.append(f"\\noindent {escaped_row}{trailing}")
+
+        if grid:
+            if max_cols >= 3:
+                tabular_spec = "@{}p{0.38\\textwidth}p{0.28\\textwidth}p{0.30\\textwidth}@{}"
+            elif max_cols == 2:
+                tabular_spec = "@{}p{0.48\\textwidth}p{0.48\\textwidth}@{}"
+            else:
+                tabular_spec = "@{}p{0.96\\textwidth}@{}"
+
+            lines.append(f"\\noindent \\begin{{tabular}}{{{tabular_spec}}}")
+            for r in grid:
+                row_cells = []
+                for i in range(max_cols):
+                    cell = escape_latex(r[i]) if i < len(r) else ""
+                    cell = re.sub(r"\s*[｜|]\s*", " ", cell).strip()
+                    row_cells.append(cell)
+                lines.append(" & ".join(row_cells) + r" \\")
+            lines.append(r"\end{tabular}")
+            lines.append(r"\vspace{2pt}")
 
         # 2. Work / Internship Experience
         experiences = profile.get("experience", [])
@@ -310,20 +326,35 @@ class AcademicExporter:
 
 
         # Education
-        edu_rows = cand.get("education_rows", [])
-        if not edu_rows and cand.get("education_badges"):
-            from core.profile_adapter import group_education_badges_into_rows
-            edu_rows = group_education_badges_into_rows(cand["education_badges"])
+        from core.profile_adapter import extract_education_grid
+        grid = extract_education_grid(cand)
+        max_cols = max((len(r) for r in grid), default=1)
 
+        degree_clean = re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip()
+        degree_meta = f" #h(1.5em) {degree_clean}" if degree_clean else ""
         edu_meta = f" #h(1fr) {edu_time}" if edu_time else ""
-        degree_meta = f" | {degree}" if degree else ""
+
         lines.extend([
             "== 教育背景",
-            f"*{school}*{degree_meta}{edu_meta} \\",
+            f"*{school}*{degree_meta}{edu_meta}",
         ])
-        for i, row in enumerate(edu_rows):
-            trailing = " \\" if i < len(edu_rows) - 1 else ""
-            lines.append(f"{row}{trailing}")
+
+        if grid:
+            if max_cols >= 3:
+                cols_str = "(38%, 28%, 1fr)"
+            elif max_cols == 2:
+                cols_str = "(48%, 1fr)"
+            else:
+                cols_str = "(1fr,)"
+
+            cell_tokens = []
+            for r in grid:
+                for i in range(max_cols):
+                    cell = r[i] if i < len(r) else ""
+                    cell = re.sub(r"\s*[｜|]\s*", " ", cell).strip()
+                    cell_tokens.append(f"[{cell}]")
+
+            lines.append(f"#grid(\n  columns: {cols_str},\n  row-gutter: 3pt,\n  " + ", ".join(cell_tokens) + ",\n)")
         lines.append("")
 
         # Experience
@@ -386,15 +417,28 @@ class AcademicExporter:
         email = cand.get("email", "candidate@example.com")
         phone = cand.get("phone", "+86 138-0000-0000")
         school = cand.get("school", "")
-        degree = cand.get("degree", "")
         location = cand.get("location", "")
         edu_time = cand.get("edu_time", "")
-        edu_badges = cand.get("education_badges", [])
-        edu_rows = cand.get("education_rows", [])
-        if not edu_rows and edu_badges:
-            from core.profile_adapter import group_education_badges_into_rows
-            edu_rows = group_education_badges_into_rows(edu_badges)
-        edu_rows_html = "".join([f'<div style="margin-top:2pt;">{r}</div>' for r in edu_rows])
+
+        from core.profile_adapter import extract_education_grid
+        grid = extract_education_grid(cand)
+        max_cols = max((len(r) for r in grid), default=1)
+        if max_cols >= 3:
+            col_template = "38% 28% 1fr"
+        elif max_cols == 2:
+            col_template = "45% 1fr"
+        else:
+            col_template = "1fr"
+
+        grid_cells_html = []
+        for r in grid:
+            for i in range(max_cols):
+                cell_text = r[i] if i < len(r) else ""
+                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
+                grid_cells_html.append(f'<div>{cell_clean}</div>')
+
+        degree = cand.get("degree", "")
+        degree_clean = re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip()
         exp_list = profile.get("experience", [])
         proj_list = profile.get("projects", [])
         comps = profile.get("competencies", {})
@@ -506,11 +550,11 @@ class AcademicExporter:
 
   <h2>教育背景</h2>
   <div class="item-header">
-    <span>{school} ｜ {degree}</span>
+    <span>{school} &nbsp;&nbsp;&nbsp;&nbsp; {degree_clean}</span>
     <span>{edu_time}</span>
   </div>
-  <div class="edu-content" style="font-size: 10pt; color: #333333; line-height: 1.45; margin-top: 2pt; margin-bottom: 4pt;">
-    {edu_rows_html}
+  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3pt; font-size:10pt; color:#333333; line-height:1.45; margin-top:3pt; margin-bottom:5pt;">
+    {"".join(grid_cells_html)}
   </div>
 """
 

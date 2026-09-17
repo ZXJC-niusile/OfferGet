@@ -145,26 +145,36 @@ class ResumeBuilder:
         """Renders standard HTML sections for HTML-based themes."""
         prof = profile or self.profile
         cand = prof.get("candidate", {})
-        edu_badges = cand.get("education_badges", [])
-        edu_rows = cand.get("education_rows", [])
-        if not edu_rows and edu_badges:
-            from core.profile_adapter import group_education_badges_into_rows
-            edu_rows = group_education_badges_into_rows(edu_badges)
-
         exp_list = prof.get("experience", [])
         proj_list = prof.get("projects", [])
         comps = prof.get("competencies", {})
 
-        edu_rows_html = "".join([
-            f'<div class="edu-row" style="font-size:10.5px; color:var(--color-muted, #4B5563); line-height:1.45; margin-top:1.5px;">{r}</div>'
-            for r in edu_rows
-        ])
+        from core.profile_adapter import extract_education_grid
+        grid = extract_education_grid(cand)
+        max_cols = max((len(r) for r in grid), default=1)
+        if max_cols >= 3:
+            col_template = "38% 28% 1fr"
+        elif max_cols == 2:
+            col_template = "45% 1fr"
+        else:
+            col_template = "1fr"
+
+        grid_cells_html = []
+        for r in grid:
+            for i in range(max_cols):
+                cell_text = r[i] if i < len(r) else ""
+                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
+                grid_cells_html.append(f'<div>{cell_clean}</div>')
+
+        edu_grid_html = f"""
+      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2.5px; font-size:10.5px; color:var(--color-muted, #4B5563); line-height:1.45; margin-top:2.5px;">
+        {"".join(grid_cells_html)}
+      </div>"""
 
         sections = []
 
         school_str = cand.get('school', '')
-        degree_str = cand.get('degree', '')
-        sep_span = '<span style="color:var(--color-bar-border, #CBD5E1); font-size:10.5px;">｜</span>' if degree_str and school_str else ''
+        degree_str = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get('degree', ''))).strip()
         role_span = f'<span class="org-role" style="font-weight:600; font-size:11.2px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
 
         # 1. Education
@@ -175,16 +185,13 @@ class ResumeBuilder:
         <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
       </div>
       <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:3px; margin-bottom:2px;">
-        <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
+        <div class="org-left" style="display:flex; align-items:baseline; gap:16px;">
           <span class="org-title" style="font-weight:700; font-size:11.8px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
-          {sep_span}
           {role_span}
         </div>
         <div class="org-right" style="font-size:10.5px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
       </div>
-      <div class="edu-details" style="margin-top:1px; margin-bottom:2px;">
-        {edu_rows_html}
-      </div>
+      {edu_grid_html}
     </section>
     """
         sections.append(edu_html)
@@ -409,11 +416,29 @@ class ResumeBuilder:
         comps = prof.get("competencies", {})
         exp_list = prof.get("experience", [])
         proj_list = prof.get("projects", [])
-        edu_badges = cand.get("education_badges", [])
-        edu_rows = cand.get("education_rows", [])
-        if not edu_rows and edu_badges:
-            from core.profile_adapter import group_education_badges_into_rows
-            edu_rows = group_education_badges_into_rows(edu_badges)
+
+        from core.profile_adapter import extract_education_grid
+        grid = extract_education_grid(cand)
+        max_cols = max((len(r) for r in grid), default=1)
+        if max_cols >= 3:
+            col_template = "38% 28% 1fr"
+        elif max_cols == 2:
+            col_template = "45% 1fr"
+        else:
+            col_template = "1fr"
+
+        grid_cells_html = []
+        for r in grid:
+            for i in range(max_cols):
+                cell_text = r[i] if i < len(r) else ""
+                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
+                grid_cells_html.append(f'<div>{cell_clean}</div>')
+
+        school_str = cand.get('school', '')
+        degree_str = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get('degree', ''))).strip()
+        edu_time_str = cand.get('edu_time', '')
+        head_edu = f"{school_str}    {degree_str}" if degree_str else school_str
+        head_edu_full = f"{head_edu}    {edu_time_str}" if edu_time_str else head_edu
 
         # 1. Markdown file
         photo_tag = f" | 照片：{eff_photo_path}" if (photo_enabled and eff_photo_path) else (" | 照片：预留证件照位置" if photo_enabled else "")
@@ -425,10 +450,21 @@ class ResumeBuilder:
             "---",
             "",
             "## 教育背景",
-            f"### {cand.get('school', '')} ｜ {cand.get('degree', '')} ｜ {cand.get('edu_time', '')}",
+            f"### {head_edu_full}",
         ]
-        for r in edu_rows:
-            md_lines.append(f"{r}  ")
+        for r in grid:
+            c1 = r[0] if len(r) > 0 else ""
+            c2 = r[1] if len(r) > 1 else ""
+            c3 = r[2] if len(r) > 2 else ""
+            c1_clean = re.sub(r"\s*[｜|]\s*", " ", c1).strip()
+            c2_clean = re.sub(r"\s*[｜|]\s*", " ", c2).strip()
+            c3_clean = re.sub(r"\s*[｜|]\s*", " ", c3).strip()
+            w1 = sum(2 if ord(ch) > 127 else 1 for ch in c1_clean)
+            pad1 = max(4, 32 - w1)
+            w2 = sum(2 if ord(ch) > 127 else 1 for ch in c2_clean)
+            pad2 = max(4, 20 - w2)
+            line = f"{c1_clean}{' ' * pad1}{c2_clean}{' ' * pad2}{c3_clean}".rstrip()
+            md_lines.append(f"{line}  ")
 
         if exp_list:
             md_lines.extend(["", "---", "", "## 实习经历"])
@@ -566,11 +602,11 @@ class ResumeBuilder:
 
   <h2>教育背景</h2>
   <div class="item-header">
-    <span>{cand.get('school', '')} ｜ {cand.get('degree', '')}</span>
-    <span>{cand.get('edu_time', '')}</span>
+    <span>{school_str} &nbsp;&nbsp;&nbsp;&nbsp; {degree_str}</span>
+    <span>{edu_time_str}</span>
   </div>
-  <div class="edu-content" style="font-size: 10pt; line-height: 1.45; margin-top: 2pt; margin-bottom: 4pt;">
-    {"".join([f'<div style="margin-top:2pt;">{r}</div>' for r in edu_rows])}
+  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3pt; font-size:10pt; line-height:1.45; margin-top:3pt; margin-bottom:5pt;">
+    {"".join(grid_cells_html)}
   </div>
 """
         if exp_list:
