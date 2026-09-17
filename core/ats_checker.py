@@ -12,47 +12,18 @@ import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # ---------------------------------------------------------------------------
-# Constants & Pattern Banks
+# Constants & Pattern Banks (Centralized from core.lexicon SSOT)
 # ---------------------------------------------------------------------------
-
-# Action verbs - Strong (reward)
-STRONG_ACTION_VERBS_EN = {
-    "built", "architected", "engineered", "spearheaded", "shipped", "optimized",
-    "deployed", "pioneered", "led", "scaled", "accelerated", "authored",
-    "designed", "implemented", "streamlined", "delivered", "orchestrated",
-    "formulated", "executed", "overhauled", "customized", "refactored",
-    "automated", "established", "invented", "slashed", "drove"
-}
-
-STRONG_ACTION_VERBS_ZH = {
-    "主导", "架构", "研发", "搭建", "攻坚", "优化", "实现", "交付",
-    "推进", "开源", "设计", "落地", "首创", "降低", "提升", "节省",
-    "自研", "定制", "重构", "重塑", "打通", "构建", "牵引", "主持"
-}
-
-# Action verbs - Weak (penalize)
-WEAK_ACTION_VERBS_EN = {
-    "responsible for", "assisted in", "helped with", "worked on",
-    "participated in", "contributed to", "handled", "involved in",
-    "tasked with", "supported", "aided", "collaborated on", "took part in"
-}
-
-WEAK_ACTION_VERBS_ZH = {
-    "负责", "参与", "协助", "配合", "辅助", "支持", "做过", "了解", "接触过", "跟进"
-}
-
-# Quantified metric patterns
-QUANTIFIED_PATTERNS = [
-    re.compile(r"\b\d+(?:\.\d+)?%"),                                                  # 54.2%, 62%, 100%
-    re.compile(r"\b\d+(?:\.\d+)?x\b", re.IGNORECASE),                                  # 2.8x, 3x
-    re.compile(r"[$¥￥]\s*\d+(?:,\d+)*(?:\.\d+)?"),                                   # $100k, ￥3800
-    re.compile(r"\b\d+(?:,\d+)*(?:\.\d+)?\s*(?:万|亿元|万元|k|m|b|billion|million|rmb|usd)\b", re.IGNORECASE), # 3800 万元, 38M RMB
-    re.compile(r"\b\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds?|min|minutes?|hours?|h|周|天|小时|分钟|秒|weeks?|days?|months?)\b", re.IGNORECASE), # 320ms, 8 分钟
-    re.compile(r"\b\d+(?:,\d+)?\s*(?:卡|gpus?|nodes?|tps|qps|tokens?/s|gb|tb|pb|stars?|citations?|条|篇)\b", re.IGNORECASE), # 1024 卡, 3400 stars
-    re.compile(r"\b\d+[bm]\b", re.IGNORECASE),                                         # 230B, 64B
-    re.compile(r"[+上下降提升增加缩短减少压减削减]\s*\d+(?:\.\d+)?%?"),                      # 提升 14.2%, 减少 48%
-    re.compile(r"\b(?:from|slashing|reducing|increasing|boosting)\b[^\n,;]+?\b\d+"),   # English metric phrasing
-]
+from core.lexicon import (
+    STRONG_ACTION_VERBS_EN,
+    STRONG_ACTION_VERBS_ZH,
+    WEAK_ACTION_VERBS_EN,
+    WEAK_ACTION_VERBS_ZH,
+    QUANTIFIED_PATTERNS,
+    AI_BUZZWORDS_LEXICON,
+    VERB_HIERARCHY,
+    ROLE_RANKS,
+)
 
 # Standard Section Names mapping
 STANDARD_SECTIONS = {
@@ -86,21 +57,6 @@ FORMATTING_RISKS = [
     ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
 ]
 
-# AI Buzzword Lexicon
-AI_BUZZWORDS_LEXICON = [
-    # English buzzwords
-    "results-driven", "results driven", "dynamic", "synergy", "passionate",
-    "proven track record", "deeply passionate", "testament to", "delve into",
-    "pivotal role", "game-changing transformation", "intricate tapestry",
-    "fast-paced environment", "thought leader", "go-getter", "team player",
-    "seasoned professional", "cutting-edge solutions", "groundbreaking",
-    "spearheading transformative", "holistic approach", "seamlessly integrate",
-    "unwavering commitment", "strategic vision", "value proposition",
-    # Chinese buzzwords
-    "具有深厚底蕴", "全面赋能", "深度赋能", "全面革新", "强力驱动", "革命性突破",
-    "显著提高", "大幅优化", "卓越成效", "顶层设计", "无缝打通", "全方位重塑",
-    "作为一名深耕", "深耕.*领域", "不仅.*而且.*更.*"
-]
 
 # Default Transferable Defense Guidance
 DEFENSE_GUIDE_TEMPLATES = {

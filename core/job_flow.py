@@ -12,10 +12,14 @@ Implements the competition track 2 closed-loop job-seeking pipeline:
 
 from __future__ import annotations
 
-import re
+import copy
 import json
+from pathlib import Path
+import re
 from dataclasses import asdict
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from core.interview_debrief import InterviewDebriefEngine
 from core.jd_compat import profile_to_canonical
@@ -242,11 +246,235 @@ def generate_resume_advice(
     return advice_list
 
 
+def generate_tailored_profile_from_review(
+    review_result: Dict[str, Any],
+    base_profile: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Derive targeted tailored candidate profile from career review advice.
+
+    Extracts safe_bullet recommendations (verified, un-inflated, fact-grounded)
+    and injects or supplements them into corresponding experiences or projects
+    in base_profile, generating a highly tailored profile for the target JD.
+    """
+    tailored = copy.deepcopy(base_profile if isinstance(base_profile, dict) else {})
+
+    # 1. Candidate metadata & photo slot
+    if "candidate" in tailored and isinstance(tailored["candidate"], dict):
+        cand = tailored["candidate"]
+        if "school" not in cand and "institution" in cand:
+            cand["school"] = cand["institution"]
+        if "title" not in cand and "title_zh" in cand:
+            cand["title"] = cand["title_zh"]
+        cand["reserve_photo"] = True
+    else:
+        tailored["reserve_photo"] = True
+
+    # 2. Normalize experiences
+    experiences = tailored.get("experience")
+    if experiences is None and "internships" in tailored:
+        experiences = tailored["internships"]
+        tailored["experience"] = experiences
+    if not isinstance(experiences, list):
+        experiences = []
+        tailored["experience"] = experiences
+
+    for exp in experiences:
+        if not isinstance(exp, dict):
+            continue
+        if "org" not in exp and "company" in exp:
+            exp["org"] = exp["company"]
+        if "company" not in exp and "org" in exp:
+            exp["company"] = exp["org"]
+        if "time" not in exp and "period" in exp:
+            exp["time"] = exp["period"]
+        if "period" not in exp and "time" in exp:
+            exp["period"] = exp["time"]
+
+        bullets = exp.get("bullets")
+        if bullets is None:
+            extracted = []
+            for h in exp.get("highlights", []):
+                if isinstance(h, dict):
+                    txt = h.get("claim_zh") or h.get("claim_en") or h.get("text") or ""
+                else:
+                    txt = str(h)
+                if txt and txt not in extracted:
+                    extracted.append(txt)
+            exp["bullets"] = extracted
+        else:
+            exp["bullets"] = list(bullets)
+
+    # 3. Normalize projects
+    projects = tailored.get("projects")
+    if projects is None and "campus_experience" in tailored:
+        projects = tailored["campus_experience"]
+        tailored["projects"] = projects
+    if isinstance(projects, list):
+        for proj in projects:
+            if not isinstance(proj, dict):
+                continue
+            if "time" not in proj and "period" in proj:
+                proj["time"] = proj["period"]
+            p_bullets = proj.get("bullets")
+            if p_bullets is None:
+                extracted = []
+                desc = proj.get("description_zh") or proj.get("description", "")
+                if desc:
+                    extracted.append(desc)
+                proj["bullets"] = extracted
+            else:
+                proj["bullets"] = list(p_bullets)
+
+    # 4. Extract and inject verified safe_bullet evidence
+    if isinstance(review_result, list):
+        advice_list = review_result
+    elif isinstance(review_result, dict):
+        advice_list = review_result.get("resume_advice", [])
+    else:
+        advice_list = []
+
+    for advice in advice_list:
+        if not isinstance(advice, dict):
+            continue
+        safe_bullet = advice.get("safe_bullet", "")
+        if not isinstance(safe_bullet, str):
+            continue
+        safe_bullet = safe_bullet.strip()
+        if not safe_bullet:
+            continue
+
+        # Clean diagnostic prefixes
+        if safe_bullet.startswith("简历中明确提及") or safe_bullet.startswith("未直接提及") or safe_bullet.startswith("候选人专业"):
+            m_quote = re.search(r"['‘\"](.+?)['’\"]", safe_bullet)
+            if m_quote and len(m_quote.group(1).strip()) >= 5:
+                safe_bullet = m_quote.group(1).strip()
+            else:
+                continue
+
+        category = advice.get("category", "")
+        action = advice.get("action", "")
+        requirement = advice.get("requirement", "")
+        evidence_refs = advice.get("evidence_refs", [])
+
+        # Filter candidate metadata
+        is_candidate_meta = False
+        for ref in evidence_refs:
+            sp = ref.get("source_path", "")
+            if any(marker in sp for marker in ("candidate.degree", "candidate.years_of_experience", "candidate.major", "candidate.school", "candidate.institution")):
+                is_candidate_meta = True
+                cand = tailored.get("candidate", {})
+                if "degree" in sp and isinstance(cand, dict):
+                    cand["degree"] = safe_bullet
+                elif "years_of_experience" in sp and isinstance(cand, dict):
+                    cand["years_of_experience"] = safe_bullet
+                break
+        if is_candidate_meta:
+            continue
+        if category == "threshold" and any(k in requirement for k in ("学历", "学位", "年限", "工作经验", "专业")):
+            continue
+
+        target_exp_indices: List[int] = []
+        target_proj_indices: List[int] = []
+        excerpts: List[str] = []
+
+        for ref in evidence_refs:
+            sp = ref.get("source_path", "")
+            cid = ref.get("claim_id", "")
+            if ref.get("excerpt"):
+                excerpts.append(ref["excerpt"])
+
+            m_exp = re.search(r"experience\[(\d+)\]", sp)
+            if m_exp:
+                target_exp_indices.append(int(m_exp.group(1)))
+            m_proj = re.search(r"projects\[(\d+)\]", sp)
+            if m_proj:
+                target_proj_indices.append(int(m_proj.group(1)))
+
+            if cid and experiences:
+                for e_idx, exp in enumerate(experiences):
+                    if not isinstance(exp, dict):
+                        continue
+                    for h in exp.get("highlights", []):
+                        if isinstance(h, dict) and h.get("claim_id") == cid:
+                            target_exp_indices.append(e_idx)
+
+        # Keyword matching fallback
+        if not target_exp_indices and not target_proj_indices and experiences:
+            best_idx = -1
+            best_score = 0
+            for e_idx, exp in enumerate(experiences):
+                if not isinstance(exp, dict):
+                    continue
+                exp_text = f"{exp.get('company', '')} {exp.get('role', '')} {' '.join(exp.get('bullets', []))}".lower()
+                score = 0
+                if requirement and requirement.lower() in exp_text:
+                    score += 5
+                for token in re.split(r"[/,、\s\-]+", safe_bullet):
+                    if len(token) >= 2 and token.lower() in exp_text:
+                        score += 1
+                if score > best_score:
+                    best_score = score
+                    best_idx = e_idx
+            if best_idx >= 0 and best_score >= 1:
+                target_exp_indices.append(best_idx)
+            elif category in ("responsibility", "experience") or action == "rewrite":
+                target_exp_indices.append(0)
+
+        # Inject / rewrite into matched experiences
+        for e_idx in dict.fromkeys(target_exp_indices):
+            if 0 <= e_idx < len(experiences):
+                exp = experiences[e_idx]
+                bullets = exp.setdefault("bullets", [])
+
+                if safe_bullet in bullets:
+                    continue
+
+                replaced = False
+                if action == "rewrite":
+                    for b_idx, existing_b in enumerate(bullets):
+                        if any(ex and ex in existing_b for ex in excerpts):
+                            bullets[b_idx] = safe_bullet
+                            replaced = True
+                            break
+
+                if not replaced:
+                    bullets.append(safe_bullet)
+
+                if "highlights" in exp and isinstance(exp["highlights"], list):
+                    has_h = any(
+                        (isinstance(h, dict) and (h.get("claim_zh") == safe_bullet or h.get("safe_bullet") == safe_bullet))
+                        or h == safe_bullet
+                        for h in exp["highlights"]
+                    )
+                    if not has_h:
+                        exp["highlights"].append({
+                            "claim_id": f"TAILORED-{len(exp['highlights'])+1}",
+                            "claim_zh": safe_bullet,
+                            "safe_bullet": safe_bullet,
+                            "verified_metrics": True,
+                            "tailored": True,
+                        })
+
+        # Inject into matched projects
+        for p_idx in dict.fromkeys(target_proj_indices):
+            if projects and 0 <= p_idx < len(projects):
+                proj = projects[p_idx]
+                p_bullets = proj.setdefault("bullets", [])
+                if safe_bullet not in p_bullets:
+                    p_bullets.append(safe_bullet)
+
+    return tailored
+
+
 def run_career_review(
     jd_text: str,
     profile_dict: Dict[str, Any],
     answers_dict: Optional[Dict[str, Any]] = None,
     listing_age_days: int = 15,
+    build_resume: bool = False,
+    resume_theme: str = "modern-navy",
+    resume_output_dir: Optional[Union[str, Path]] = None,
+    reserve_photo: bool = True,
 ) -> Dict[str, Any]:
     decoder = JDDecoder()
     decoded_jd = decoder.decode(jd_text)
@@ -397,7 +625,7 @@ def run_career_review(
         "invalid_answers": invalid_answers,
     }
 
-    return {
+    result = {
         "schema_version": "career-review.v1",
         "jd_breakdown": {
             "job_title": getattr(decoded_jd, "job_title", ""),
@@ -445,3 +673,46 @@ def run_career_review(
         },
         "polish_focus": polish_focus,
     }
+
+    tailored_profile = generate_tailored_profile_from_review(
+        {"resume_advice": resume_advices, "match_summary": matcher_result},
+        profile_dict,
+    )
+    result["tailored_profile"] = tailored_profile
+
+    if build_resume:
+        from core.resume_builder import ResumeBuilder
+
+        if resume_output_dir is None:
+            out_dir = PROJECT_ROOT / "output" / "resumes"
+        else:
+            out_dir = Path(resume_output_dir).resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        builder = ResumeBuilder(tailored_profile)
+        if resume_theme == "all":
+            built_files = builder.build_all(out_dir, photo=reserve_photo)
+            primary_pdf = None
+            if "modern-navy" in built_files and "pdf" in built_files["modern-navy"]:
+                primary_pdf = built_files["modern-navy"]["pdf"]
+            elif built_files:
+                first_theme = next(iter(built_files.values()))
+                primary_pdf = first_theme.get("pdf")
+            result["generated_resumes"] = {
+                "theme": resume_theme,
+                "pdf": primary_pdf,
+                "files": built_files,
+                "output_dir": out_dir,
+            }
+        else:
+            built_files = builder.build_theme(resume_theme, out_dir, photo=reserve_photo)
+            result["generated_resumes"] = {
+                **built_files,
+                "theme": resume_theme,
+                "pdf": built_files.get("pdf"),
+                "html": built_files.get("html"),
+                "output_dir": out_dir,
+            }
+
+    return result
+

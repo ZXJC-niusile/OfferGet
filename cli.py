@@ -210,7 +210,10 @@ def cmd_career_review(args):
     review_result = run_career_review(
         jd_text=jd_text,
         profile_dict=profile_data,
-        answers_dict=answers_data
+        answers_dict=answers_data,
+        build_resume=getattr(args, "build_resume", False),
+        resume_theme=getattr(args, "resume_theme", "modern-navy"),
+        resume_output_dir=getattr(args, "resume_output_dir", None),
     )
 
     if args.output:
@@ -264,7 +267,21 @@ def cmd_career_review(args):
     print(f"    • Description: {pf.get('description')}")
     for cp in pf.get("defense_checkpoints", []):
         print(f"      - {cp}")
+
+    if review_result.get("generated_resumes"):
+        print("\n[5] Directly Generated Tailored Resumes:")
+        gen = review_result["generated_resumes"]
+        if "files" in gen:
+            for theme_name, fmap in gen["files"].items():
+                p = fmap.get("pdf", "")
+                print(f"    ✓ [{theme_name:<16}] -> {p}")
+        else:
+            p = gen.get("pdf", "")
+            t = gen.get("theme", "modern-navy")
+            print(f"    ✓ [{t:<16}] -> {p}")
     print("=" * 72)
+
+
 
 
 def cmd_ats_audit(args):
@@ -981,6 +998,13 @@ def cmd_resume_build(args_list):
         help="Output directory to save generated resumes (default: output/resumes)",
     )
     build_parser.add_argument("--no-photo", action="store_true", help="Do not reserve photo slot")
+    build_parser.add_argument("--photo-path", default=None, help="Path to candidate photo image (jpg/png/webp)")
+    build_parser.add_argument(
+        "--anonymize",
+        default=None,
+        choices=["standard", "strict"],
+        help="Privacy anonymization level ('standard' or 'strict')",
+    )
     build_parser.add_argument("--no-autofit", action="store_true", help="Disable single-page AutoFit compaction")
 
     parsed = build_parser.parse_args(args_list)
@@ -993,9 +1017,15 @@ def cmd_resume_build(args_list):
     out_dir = Path(parsed.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    builder = ResumeBuilder(profile_path)
+    builder = ResumeBuilder(
+        profile_path,
+        photo_path=parsed.photo_path,
+        anonymize=parsed.anonymize,
+    )
     cand_name = builder.profile["candidate"].get("name", "候选人")
     target_role = builder.profile["candidate"].get("title", "运营岗")
+
+    photo_status = 'Disabled' if parsed.no_photo else ('Custom image' if parsed.photo_path else 'Reserved placeholder')
 
     print("=" * 68)
     print("             OfferGet · Multi-Template Resume Builder            ")
@@ -1003,7 +1033,8 @@ def cmd_resume_build(args_list):
     print(f"[*] Candidate:   {cand_name}")
     print(f"[*] Target Role: {target_role}")
     print(f"[*] Output Dir:  {out_dir}")
-    print(f"[*] Photo Slot:  {'Disabled' if parsed.no_photo else 'Enabled'}")
+    print(f"[*] Photo Slot:  {photo_status}")
+    print(f"[*] Anonymize:   {parsed.anonymize or 'Disabled'}")
     print(f"[*] AutoFit:     {'Disabled' if parsed.no_autofit else 'Enabled'}")
     print("-" * 68)
 
@@ -1350,6 +1381,15 @@ Examples:
     review_parser.add_argument("--answers", help="Optional path to interview answers JSON")
     review_parser.add_argument("--output", help="Optional output JSON file path")
     review_parser.add_argument("--json", action="store_true", help="Output raw JSON")
+    review_parser.add_argument("--build-resume", action="store_true", help="Directly build tailored resume PDF using review safe bullets")
+    review_parser.add_argument(
+        "--resume-theme",
+        default="modern-navy",
+        choices=["all", "modern-navy", "silicon-clean", "classic-tech", "ats-plain", "academic-latex", "academic-typst"],
+        help="Theme for tailored resume (default: modern-navy)",
+    )
+    review_parser.add_argument("--resume-output-dir", default=None, help="Custom output directory for tailored resumes")
+
 
     # `offerget resume ...`
     resume_parser = subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")

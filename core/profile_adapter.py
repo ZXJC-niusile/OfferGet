@@ -281,11 +281,57 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
                 edu_badges.append(str(cand["certificates"]))
         cand["education_badges"] = edu_badges
 
+        if "school" not in cand and "institution" in cand:
+            cand["school"] = cand["institution"]
+        if "title" not in cand and "title_zh" in cand:
+            cand["title"] = cand["title_zh"]
+        if "reserve_photo" not in cand:
+            cand["reserve_photo"] = True
+
+        norm_exp = []
+        for e in raw_profile.get("experience", []):
+            if not isinstance(e, dict):
+                continue
+            e_copy = dict(e)
+            org = e_copy.get("org") or e_copy.get("company", "")
+            time_str = e_copy.get("time") or e_copy.get("period", "")
+            bullets = list(e_copy.get("bullets", []))
+            if not bullets and e_copy.get("highlights"):
+                for h in e_copy["highlights"]:
+                    if isinstance(h, dict):
+                        txt = h.get("claim_zh") or h.get("claim_en") or h.get("text") or ""
+                    else:
+                        txt = str(h)
+                    if txt and txt not in bullets:
+                        bullets.append(txt)
+            e_copy["org"] = org
+            e_copy["company"] = org
+            e_copy["time"] = time_str
+            e_copy["period"] = time_str
+            e_copy["bullets"] = bullets
+            norm_exp.append(e_copy)
+
+        norm_proj = []
+        for p in raw_profile.get("projects", []):
+            if not isinstance(p, dict):
+                continue
+            p_copy = dict(p)
+            time_str = p_copy.get("time") or p_copy.get("period", "")
+            bullets = list(p_copy.get("bullets", []))
+            if not bullets:
+                desc = p_copy.get("description_zh") or p_copy.get("description", "")
+                if desc:
+                    bullets.append(desc)
+            p_copy["time"] = time_str
+            p_copy["period"] = time_str
+            p_copy["bullets"] = bullets
+            norm_proj.append(p_copy)
+
         return {
             "candidate": cand,
             "competencies": raw_profile.get("competencies", {}),
-            "experience": raw_profile.get("experience", []),
-            "projects": raw_profile.get("projects", []),
+            "experience": norm_exp,
+            "projects": norm_proj,
             "publications": raw_profile.get("publications", []),
             "narrative": raw_profile.get("narrative", {}),
         }

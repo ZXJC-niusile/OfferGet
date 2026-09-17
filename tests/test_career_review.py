@@ -23,7 +23,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.job_flow import run_career_review, generate_resume_advice, build_candidate_profile
+from core.job_flow import (
+    run_career_review,
+    generate_resume_advice,
+    build_candidate_profile,
+    generate_tailored_profile_from_review,
+)
 from core.fact_guard import FactVerificationGuard
 from core.profile_adapter import iter_profile_claims
 from modules.jd_analyst.decoder import JDDecoder
@@ -312,6 +317,124 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertIn("written to", proc.stderr)
 
+    def test_17_career_review_build_resume_e2e(self):
+        """Test run_career_review with build_resume=True end-to-end closed loop."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "resumes"
+            res = run_career_review(
+                self.jd_text,
+                self.profile_data,
+                build_resume=True,
+                resume_output_dir=out_dir,
+                resume_theme="modern-navy",
+                reserve_photo=True,
+            )
+            # 1. Verify generated_resumes structure and PDF file
+            self.assertIn("generated_resumes", res)
+            self.assertIn("tailored_profile", res)
+
+            gen = res["generated_resumes"]
+            self.assertIn("pdf", gen)
+            self.assertIn("html", gen)
+            pdf_path = Path(gen["pdf"])
+            self.assertTrue(pdf_path.exists())
+            self.assertTrue(pdf_path.is_file())
+            self.assertGreater(pdf_path.stat().st_size, 0)
+
+            # 2. Verify rewritten experience contains safe_bullet evidence
+            safe_bullets = [
+                a["safe_bullet"] for a in res["resume_advice"]
+                if a.get("safe_bullet") and a.get("category") != "threshold"
+            ]
+            self.assertTrue(len(safe_bullets) > 0)
+            tailored_exp_bullets = [
+                b for exp in res["tailored_profile"]["experience"]
+                for b in exp.get("bullets", [])
+            ]
+            self.assertTrue(len(tailored_exp_bullets) > 0)
+            has_safe_evidence = any(
+                any(sb in b or b in sb for b in tailored_exp_bullets)
+                for sb in safe_bullets
+            )
+            self.assertTrue(has_safe_evidence, "Rewritten experience must contain safe_bullet evidence")
+
+            # 3. Verify photo placeholder slot ("预留证件照" / photo-placeholder)
+            html_path = Path(gen["html"])
+            self.assertTrue(html_path.exists())
+            html_text = html_path.read_text(encoding="utf-8")
+            self.assertTrue("预留证件照" in html_text or "photo-placeholder" in html_text)
+            self.assertTrue(res["tailored_profile"]["candidate"].get("reserve_photo", False))
+
+    def test_18_generate_tailored_profile_from_review_unit(self):
+        """Test unit behavior of generate_tailored_profile_from_review."""
+        base = {
+            "candidate": {
+                "name": "李四",
+                "institution": "上海交通大学",
+                "title_zh": "大模型算法工程师",
+            },
+            "experience": [
+                {
+                    "company": "科技公司A",
+                    "role": "算法研究员",
+                    "period": "2024.01 - 至今",
+                    "bullets": [
+                        "负责训练流水线优化，通信开销降低 20%。",
+                    ],
+                }
+            ],
+        }
+        review = {
+            "resume_advice": [
+                {
+                    "requirement": "Megatron-LM",
+                    "category": "skill",
+                    "state": "verified",
+                    "action": "rewrite",
+                    "safe_bullet": "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 35%。",
+                    "evidence_refs": [{"source_path": "experience[0].bullets[0]", "excerpt": "负责训练流水线优化"}],
+                },
+                {
+                    "requirement": "幻觉技能",
+                    "category": "skill",
+                    "state": "needs_confirmation",
+                    "action": "ask_user",
+                    "safe_bullet": "",
+                    "evidence_refs": [],
+                },
+            ]
+        }
+        tailored = generate_tailored_profile_from_review(review, base)
+
+        # Base profile should remain untouched (immutability)
+        self.assertEqual(len(base["experience"][0]["bullets"]), 1)
+        self.assertNotIn("Megatron-LM", base["experience"][0]["bullets"][0])
+
+        # Tailored profile must contain safe_bullet rewritten experience
+        bullets = tailored["experience"][0]["bullets"]
+        self.assertTrue(any("Megatron-LM" in b for b in bullets))
+        self.assertTrue(any("35%" in b for b in bullets))
+        self.assertNotIn("幻觉技能", " ".join(bullets))
+
+        # Photo reservation and bridged candidate fields
+        self.assertTrue(tailored["candidate"]["reserve_photo"])
+        self.assertEqual(tailored["candidate"]["school"], "上海交通大学")
+        self.assertEqual(tailored["candidate"]["title"], "大模型算法工程师")
+
+    def test_19_career_review_default_build_resume(self):
+        """Test run_career_review with default build_resume=True parameters."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "default_resumes"
+            res = run_career_review(self.jd_text, self.profile_data, build_resume=True, resume_output_dir=out_dir)
+            self.assertIn("generated_resumes", res)
+            pdf_path = Path(res["generated_resumes"]["pdf"])
+            self.assertTrue(pdf_path.exists())
+            self.assertTrue(pdf_path.stat().st_size > 0)
+            self.assertEqual(res["generated_resumes"]["theme"], "modern-navy")
+
 
 if __name__ == "__main__":
     unittest.main()
+

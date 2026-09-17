@@ -17,12 +17,39 @@ Exports CandidateProfile SSOT to Native Academic LaTeX and Typst Resumes:
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
+
+
+def _image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional[str]:
+    """Converts a local image file to a base64 data URI."""
+    if not image_path:
+        return None
+    p = Path(image_path).resolve()
+    if not p.is_file():
+        return None
+    suffix = p.suffix.lower()
+    mime_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+        ".svg": "image/svg+xml",
+    }
+    mime_type = mime_types.get(suffix, "image/jpeg")
+    try:
+        data = p.read_bytes()
+        b64 = base64.b64encode(data).decode("ascii")
+        return f"data:{mime_type};base64,{b64}"
+    except Exception:
+        return None
+
 
 
 def escape_latex(text: str) -> str:
@@ -53,7 +80,12 @@ class AcademicExporter:
     with photo reservation and compilation support.
     """
 
-    def generate_latex(self, profile: Dict[str, Any], reserve_photo: bool = False) -> str:
+    def generate_latex(
+        self,
+        profile: Dict[str, Any],
+        reserve_photo: bool = False,
+        photo_path: Optional[Union[str, Path]] = None,
+    ) -> str:
         """
         Generates standard academic Chinese/English LaTeX source (.tex).
         """
@@ -66,7 +98,7 @@ class AcademicExporter:
         school = escape_latex(cand.get("school", ""))
         location = escape_latex(cand.get("location", ""))
         edu_time = escape_latex(cand.get("edu_time", ""))
-        photo_needed = reserve_photo or cand.get("reserve_photo", False)
+        photo_needed = reserve_photo or cand.get("reserve_photo", False) or (photo_path is not None)
 
         lines = [
             r"\documentclass[a4paper,11pt]{article}",
@@ -76,6 +108,7 @@ class AcademicExporter:
             r"\usepackage{enumitem}",
             r"\usepackage{titlesec}",
             r"\usepackage{xcolor}",
+            r"\usepackage{graphicx}",
             r"\pagestyle{empty}",
             r"\setCJKmainfont{SimSun}",
             r"\titlespacing{\section}{0pt}{10pt}{4pt}",
@@ -87,6 +120,12 @@ class AcademicExporter:
         # Header block
         if photo_needed:
             loc_str = f" \\quad | \\quad {location}" if location else ""
+            if photo_path and Path(photo_path).is_file():
+                posix_path = Path(photo_path).resolve().as_posix()
+                photo_box_tex = f"  \\fbox{{\\includegraphics[width=55pt,height=75pt,keepaspectratio=false]{{{posix_path}}}}}"
+            else:
+                photo_box_tex = r"  \fbox{\parbox[c][75pt][c]{55pt}{\centering \small 预留证件照\\一寸/二寸}}"
+
             lines.extend([
                 r"\begin{minipage}[c]{0.78\textwidth}",
                 f"  {{\\LARGE \\textbf{{{name}}}}} \\\\[4pt]",
@@ -96,7 +135,7 @@ class AcademicExporter:
                 r"\hfill",
                 r"\begin{minipage}[c]{0.20\textwidth}",
                 r"  \flushright",
-                r"  \fbox{\parbox[c][75pt][c]{55pt}{\centering \small 预留证件照\\一寸/二寸}}",
+                photo_box_tex,
                 r"\end{minipage}",
                 r"\vspace{6pt}",
             ])
@@ -195,7 +234,12 @@ class AcademicExporter:
         lines.append(r"\end{document}")
         return "\n".join(lines)
 
-    def generate_typst(self, profile: Dict[str, Any], reserve_photo: bool = False) -> str:
+    def generate_typst(
+        self,
+        profile: Dict[str, Any],
+        reserve_photo: bool = False,
+        photo_path: Optional[Union[str, Path]] = None,
+    ) -> str:
         """
         Generates modern Typst source (.typ).
         """
@@ -208,7 +252,7 @@ class AcademicExporter:
         degree = cand.get("degree", "")
         location = cand.get("location", "")
         edu_time = cand.get("edu_time", "")
-        photo_needed = reserve_photo or cand.get("reserve_photo", False)
+        photo_needed = reserve_photo or cand.get("reserve_photo", False) or (photo_path is not None)
 
         lines = [
             '#set page(paper: "a4", margin: (x: 1.5cm, y: 1.5cm))',
@@ -220,6 +264,20 @@ class AcademicExporter:
 
         if photo_needed:
             loc_disp = f" | {location}" if location else ""
+            if photo_path and Path(photo_path).is_file():
+                posix_path = Path(photo_path).resolve().as_posix()
+                rect_body = (
+                    "    #rect(width: 2.1cm, height: 2.8cm, stroke: 1pt + rgb(\"#1e3a8a\"), radius: 2pt, inset: 0pt, clip: true)[\n"
+                    f"      #image(\"{posix_path}\", width: 100%, height: 100%, fit: \"cover\")\n"
+                    "    ]"
+                )
+            else:
+                rect_body = (
+                    "    #rect(width: 2.1cm, height: 2.8cm, stroke: 1pt + rgb(\"#1e3a8a\"), radius: 2pt, align(center + horizon)[\n"
+                    "      #text(size: 8pt, fill: rgb(\"#555555\"))[预留证件照 \\ 一寸 / 二寸]\n"
+                    "    ])"
+                )
+
             lines.extend([
                 "#grid(",
                 "  columns: (1fr, auto),",
@@ -231,9 +289,7 @@ class AcademicExporter:
                 f"    #v(2pt)#text(fill: rgb(\"#555555\"))[电话：{phone} | 邮箱：{email_typst}{loc_disp}]",
                 "  ],",
                 "  [",
-                "    #rect(width: 2.1cm, height: 2.8cm, stroke: 1pt + rgb(\"#1e3a8a\"), radius: 2pt, align(center + horizon)[",
-                "      #text(size: 8pt, fill: rgb(\"#555555\"))[预留证件照 \\ 一寸 / 二寸]",
-                "    ])",
+                rect_body,
                 "  ]",
                 ")",
                 "#v(6pt)",
@@ -299,7 +355,12 @@ class AcademicExporter:
 
         return "\n".join(lines)
 
-    def generate_latex_html_preview(self, profile: Dict[str, Any], reserve_photo: bool = True) -> str:
+    def generate_latex_html_preview(
+        self,
+        profile: Dict[str, Any],
+        reserve_photo: bool = True,
+        photo_path: Optional[Union[str, Path]] = None,
+    ) -> str:
         """
         Generates single-page A4 HTML styled cleanly like LaTeX, with photo placeholder.
         Allows instant browser preview and headless PDF rendering without local LaTeX tools.
@@ -317,17 +378,28 @@ class AcademicExporter:
         exp_list = profile.get("experience", [])
         proj_list = profile.get("projects", [])
         comps = profile.get("competencies", {})
-        photo_needed = reserve_photo or cand.get("reserve_photo", False)
+        photo_needed = reserve_photo or cand.get("reserve_photo", False) or (photo_path is not None)
 
         photo_html = ""
         if photo_needed:
-            photo_html = """
+            photo_data_uri = _image_to_base64_data_uri(photo_path)
+            if photo_data_uri:
+                photo_html = f"""
+    <div style="width: 72px; height: 96px; border: 1.5px dashed #1e3a8a; background: #fafafa; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0; overflow: hidden; position: relative;" title="预留证件照位置">
+      <img src="{photo_data_uri}" alt="证件照" style="width:100%; height:100%; object-fit:cover; display:block;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+      <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
+        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
+      </div>
+    </div>
+                """
+            else:
+                photo_html = """
     <div style="width: 72px; height: 96px; border: 1.5px dashed #1e3a8a; background: #fafafa; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="预留证件照位置">
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
         <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
       </div>
     </div>
-            """
+                """
 
         loc_str = f" &nbsp;|&nbsp; {location}" if location else ""
 

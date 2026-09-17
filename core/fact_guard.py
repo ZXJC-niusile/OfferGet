@@ -15,30 +15,13 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 
 # ---------------------------------------------------------------------------
-# Technology & Version Whitelist (Numbers that are not performance metrics)
+# Technology & Version Whitelist & Inflation Lexicons (Centralized SSOT)
 # ---------------------------------------------------------------------------
-
-NON_METRIC_TECH_PATTERNS = [
-    re.compile(r"\bC\+\+[0-9]{2}\b", re.IGNORECASE),                         # C++17, C++20
-    re.compile(r"\bFlashAttention-[23](?:/[23])?\b", re.IGNORECASE),        # FlashAttention-2/3
-    re.compile(r"\bZeRO-[123]\b", re.IGNORECASE),                           # ZeRO-3
-    re.compile(r"\bGPT-[34](?:o|\.5)?\b", re.IGNORECASE),                   # GPT-4o, GPT-3.5
-    re.compile(r"\b(?:FP8|INT8|INT4|FP16|BF16)\b", re.IGNORECASE),           # Quantization formats
-    re.compile(r"\b(?:E4M3|E5M2)\b", re.IGNORECASE),                        # FP8 sub-types
-    re.compile(r"\bGSM8K\b", re.IGNORECASE),                                # Benchmark name
-    re.compile(r"\bBM25\b", re.IGNORECASE),                                 # Algorithm name
-    re.compile(r"\b[34]D\s*(?:Parallel|并[行度])?\b", re.IGNORECASE),        # 3D/4D Parallel
-    re.compile(r"\b(?:P[78]|L[56])\b", re.IGNORECASE),                      # Job grade labels
-    re.compile(r"\b(?:H800|H100|A800|A100|V100|RTX\s*4090)\b", re.IGNORECASE), # Accelerator models
-    # Realistic calendar date ranges: e.g. 2020.08 - 2023.02, 2020 - 至今
-    re.compile(r"\b(?:19[7-9]\d|20[0-2]\d)\s*(?:\.\s*\d{1,2})?\s*[-~–—到至]\s*(?:(?:19[7-9]\d|20[0-2]\d)(?:\.\s*\d{1,2})?|至今|present)\b", re.IGNORECASE),
-    # Standalone dates with dot month: e.g. 2023.03
-    re.compile(r"\b(?:19[7-9]\d|20[0-2]\d)\.\d{1,2}\b", re.IGNORECASE),
-    # Calendar year e.g. 2024年
-    re.compile(r"\b(?:19[7-9]\d|20[0-2]\d)\s*年", re.IGNORECASE),
-    re.compile(r"\bEXP-\d{2}\b", re.IGNORECASE),                            # Claim IDs
-    re.compile(r"\bRFC[-\s]?\d+\b", re.IGNORECASE),                         # RFC IDs
-]
+from core.lexicon import (
+    NON_METRIC_TECH_PATTERNS,
+    INFLATION_PATTERNS,
+    FORBIDDEN_BUZZWORDS,
+)
 
 METRIC_TYPE_TO_TOPICS: Dict[str, Set[str]] = {
     "percentage": {"mfu", "uptime", "latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain"},

@@ -47,6 +47,19 @@ from core.defense_simulator import (
     DefenseSimulator,
     simulate_project_defense
 )
+from core.lexicon import (
+    VERB_HIERARCHY,
+    STRONG_ACTION_VERBS_ZH,
+    STRONG_ACTION_VERBS_EN,
+    WEAK_ACTION_VERBS_ZH,
+    WEAK_ACTION_VERBS_EN,
+    ROLE_RANKS,
+    QUANTIFIED_PATTERNS,
+    NON_METRIC_TECH_PATTERNS,
+    INFLATION_PATTERNS,
+    FORBIDDEN_BUZZWORDS,
+    AI_BUZZWORDS_LEXICON,
+)
 
 __all__ = [
     "decode_jd",
@@ -82,6 +95,17 @@ __all__ = [
     "match_advisor_and_draft_email",
     "DefenseSimulator",
     "simulate_project_defense",
+    "VERB_HIERARCHY",
+    "STRONG_ACTION_VERBS_ZH",
+    "STRONG_ACTION_VERBS_EN",
+    "WEAK_ACTION_VERBS_ZH",
+    "WEAK_ACTION_VERBS_EN",
+    "ROLE_RANKS",
+    "QUANTIFIED_PATTERNS",
+    "NON_METRIC_TECH_PATTERNS",
+    "INFLATION_PATTERNS",
+    "FORBIDDEN_BUZZWORDS",
+    "AI_BUZZWORDS_LEXICON",
     "__version__"
 ]
 
