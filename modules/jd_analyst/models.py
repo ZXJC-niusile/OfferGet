@@ -140,10 +140,10 @@ class GapItem:
 @dataclass
 class CandidateProfile:
     name: str = "候选人"
-    education_level: str = "硕士"  # 博士, 硕士, 本科, 大专
+    education_level: str = ""  # 博士, 硕士, 本科, 大专; empty means unknown
     degree_school: str = ""
-    major: str = "计算机科学与技术"
-    years_of_experience: float = 3.0
+    major: str = ""
+    years_of_experience: float = 0.0
     skills: List[str] = field(default_factory=list)
     project_descriptions: List[str] = field(default_factory=list)
     raw_resume_text: str = ""

@@ -1,0 +1,47 @@
+{
+  "profile_version": "career-demo.v1",
+  "candidate": {
+    "name": "匿名候选人",
+    "degree": "计算机相关专业本科",
+    "institution": "示例大学",
+    "major": "计算机科学与技术",
+    "years_of_experience": 3
+  },
+  "competencies": {
+    "languages": ["Python", "C++"],
+    "frameworks": ["PyTorch", "vLLM"]
+  },
+  "experience": [
+    {
+      "company": "示例科技公司",
+      "role": "算法工程师",
+      "highlights": [
+        {
+          "claim_id": "DEMO-EXP-01",
+          "claim_zh": "负责 vLLM 推理服务的批处理参数调优，在固定测试集和同等硬件下将 P99 延迟从 920ms 降至 710ms。",
+          "role_scope": "vLLM 推理服务批处理参数调优",
+          "attribution": "本人负责参数实验、压测与结果复核；部署平台由基础架构团队维护。",
+          "verified_metrics": {
+            "p99_before": "920ms",
+            "p99_after": "710ms",
+            "source": "脱敏压测记录"
+          }
+        },
+        {
+          "claim_id": "DEMO-EXP-02",
+          "claim_zh": "参与 PyTorch 模型训练与错误样本分析，协助维护训练脚本。"
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "检索问答实验",
+      "role": "核心参与者",
+      "description_zh": "使用向量检索完成课程项目原型，尚未在生产环境部署。",
+      "bullets": [
+        "完成数据清洗、索引构建和离线评测；线上效果与业务收益待确认。"
+      ]
+    }
+  ]
+}

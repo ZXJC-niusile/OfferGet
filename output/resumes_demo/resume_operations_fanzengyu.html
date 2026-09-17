@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>范增煜 - 运营岗 个人简历</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-serif: Georgia, "Times New Roman", "Songti SC", serif;
+      --font-mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
+
+      --color-primary: #1E3A8A;        /* Classic Executive Navy */
+      --color-primary-dark: #0F172A;   /* Slate Deep Header */
+      --color-accent: #0284C7;         /* Cerulean Blue */
+      --color-text: #1E293B;           /* Dark Slate Body Text */
+      --color-muted: #64748B;          /* Muted Secondary Gray */
+      --color-border: #E2E8F0;         /* Section Divider Line */
+      --color-bg-bar: #F8FAFC;         /* Light Bar Accent */
+      --color-tag-bg: #F1F5F9;         /* Tag Badge Background */
+      --color-tag-text: #334155;       /* Tag Badge Text */
+
+      /* A4 Layout Tokens - optimized for 1 page */
+      --page-padding-y: 8.5mm;
+      --page-padding-x: 11mm;
+      --body-font-size: 11px;
+      --body-line-height: 1.50;
+      --item-gap: 3.2px;
+      --section-gap: 8.5px;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--body-font-size);
+      line-height: var(--body-line-height);
+      color: var(--color-text);
+      background: #FFFFFF;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: var(--page-padding-y) var(--page-padding-x);
+      margin: 0 auto;
+      background: #FFFFFF;
+    }
+
+    /* Header Layout with Photo Box */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--color-primary);
+      padding-bottom: 8px;
+      margin-bottom: 6px;
+    }
+
+    .header-left {
+      flex: 1;
+      padding-right: 18px;
+    }
+
+    .name-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 5px;
+    }
+
+    h1 {
+      font-size: 21px;
+      font-weight: 700;
+      color: var(--color-primary-dark);
+      letter-spacing: 1px;
+      line-height: 1.1;
+    }
+
+    .intent-badge {
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--color-accent);
+      background: #E0F2FE;
+      padding: 2px 8px;
+      border-radius: 3px;
+      letter-spacing: 0.5px;
+    }
+
+    .contact-info {
+      font-size: 11px;
+      color: var(--color-muted);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .contact-info span.sep {
+      color: #CBD5E1;
+    }
+
+    .contact-info a {
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    /* Photo Placeholder Slot */
+    .photo-wrapper {
+      width: 78px;
+      height: 104px; /* Standard 1-inch / 2-inch ID photo ratio (3:4) */
+      border: 1.5px dashed #94A3B8;
+      border-radius: 4px;
+      background-color: #F8FAFC;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      text-align: center;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+
+    .photo-wrapper:hover {
+      border-color: var(--color-accent);
+      background-color: #F0F9FF;
+    }
+
+    .photo-wrapper img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none; /* Shows when src is valid */
+    }
+
+    .photo-icon {
+      width: 22px;
+      height: 22px;
+      fill: #94A3B8;
+      margin-bottom: 3px;
+    }
+
+    .photo-tip {
+      font-size: 9.5px;
+      color: #64748B;
+      line-height: 1.25;
+      font-weight: 500;
+    }
+
+    /* Section Headers */
+    .section-header {
+      display: flex;
+      align-items: center;
+      margin-top: var(--section-gap);
+      margin-bottom: 3.5px;
+    }
+
+    h2 {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--color-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      white-space: nowrap;
+      margin-right: 8px;
+    }
+
+    .section-rule {
+      flex: 1;
+      height: 1px;
+      background-color: var(--color-border);
+    }
+
+    /* Item Sub-headers */
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 4px;
+      margin-bottom: 2px;
+    }
+
+    .item-title-group {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .item-title {
+      font-size: 11.8px;
+      font-weight: 700;
+      color: var(--color-primary-dark);
+    }
+
+    .item-role {
+      font-size: 11.2px;
+      font-weight: 600;
+      color: var(--color-accent);
+    }
+
+    .item-date {
+      font-size: 10.5px;
+      color: var(--color-muted);
+      font-weight: 500;
+      font-family: var(--font-sans);
+    }
+
+    /* Badges & Tags */
+    .badges-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 3px;
+      margin-bottom: 2px;
+    }
+
+    .badge {
+      font-size: 10.2px;
+      color: var(--color-tag-text);
+      background-color: var(--color-tag-bg);
+      border: 1px solid #E2E8F0;
+      padding: 1.5px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+
+    .badge b {
+      color: var(--color-primary);
+    }
+
+    /* Bullets */
+    ul {
+      list-style-type: none;
+      padding-left: 0;
+      margin-top: 1.5px;
+      margin-bottom: 2px;
+    }
+
+    li {
+      position: relative;
+      padding-left: 13px;
+      margin-bottom: var(--item-gap);
+      text-align: justify;
+      color: #334155;
+    }
+
+    li::before {
+      content: "▪";
+      position: absolute;
+      left: 2px;
+      top: -1px;
+      color: var(--color-accent);
+      font-size: 10px;
+    }
+
+    b, strong {
+      font-weight: 700;
+      color: #0F172A;
+    }
+
+    /* Skills Grid */
+    .skills-block {
+      background: var(--color-bg-bar);
+      border: 1px solid var(--color-border);
+      border-radius: 4px;
+      padding: 5px 8px;
+      margin-top: 3px;
+    }
+
+    .skill-row {
+      display: flex;
+      margin-bottom: 2.5px;
+      line-height: 1.45;
+    }
+
+    .skill-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .skill-label {
+      width: 76px;
+      font-weight: 700;
+      color: var(--color-primary);
+      flex-shrink: 0;
+    }
+
+    .skill-content {
+      flex: 1;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- Header with Photo -->
+    <header>
+      <div class="header-left">
+        <div class="name-row">
+          <h1>范增煜</h1>
+          <span class="intent-badge">求职意向：运营岗</span>
+        </div>
+        <div class="contact-info">
+          <span>电话：+86 183-9708-4690</span>
+          <span class="sep">|</span>
+          <span>邮箱：<a href="mailto:3027812108@qq.com">3027812108@qq.com</a></span>
+          <span class="sep">|</span>
+          <span>现居城市：杭州</span>
+        </div>
+      </div>
+
+      <!-- Right Photo Slot -->
+      <div class="photo-wrapper" title="支持在此处替换个人1寸/2寸免冠职业照">
+        <!-- If you have photo.jpg, set src="photo.jpg" and display:block -->
+        <img id="profile-img" src="avatar.jpg" alt="证件照" onerror="this.style.display='none'; document.getElementById('placeholder-box').style.display='flex';" onload="this.style.display='block'; document.getElementById('placeholder-box').style.display='none';">
+        <div id="placeholder-box" style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
+          <svg class="photo-icon" viewBox="0 0 24 24">
+            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+          </svg>
+          <span class="photo-tip">预留证件照<br>一寸 / 二寸</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 1. 教育背景 -->
+    <section id="education">
+      <div class="section-header">
+        <h2>教育背景</h2>
+        <div class="section-rule"></div>
+      </div>
+      <div class="item-header">
+        <div class="item-title-group">
+          <span class="item-title">青岛理工大学</span>
+          <span class="item-role">土木工程 · 本科在读</span>
+        </div>
+        <span class="item-date">2023.09 — 2027.06</span>
+      </div>
+      <div class="badges-row">
+        <span class="badge">GPA <b>3.12</b> (专业前15%)</span>
+        <span class="badge">文体优秀奖学金</span>
+        <span class="badge">大学英语四级 (CET-4 <b>506分</b>)</span>
+        <span class="badge">全国计算机等级考试二级 (WPS Office)</span>
+        <span class="badge">普通话水平测试二级乙等</span>
+      </div>
+    </section>
+
+    <!-- 2. 实习经历 -->
+    <section id="internship">
+      <div class="section-header">
+        <h2>实习经历</h2>
+        <div class="section-rule"></div>
+      </div>
+
+      <!-- 交个朋友 -->
+      <div class="item-header">
+        <div class="item-title-group">
+          <span class="item-title">交个朋友（杭州）</span>
+          <span class="item-role">直播运营</span>
+        </div>
+        <span class="item-date">2026.06 — 至今</span>
+      </div>
+      <ul>
+        <li>负责美妆直播开播前的全流程筹备，月均统筹 <b>20 余场</b> 直播；结合活动节奏参与直播主题及互动环节设计，独立撰写开场、福袋、憋单等直播话术，并跟进贴片、KT板、直播 PPT 等物料的制作、校对和现场调试，保障场次按计划开播。</li>
+        <li>负责直播现场场控、公屏互动及关键节点提醒，实时跟踪 <b>GMV、转化率、5分钟点击率</b> 等指标，协同主播根据流量和成交变化调整讲解节奏及促单策略；单场最高同时在线人数约 <b>500 人</b>，单场最高 GMV 超过 <b>30 万元</b>。</li>
+        <li>建立并维护直播场次数据台账，围绕 <b>GMV、ROI、点击率和转化率</b> 开展复盘，梳理流量承接及成交转化环节的问题并提出优化建议；协助完成千川投放素材整理和基础数据支持。</li>
+        <li>协同商务团队完成直播选品及样品测评，从用户需求、产品卖点、价格机制和直播适配度等维度评估商品，提炼核心销售卖点，并提出排品和商品组合建议。</li>
+      </ul>
+
+      <!-- 桃蹊礼品 -->
+      <div class="item-header" style="margin-top: 5px;">
+        <div class="item-title-group">
+          <span class="item-title">桃蹊礼品</span>
+          <span class="item-role">新媒体运营与线下推广</span>
+        </div>
+        <span class="item-date">2024.10 — 2025.01</span>
+      </div>
+      <ul>
+        <li>负责线下用户拓展、核心客户关系维护、回访调研和需求沟通，记录客户需求及反馈，支持复购跟进和潜在礼品定制需求挖掘。</li>
+        <li>参与品牌线下推广活动执行，负责用户触达、活动引导、信息收集和反馈整理，协助团队优化推广流程，为用户画像完善及后续运营策略调整提供参考。</li>
+      </ul>
+    </section>
+
+    <!-- 3. 校园与实践经历 -->
+    <section id="campus">
+      <div class="section-header">
+        <h2>校园与实践经历</h2>
+        <div class="section-rule"></div>
+      </div>
+
+      <!-- 新媒体中心 -->
+      <div class="item-header">
+        <div class="item-title-group">
+          <span class="item-title">青岛理工大学新媒体中心</span>
+          <span class="item-role">编辑部成员</span>
+        </div>
+        <span class="item-date">2023.09 — 至今</span>
+      </div>
+      <ul>
+        <li>参与学校新媒体平台日常内容运营，负责公众号文案撰写、内容校审、活动宣传策划及现场摄影，协助完成校园活动宣传内容制作。</li>
+        <li>根据活动主题完成信息整理、宣传文案撰写和内容检查，熟悉公众号内容从素材收集、文案整理到审核发布的基本流程。</li>
+      </ul>
+
+      <!-- 个人电商实践 -->
+      <div class="item-header" style="margin-top: 5px;">
+        <div class="item-title-group">
+          <span class="item-title">个人电商及本地 IP 推广实践</span>
+          <span class="item-role">主理人 / 实践成员</span>
+        </div>
+        <span class="item-date">2023.09 — 至今</span>
+      </div>
+      <ul>
+        <li>独立运营闲鱼店铺，负责商品选品、信息上架、标题关键词优化、用户沟通、价格协商及售后处理。</li>
+        <li>参与青岛本地文创 IP“小海鸥谢谢”的推广活动，负责潜在用户沟通、线下活动执行、反馈收集及数据整理，积累从用户触达到订单处理和售后维护的基础运营经验。</li>
+      </ul>
+    </section>
+
+    <!-- 4. 专业技能 -->
+    <section id="skills">
+      <div class="section-header">
+        <h2>专业技能</h2>
+        <div class="section-rule"></div>
+      </div>
+      <div class="skills-block">
+        <div class="skill-row">
+          <span class="skill-label">内容运营：</span>
+          <span class="skill-content">具备直播话术、公众号文案、活动宣传及内容校审经验，能够根据产品和活动信息整理核心卖点。</span>
+        </div>
+        <div class="skill-row">
+          <span class="skill-label">直播运营：</span>
+          <span class="skill-content">熟悉直播前筹备、现场场控、互动节点执行、选品协同及基础数据复盘流程。</span>
+        </div>
+        <div class="skill-row">
+          <span class="skill-label">用户运营：</span>
+          <span class="skill-content">能够完成客户信息登记、回访提醒、需求记录和用户反馈整理。</span>
+        </div>
+        <div class="skill-row">
+          <span class="skill-label">办公工具：</span>
+          <span class="skill-content">熟练使用 Word、Excel、PowerPoint 和 WPS Office，可完成文档排版、表格制作、数据整理及基础汇总分析。</span>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

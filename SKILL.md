@@ -364,6 +364,19 @@ invoke_subagent(
   offerget defense simulate "面向长序列大语言模型的高效分布式 KV-Cache 压缩机制" --profile examples/academic_profile.json --intensity 严刑拷打
   ```
 
+### 5. 赛题二全闭环求职审查工作台 (Career Review v1)
+- **赛题标准契约**：严格遵循 `career-review.v1` 输出协议，纯 Python 确定性规则引擎，无外部 API/LLM 依赖。
+- **全流程闭环**：
+  1. **JD 精细化拆解 (`jd_breakdown`)**：5 图层技术要求、硬门槛与隐性信号。
+  2. **基于事实的简历建议 (`resume_advice`)**：映射到候选人 profile 路径，区分直接、相邻、弱证据和缺失；数字、角色范围或个人归因未闭合时先追问，`unsupported` 不生成 bullet。
+  3. **默认 3 道针对性面试问题 (`interview_questions`)**：基于岗位 gap、隐性信号与职责从兼容题库排序，带考查意图、备考要点和证据引用；这是确定性题库选择，不是模型动态出题。
+  4. **一轮问答复盘反馈 (`answer_feedback`)**：支持无回答时的待提交状态 (`awaiting_answer`)，以及作答后的指标漂移诊断 (`metric_drift`)、盲区判定 (`fatal_gap`) 与严密防守 (`well_defended`)。
+  5. **终面防守重点打磨 (`polish_focus`: "interview_defense")**：深挖指标 baseline 真实性与底层推导。
+- **CLI 示例**：
+  ```bash
+  offerget review examples/sample_career_jd.txt --profile examples/candidate_profile_minimal.json --answers examples/answers_example.json --output review.json --json
+  ```
+
 ---
 
 ## 知识库速查映射 (Reference Catalog)

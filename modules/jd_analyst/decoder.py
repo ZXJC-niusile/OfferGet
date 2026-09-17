@@ -204,6 +204,14 @@ class JDDecoder:
             if matched_reasons:
                 for reason in matched_reasons:
                     filtered.append(BoilerplateFiltered(text=line_str, reason=reason))
+                # Remove only matched boilerplate fragments. A line may also
+                # contain a real requirement that must remain available to the
+                # decoder.
+                retained = line_str
+                for pat, _ in self.BOILERPLATE_PATTERNS:
+                    retained = re.sub(pat, " ", retained, flags=re.IGNORECASE)
+                if retained.strip():
+                    retained_lines.append(retained)
             else:
                 retained_lines.append(line)
 
@@ -218,7 +226,7 @@ class JDDecoder:
 
         first_line = lines[0]
         # Match common title patterns: e.g. 职位：大模型算法专家
-        m = re.search(r"(?:职位(?:名称)?|岗位(?:名称)?|招聘岗位|Job\s*Title)[：:\s]+([^\n,，;；]{2,30})", text, re.IGNORECASE)
+        m = re.search(r"(?:【(?:职位|岗位)(?:名称)?】|职位(?:名称)?|岗位(?:名称)?|招聘岗位|Job\s*Title)\s*[：:]?\s*([^\n,，;；]{2,60})", text, re.IGNORECASE)
         if m:
             return m.group(1).strip()
 
@@ -230,7 +238,10 @@ class JDDecoder:
 
     def _extract_company_dept(self, text: str) -> str:
         """Extract company or department info if available."""
-        m = re.search(r"(?:公司|部门|所属部门|团队)[：:\s]+([^\n,，;；]{2,30})", text)
+        for bracketed in re.finditer(r"【([^】]+)】[：:]?\s*([^\n,，;；]{2,60})", text):
+            if any(marker in bracketed.group(1) for marker in ("公司", "部门", "团队")):
+                return bracketed.group(2).strip()
+        m = re.search(r"(?:公司|部门|所属部门|团队|团队部门)[：:]\s*([^\n,，;；]{2,60})", text)
         if m:
             return m.group(1).strip()
         return "核心技术业务部"
@@ -314,17 +325,8 @@ class JDDecoder:
                     exp_found = True
                     break
 
-        if not exp_found:
-            # Default fallback if text implies senior
-            if re.search(r"(资深|专家|Staff|Principal|Leader|负责人)", text, re.IGNORECASE):
-                thresholds.append(
-                    HardThreshold(
-                        category="experience_years",
-                        requirement="5年及以上算法研发经验（资深/专家岗推定）",
-                        is_mandatory=True,
-                        min_years=5.0,
-                    )
-                )
+        # Do not convert seniority wording into a numeric hard gate. If the JD
+        # omits years, the requirement remains unknown and must be confirmed.
 
         # 3. Major
         major_pat = r"(计算机|软件工程|人工智能|数学|应用数学|统计学|自动化|电子信息|通信工程)"
@@ -361,7 +363,10 @@ class JDDecoder:
         if m:
             resp_section = m.group(1)
         else:
-            resp_section = text
+            # An unlabeled JD does not provide a reliable responsibility
+            # section. Do not turn company copy, requirements, or benefits into
+            # candidate-facing responsibilities.
+            resp_section = ""
 
         lines = [l.strip() for l in resp_section.split("\n") if l.strip()]
         for line in lines:
@@ -382,33 +387,9 @@ class JDDecoder:
                     )
                 )
 
-        # If too few responsibilities detected, synthesize from AI domain keywords
-        if len(responsibilities) < 2:
-            if re.search(r"(预训练|Pre-train|对齐|RLHF|SFT)", text, re.IGNORECASE):
-                responsibilities.append(
-                    CoreResponsibility(
-                        title="大模型预训练与指令微调对齐",
-                        description="负责亿级至千亿级参数大模型预训练、SFT微调及RLHF/DPO强化学习对齐策略研发与落地。",
-                        domain=TechDomain.TRAINING_COMM.value,
-                    )
-                )
-            if re.search(r"(推理|Inference|vLLM|量化|加速)", text, re.IGNORECASE):
-                responsibilities.append(
-                    CoreResponsibility(
-                        title="大模型高性能推理引擎架构与算子加速",
-                        description="负责大模型线上服务吞吐提升、P99时延优化、量化压缩与投机采样等工程加速方案落地。",
-                        domain=TechDomain.INFERENCE_ACCEL.value,
-                    )
-                )
-            if re.search(r"(Agent|智能体|工作流|RAG|Tool Use)", text, re.IGNORECASE):
-                responsibilities.append(
-                    CoreResponsibility(
-                        title="AI Agent 智能体架构设计与工具调用落地",
-                        description="负责复杂长流程Agent规划能力设计、多工具函数调用(Function Calling)、状态管理与企业级RAG知识增强体系研发。",
-                        domain=TechDomain.AGENT_WORKFLOW.value,
-                    )
-                )
-
+        # Do not synthesize responsibilities from keywords. A generated
+        # responsibility can look like a fact from the supplied JD and later
+        # leak into resume advice. An empty/weak section is an honest result.
         return responsibilities
 
     def _infer_domain_for_text(self, snippet: str) -> TechDomain:
@@ -503,32 +484,32 @@ class JDDecoder:
             (
                 r"(推理延迟|低延迟|P99|TTFT|吞吐|高并发|QPS|显存优化|显存瓶颈)",
                 "推理成本与高并发延迟痛点",
-                "线上大模型服务显存开销极大、并发吞吐受限、首字时延(TTFT)过长，亟需深度量化、PagedAttention及算子级极致优化降低百万Token推理成本。",
-                "TTFT < 80ms, P99 Latency < 500ms, 单卡并发吞吐提升 3x, GPU显存碎片率 < 10%",
+                "JD 明示推理延迟、吞吐或显存约束，具体业务口径仍需向招聘方确认。",
+                "以 JD 原文中的延迟、吞吐或显存指标为准；未明示则待确认",
             ),
             (
                 r"(长文本|长上下文|Long Context|大海捞针|Needle in a Haystack|128k|1M)",
                 "长上下文与大海捞针召回痛点",
-                "长文本推理显存二次方爆炸、注意力弥散与有效信息召回精度急剧衰减，需要RoPE外推、RingAttention及有效KV Cache压缩技术攻坚。",
-                "128k/1M 上下文下 Needle In A Haystack 准确率达到 99%+, KV Cache显存占用减少 50%",
+                "JD 明示长上下文或召回稳定性挑战，评测集、窗口和阈值仍需确认。",
+                "以 JD 明示的上下文长度和评测口径为准；未明示则待确认",
             ),
             (
                 r"(幻觉|对齐|安全性|红队|准确率|GSM8K|MATH|评测)",
                 "模型幻觉消除与垂直领域精度对齐",
-                "基础开源模型在垂直专业领域回答准确率低、存在严重编造幻觉及指令跟随偏移，需要构建高质量DPO/RLHF与自动化红队评测流水线。",
-                "通用基准(MMLU/GSM8K)对齐精度领先基线 5%+, 线上核心问答真实幻觉率 < 2%",
+                "JD 明示幻觉、对齐或评测挑战，数据集、基线和统计窗口仍需确认。",
+                "以 JD 明示的评测指标为准；未明示则待确认",
             ),
             (
                 r"(集群稳定|万卡|千卡|故障恢复|断点续训|Checkpoint|MTBF|通信开销)",
                 "超大规模集群训练稳定性与算力利用率(MFU)",
-                "大规模分布式训练频繁遭遇硬件掉卡、慢节点卡顿与通信瓶颈，导致MFU低下与断点频繁重启，严重消耗昂贵GPU算力预算。",
-                "千卡集群 MFU (Model FLOPs Utilization) > 45%, 自动故障检测与热重启时间 < 5分钟",
+                "JD 明示集群稳定性、故障恢复或通信开销挑战，真实集群规模和验收阈值仍需确认。",
+                "以 JD 明示的集群规模、可用率或恢复时长为准；未明示则待确认",
             ),
             (
                 r"(Agent|工作流|调用成功率|复杂任务|工具调用|Function Call)",
                 "多步长流程Agent任务规划与工具调用可靠性",
-                "复杂多步任务中Agent容易陷入无限死循环、参数传递格式错误或意图解析漂移，无法达到企业级生产可用标准。",
-                "复杂多工具调用端到端成功率 (Success Rate) > 92%, 意图分发准确率 > 95%",
+                "JD 明示多步任务、工具调用或流程可靠性挑战，成功率和评测口径仍需确认。",
+                "以 JD 明示的成功率、准确率或回归集为准；未明示则待确认",
             ),
         ]
 
@@ -542,14 +523,6 @@ class JDDecoder:
                     )
                 )
 
-        # Fallback if none explicitly detected
-        if not pain_points:
-            pain_points.append(
-                BusinessPainPoint(
-                    aspect="大模型工业化落地与生产可用性",
-                    description="将离线前沿算法成果转化为稳定、高效、可度量的线上生产力，平衡技术先进性与商业落地ROI。",
-                    evaluation_metric="算法迭代周期缩短30%，核心业务线上转化率/留存率提升 5%+",
-                )
-            )
-
+        # No explicit signal means no defensible business pain point. Avoid
+        # synthesizing a KPI from role conventions.
         return pain_points

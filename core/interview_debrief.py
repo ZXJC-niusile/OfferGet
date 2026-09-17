@@ -37,6 +37,9 @@ class DebriefQuestionItem:
     analysis_zh: str = ""
     refined_answer: str = ""
     key_takeaway: str = ""
+    claim_refs: List[Dict[str, Any]] = field(default_factory=list)
+    missing_elements: List[str] = field(default_factory=list)
+    follow_up_questions: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -61,13 +64,33 @@ class InterviewDebriefEngine:
         self,
         question: str,
         answer: str,
-        follow_up: str = ""
+        follow_up: str = "",
+        fact_guard: Optional[Any] = None,
+        claim_refs: Optional[List[Dict[str, Any]]] = None,
     ) -> DebriefQuestionItem:
         """
         Classifies interview Q&A performance and generates diagnosis.
         """
+        answer = answer if isinstance(answer, str) else ""
+        claim_refs = claim_refs or []
         q_lower = question.lower()
         a_lower = answer.lower()
+        missing_elements: List[str] = []
+        follow_up_questions: List[str] = []
+
+        if not any(marker in answer for marker in ("我", "本人", "个人", "负责", "参与", "协同", "团队")):
+            missing_elements.append("个人贡献与团队边界")
+            follow_up_questions.append("你本人具体负责哪一段链路？团队其他成员分别负责什么？")
+        if any(marker in a_lower or marker in answer for marker in ("%", "qps", "tps", "提升", "降低", "倍", "ms")):
+            if "baseline" not in a_lower and "基线" not in answer:
+                missing_elements.append("指标基线")
+                follow_up_questions.append("该指标的 baseline、单位、统计周期和数据来源是什么？")
+            if not any(marker in answer for marker in ("周期", "日志", "看板", "压测", "数据来源", "评测集")):
+                missing_elements.append("指标来源与统计口径")
+                follow_up_questions.append("这组数字来自哪份日志、看板或评测集，统计窗口多长？")
+        if not any(marker in answer for marker in ("失败", "复盘", "取舍", "限制", "边界", "不足", "事故")):
+            missing_elements.append("限制或失败复盘")
+            follow_up_questions.append("该方案在哪些场景会失效？你经历过什么失败并如何修正？")
 
         # Heuristics for diagnosis
         if not answer.strip() or "没做过" in answer or "不了解" in answer or "不会" in answer:
@@ -80,7 +103,7 @@ class InterviewDebriefEngine:
             analysis = "面试官直击底层实现，但回答停留在宏观 API 级别，深度明显不足。"
             refined = "正面给出底层通信原语、显存切分公式与关键数据结构。"
             takeaway = "面试前务必提前白板手撕核心算子与推导式。"
-        elif any(k in q_lower or k in question for k in ["基线", "baseline", "提升", "%", "指标", "qps"]):
+        elif any(k in q_lower or k in question or k in a_lower or k in answer for k in ["基线", "baseline", "提升", "%", "指标", "qps", "降低", "倍"]):
             if "baseline" not in a_lower and "基线" not in answer:
                 diagnosis = QuestionDiagnosis.METRIC_DRIFT
                 analysis = "提及量化收益但未同步提供基线（Baseline），触发面试官追问警觉。"
@@ -88,14 +111,29 @@ class InterviewDebriefEngine:
                 takeaway = "所有数字必须自带 Baseline，杜绝伪精确。"
             else:
                 diagnosis = QuestionDiagnosis.WELL_DEFENDED
-                analysis = "数字严密，基线与手段交代清晰，防守成功。"
+                analysis = "数字已说明基线，但仍需确保与候选人事实底稿中的口径、单位和周期一致。"
                 refined = answer
-                takeaway = "保持该严谨回答节奏。"
+                takeaway = "保持该严谨回答节奏，并准备数据来源与归因。"
         else:
             diagnosis = QuestionDiagnosis.WELL_DEFENDED
             analysis = "逻辑结构清晰，因果关系连贯。"
             refined = answer
             takeaway = "表现稳定。"
+
+        if fact_guard is not None and answer.strip():
+            guard_result = fact_guard.verify_facts(answer)
+            if not guard_result.get("passed", False):
+                # Preserve the primary diagnosis (for example, a missing
+                # baseline is already metric_drift) while adding the SSOT
+                # warning. Do not replace a useful, specific explanation with
+                # a generic guard message.
+                if diagnosis == QuestionDiagnosis.WELL_DEFENDED:
+                    diagnosis = QuestionDiagnosis.METRIC_DRIFT
+                    analysis = "回答中的数字或指标无法与事实底稿对齐，不能直接作为面试结论。"
+                    refined = "请保留真实数字，并补充基线、单位、统计周期、数据来源和个人归因；若暂时无法证明，应明确说待确认。"
+                    takeaway = "先核对事实底稿，再回答数字问题。"
+                else:
+                    analysis += " 另外，回答中的数字或指标尚未与事实底稿完全对齐，请补充数据来源、单位和统计周期。"
 
         return DebriefQuestionItem(
             question=question,
@@ -104,7 +142,10 @@ class InterviewDebriefEngine:
             diagnosis=diagnosis,
             analysis_zh=analysis,
             refined_answer=refined,
-            key_takeaway=takeaway
+            key_takeaway=takeaway,
+            claim_refs=claim_refs,
+            missing_elements=list(dict.fromkeys(missing_elements)),
+            follow_up_questions=list(dict.fromkeys(follow_up_questions)),
         )
 
     def generate_session_debrief(

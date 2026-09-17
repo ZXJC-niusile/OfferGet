@@ -85,7 +85,9 @@ class JDMatcher:
             nice_scores, nice_gaps = self._evaluate_skills(nice_have_items, candidate, default_importance="nice_to_have")
             nice_to_have_score = sum(nice_scores) / max(len(nice_scores), 1)
         else:
-            nice_to_have_score = 1.0
+            # No preferred requirements should not create a fictitious perfect
+            # match. It contributes neutrally to the weighted score.
+            nice_to_have_score = 0.0
             nice_gaps = []
 
         # 4. Score Hidden Signals & Culture Fit
@@ -143,7 +145,19 @@ class JDMatcher:
         reasons: List[str] = []
         breakthrough: List[str] = []
 
-        cand_degree_rank = self.DEGREE_RANK.get(candidate.education_level.strip(), 2)
+        cand_degree_str = candidate.education_level.strip()
+        cand_degree_rank = self.DEGREE_RANK.get(cand_degree_str)
+        if cand_degree_rank is None:
+            if "博士" in cand_degree_str or "ph.d" in cand_degree_str.lower():
+                cand_degree_rank = 4
+            elif "硕士" in cand_degree_str or "master" in cand_degree_str.lower():
+                cand_degree_rank = 3
+            elif "本" in cand_degree_str or "bachelor" in cand_degree_str.lower():
+                cand_degree_rank = 2
+            elif "专" in cand_degree_str:
+                cand_degree_rank = 1
+            else:
+                cand_degree_rank = None
 
         for th in jd.hard_thresholds:
             if not th.is_mandatory:
@@ -151,7 +165,9 @@ class JDMatcher:
 
             # Degree check
             if th.category == "education" and th.min_degree:
-                req_rank = self.DEGREE_RANK.get(th.min_degree.strip(), 2)
+                req_rank = self.DEGREE_RANK.get(th.min_degree.strip())
+                if cand_degree_rank is None or req_rank is None:
+                    continue
                 if cand_degree_rank < req_rank:
                     is_vetoed = True
                     reasons.append(
@@ -161,8 +177,11 @@ class JDMatcher:
                         "【学历破局通道】：顶尖大模型开源项目（GitHub 1k+ Stars）、国际顶会（NeurIPS/ICLR/ACL/KDD）代表作、或高含金量算法竞赛（Kaggle/天池）Top名次。以碾压级战绩绕过HR初筛，通过技术团队Leader或脉脉/知乎直推。"
                     )
 
-            # Years check
+            # Years check. Zero means the profile did not provide a value;
+            # it must not be treated as an explicit zero-year claim.
             if th.category == "experience_years" and th.min_years:
+                if candidate.years_of_experience <= 0:
+                    continue
                 if candidate.years_of_experience < th.min_years:
                     is_vetoed = True
                     reasons.append(
@@ -189,9 +208,33 @@ class JDMatcher:
 
     def _threshold_to_gap(self, th: HardThreshold, candidate: CandidateProfile) -> GapItem:
         """Convert a hard threshold to a GapItem."""
-        cand_degree_rank = self.DEGREE_RANK.get(candidate.education_level.strip(), 2)
+        cand_degree_str = candidate.education_level.strip()
+        cand_degree_rank = self.DEGREE_RANK.get(cand_degree_str)
+        if cand_degree_rank is None:
+            if "博士" in cand_degree_str or "ph.d" in cand_degree_str.lower():
+                cand_degree_rank = 4
+            elif "硕士" in cand_degree_str or "master" in cand_degree_str.lower():
+                cand_degree_rank = 3
+            elif "本" in cand_degree_str or "bachelor" in cand_degree_str.lower():
+                cand_degree_rank = 2
+            elif "专" in cand_degree_str:
+                cand_degree_rank = 1
+            else:
+                cand_degree_rank = None
+
         if th.category == "education" and th.min_degree:
-            req_rank = self.DEGREE_RANK.get(th.min_degree.strip(), 2)
+            req_rank = self.DEGREE_RANK.get(th.min_degree.strip())
+            if cand_degree_rank is None or req_rank is None:
+                return GapItem(
+                    requirement_name=f"硬门槛-{th.requirement}",
+                    category="threshold",
+                    importance="mandatory",
+                    state=GapState.TO_BE_CONFIRMED,
+                    score=0.5,
+                    candidate_evidence="候选人学历未提供，无法判断是否达标",
+                    gap_explanation="缺少学历事实，不能按默认学历推断",
+                    actionable_advice="补充真实学历与学位授予院校后再判断",
+                )
             if cand_degree_rank >= req_rank:
                 return GapItem(
                     requirement_name=f"硬门槛-{th.requirement}",
@@ -216,6 +259,17 @@ class JDMatcher:
                 )
 
         if th.category == "experience_years" and th.min_years:
+            if candidate.years_of_experience <= 0:
+                return GapItem(
+                    requirement_name=f"硬门槛-{th.requirement}",
+                    category="threshold",
+                    importance="mandatory",
+                    state=GapState.TO_BE_CONFIRMED,
+                    score=0.5,
+                    candidate_evidence="候选人工作年限未提供，无法判断是否达标",
+                    gap_explanation="缺少工作年限事实，不能按默认值推断",
+                    actionable_advice="补充可核验的工作年限和相关经验范围后再判断",
+                )
             if candidate.years_of_experience >= th.min_years:
                 return GapItem(
                     requirement_name=f"硬门槛-{th.requirement}",
@@ -495,7 +549,8 @@ class JDMatcher:
             elif "商业化" in sig.original_text or "闭环" in sig.original_text:
                 has_fit = any(k in cand_text for k in ["营收", "转化", "降本", "roi", "商业化", "日活", "dau"])
             else:
-                has_fit = True
+                # An unclassified signal is unknown, not proof of fit.
+                has_fit = False
 
             if has_fit:
                 scores.append(1.0)

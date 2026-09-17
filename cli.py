@@ -36,6 +36,7 @@ from core.defense_simulator import DefenseSimulator, simulate_project_defense
 from core.baoyan_auditor import BaoyanAuditor, audit_baoyan_entry, compress_baoyan_entry, count_baoyan_words
 from core.baoyan_pipeline import BaoyanPipeline, BaoyanStatus, validate_academic_profile, generate_camp_checklist
 from core.advisor_matcher import AdvisorMatcher, match_advisor_and_draft_email
+from core.job_flow import run_career_review
 
 
 def cmd_jd_decode(args):
@@ -175,8 +176,95 @@ def cmd_jd_report(args):
 
     print("=" * 68)
     print(f"🎉 Success! Offer Strategy Report successfully generated at:")
-    print(f"   file:///{os.path.abspath(out_file).replace('\\', '/')}")
+    normalized_out_file = os.path.abspath(out_file).replace(os.sep, "/")
+    print(f"   file:///{normalized_out_file}")
     print("=" * 68)
+
+
+def cmd_career_review(args):
+    """Handler for `offerget review <jd.txt> --profile <profile.json> [--answers <answers.json>]`."""
+    jd_path = args.jd_file
+    profile_path = args.profile
+    answers_path = args.answers
+
+    if not os.path.exists(jd_path):
+        print(f"[-] Error: JD file not found: {jd_path}", file=sys.stderr)
+        sys.exit(1)
+    if not os.path.exists(profile_path):
+        print(f"[-] Error: Profile file not found: {profile_path}", file=sys.stderr)
+        sys.exit(1)
+
+    answers_data = None
+    if answers_path:
+        if not os.path.exists(answers_path):
+            print(f"[-] Error: Answers file not found: {answers_path}", file=sys.stderr)
+            sys.exit(1)
+        with open(answers_path, "r", encoding="utf-8") as f:
+            answers_data = json.load(f)
+
+    with open(jd_path, "r", encoding="utf-8") as f:
+        jd_text = f.read()
+    with open(profile_path, "r", encoding="utf-8") as f:
+        profile_data = json.load(f)
+
+    review_result = run_career_review(
+        jd_text=jd_text,
+        profile_dict=profile_data,
+        answers_dict=answers_data
+    )
+
+    if args.output:
+        out_path = Path(args.output)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(review_result, f, ensure_ascii=False, indent=2)
+        print(f"[+] Full career review written to {out_path}", file=sys.stderr if args.json else sys.stdout)
+
+    if args.json:
+        print(json.dumps(review_result, ensure_ascii=False, indent=2))
+        return
+
+    # Formatted terminal output
+    print("=" * 72)
+    print("        OfferGet · Full-Lifecycle Career Review (career-review.v1)       ")
+    print("=" * 72)
+    jdb = review_result["jd_breakdown"]
+    ms = review_result["match_summary"]
+    print(f"[*] Target Position:    {jdb.get('job_title', 'AI Engineer')} ({jdb.get('company_or_dept', 'Frontier Team')})")
+    print(f"[*] Final Match Score:  {round(ms.get('final_match_score', 0.0) * 100, 1)}% (Raw: {round(ms.get('raw_match_score', 0.0) * 100, 1)}%)")
+    if ms.get("is_hard_vetoed"):
+        print(f"[!] Hard Veto Triggered: {'; '.join(ms.get('hard_veto_reasons', []))}")
+    print("-" * 72)
+
+    print("\n[1] Fact-Grounded Resume Advice (No Hallucination):")
+    for idx, adv in enumerate(review_result.get("resume_advice", [])[:5], 1):
+        print(f"    {idx}. [{adv['state'].upper()}] -> Action: {adv['action']}")
+        print(f"       Requirement: {adv['requirement']}")
+        print(f"       Grounding:   {adv['grounding_note']}")
+        if adv.get("safe_bullet"):
+            print(f"       Safe Bullet: {adv['safe_bullet'][:70]}...")
+
+    print("\n[2] Exactly 3 Targeted Interview Defense Questions:")
+    for q in review_result.get("interview_questions", []):
+        print(f"    • [Q{q['question_id']}] [{q['category']}]: {q['question_zh']}")
+        print(f"      Intent:  {q['interviewer_intent']}")
+        print(f"      Prep:    {q['prep_keypoints'][:65]}...")
+
+    print("\n[3] Structured Interview Answer Debrief & Feedback:")
+    for fb in review_result.get("answer_feedback", []):
+        print(f"    • [Q{fb['question_id']}] Status: {fb['status']} | Diagnosis: {fb['diagnosis']}")
+        print(f"      Analysis:  {fb['analysis']}")
+        if fb.get("candidate_answer"):
+            print(f"      Answer:    {fb['candidate_answer'][:50]}...")
+        print(f"      Takeaway:  {fb['key_takeaway']}")
+
+    print("\n[4] Focus Polish: Interview Defense:")
+    pf = review_result.get("polish_focus", {})
+    print(f"    • Focus Area: {pf.get('focus_area')}")
+    print(f"    • Description: {pf.get('description')}")
+    for cp in pf.get("defense_checkpoints", []):
+        print(f"      - {cp}")
+    print("=" * 72)
 
 
 def cmd_ats_audit(args):
@@ -1189,6 +1277,14 @@ Examples:
     baoyan_check_parser.add_argument("--track", default="直博", choices=["直博", "学硕", "专硕"], help="Target track")
     baoyan_check_parser.add_argument("--json", action="store_true", help="Output raw JSON")
 
+    # `offerget review ...`
+    review_parser = subparsers.add_parser("review", help="Full-lifecycle career review pipeline (Track 2 closed-loop)")
+    review_parser.add_argument("jd_file", help="Path to JD text file")
+    review_parser.add_argument("--profile", required=True, help="Path to candidate_profile.json")
+    review_parser.add_argument("--answers", help="Optional path to interview answers JSON")
+    review_parser.add_argument("--output", help="Optional output JSON file path")
+    review_parser.add_argument("--json", action="store_true", help="Output raw JSON")
+
     # `offerget resume ...`
     resume_parser = subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")
 
@@ -1202,7 +1298,9 @@ Examples:
 
     args = parser.parse_args()
 
-    if args.command == "jd":
+    if args.command == "review":
+        cmd_career_review(args)
+    elif args.command == "jd":
         if args.jd_command == "decode":
             cmd_jd_decode(args)
         elif args.jd_command == "match":

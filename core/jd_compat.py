@@ -204,7 +204,7 @@ def profile_to_canonical(profile_data: Dict[str, Any]) -> CandidateProfile:
     """Normalize the supported profile shapes without inventing defaults."""
     profile = profile_data or {}
     candidate = profile.get("candidate", {}) if isinstance(profile.get("candidate", {}), dict) else {}
-    degree = str(candidate.get("degree") or candidate.get("education_level") or "高中及以下")
+    degree = str(candidate.get("degree") or candidate.get("education_level") or "")
     if "博士" in degree or "Ph.D" in degree or "PhD" in degree:
         education_level = "博士"
     elif "硕士" in degree or "Master" in degree:
@@ -214,7 +214,7 @@ def profile_to_canonical(profile_data: Dict[str, Any]) -> CandidateProfile:
     elif "大专" in degree or "专科" in degree:
         education_level = "大专"
     else:
-        education_level = "高中及以下"
+        education_level = ""
 
     raw_years = candidate.get("years_of_experience", candidate.get("experience_years", 0))
     try:
@@ -241,6 +241,7 @@ def profile_to_canonical(profile_data: Dict[str, Any]) -> CandidateProfile:
         if isinstance(project, dict):
             descriptions.extend(_flatten_strings(project.get("description_zh", project.get("description", ""))))
             descriptions.extend(_flatten_strings(project.get("description_en", "")))
+            descriptions.extend(_flatten_strings(project.get("bullets", [])))
 
     raw_text = json.dumps(profile, ensure_ascii=False)
     return CandidateProfile(
