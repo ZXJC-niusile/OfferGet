@@ -38,11 +38,11 @@ class TuneProfile:
 
 # Safe step-down adjustment ladder
 TUNING_LADDER = [
-    TuneProfile(name="Step 0 (Standard)", line_height=1.60, padding_y_mm=9.0, padding_x_mm=10.6, font_size_px=11.5, item_gap_px=4.0, section_gap_px=10.0),
-    TuneProfile(name="Step 1 (Slight Line-Height)", line_height=1.56, padding_y_mm=8.5, padding_x_mm=10.2, font_size_px=11.5, item_gap_px=3.5, section_gap_px=9.0),
-    TuneProfile(name="Step 2 (Moderate Compact)", line_height=1.52, padding_y_mm=8.0, padding_x_mm=9.8, font_size_px=11.3, item_gap_px=3.0, section_gap_px=8.0),
-    TuneProfile(name="Step 3 (Deep Compact)", line_height=1.50, padding_y_mm=7.2, padding_x_mm=9.5, font_size_px=11.0, item_gap_px=2.5, section_gap_px=7.0),
-    TuneProfile(name="Step 4 (Ultra Compact Max)", line_height=1.46, padding_y_mm=6.5, padding_x_mm=9.0, font_size_px=10.8, item_gap_px=2.0, section_gap_px=6.0),
+    TuneProfile(name="Step 0 (Standard)", line_height=1.62, padding_y_mm=8.8, padding_x_mm=10.6, font_size_px=12.0, item_gap_px=4.8, section_gap_px=11.0),
+    TuneProfile(name="Step 1 (Slight Line-Height)", line_height=1.58, padding_y_mm=8.2, padding_x_mm=10.2, font_size_px=11.8, item_gap_px=4.2, section_gap_px=10.0),
+    TuneProfile(name="Step 2 (Moderate Compact)", line_height=1.54, padding_y_mm=7.8, padding_x_mm=9.8, font_size_px=11.4, item_gap_px=3.6, section_gap_px=9.0),
+    TuneProfile(name="Step 3 (Deep Compact)", line_height=1.50, padding_y_mm=7.2, padding_x_mm=9.5, font_size_px=11.0, item_gap_px=3.0, section_gap_px=8.0),
+    TuneProfile(name="Step 4 (Ultra Compact Max)", line_height=1.45, padding_y_mm=6.5, padding_x_mm=9.0, font_size_px=10.6, item_gap_px=2.5, section_gap_px=6.5),
 ]
 
 

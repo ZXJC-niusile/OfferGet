@@ -91,10 +91,17 @@ SIX_LINKS_WHITELIST: Dict[str, List[str]] = {
     ]
 }
 
-STRONG_ROLE_TERMS = re.compile(r"核心作者|maintainer|owner|主导|完全负责|总负责人|架构师|committer", re.IGNORECASE)
-MODULE_QUALIFIERS = re.compile(r"([\u4e00-\u9fa5A-Za-z0-9_]+(?:模块|链路|子系统|组件|策略|引擎))\s*(?:Owner|负责人|主导|开发)", re.IGNORECASE)
-PLANNED_MARKERS = re.compile(r"计划|规划|当前方向|拟|探索|聚焦|下一阶段|展望", re.IGNORECASE)
-FORBIDDEN_SUPERLATIVES = re.compile(r"全球最[强快好年轻]|业内首个|第一人|全网最[快强]|绝对最优", re.IGNORECASE)
+# Centralized inflation and role pattern constants from core.lexicon (SSOT)
+from core.lexicon import (
+    STRONG_ROLE_TERMS,
+    MODULE_QUALIFIERS,
+    PLANNED_MARKERS,
+    FORBIDDEN_SUPERLATIVES,
+    INFLATION_PATTERNS,
+    ROLE_RANKS,
+    VERB_HIERARCHY,
+    FORBIDDEN_BUZZWORDS,
+)
 
 
 # ============================================================================

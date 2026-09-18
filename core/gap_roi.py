@@ -12,17 +12,10 @@ Skill ROI Formula:
 from __future__ import annotations
 
 import os
-import sys
 import re
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
-# Ensure OfferGet root is in sys.path
-_CORE_DIR = Path(__file__).resolve().parent
-_OFFERGET_ROOT = _CORE_DIR.parent
-if str(_OFFERGET_ROOT) not in sys.path:
-    sys.path.insert(0, str(_OFFERGET_ROOT))
 
 from modules.jd_analyst.decoder import JDDecoder
 from modules.jd_analyst.matcher import JDMatcher
@@ -274,29 +267,104 @@ class SkillGapROIEngine:
     def __init__(self):
         self.decoder = JDDecoder()
         self.matcher = JDMatcher()
+        self.last_unknown_fields: List[str] = []
+        self.last_assumptions: List[str] = []
+        self.last_evidence_status: str = "complete"
+        self.last_input_quality: Dict[str, Any] = {}
 
     def _normalize_profile(self, candidate_profile: Union[Dict[str, Any], CandidateProfile]) -> CandidateProfile:
-        """Converts raw candidate profile dict or instance into CandidateProfile dataclass."""
+        """Converts raw candidate profile dict or instance into CandidateProfile dataclass without inventing facts."""
         if isinstance(candidate_profile, CandidateProfile):
+            unknown_exp = (candidate_profile.years_of_experience == 0.0)
+            edu_level = candidate_profile.education_level or ""
+            major = candidate_profile.major or ""
+            unknown_fields: List[str] = []
+            assumptions: List[str] = []
+            if not edu_level:
+                unknown_fields.append("education")
+                assumptions.append("学历未提供，统一标记为未知（缺失事实保持为空）。")
+            if unknown_exp:
+                unknown_fields.append("years_of_experience")
+                assumptions.append("工作年限未提供，保守设为 0.0 年并在 input_quality 中标记 unknown_experience。")
+            if not major:
+                unknown_fields.append("major")
+                assumptions.append("专业未提供，统一标记为未知（缺失事实保持为空）。")
+            if not assumptions:
+                assumptions.append("候选人基础事实完整，未引入假设。")
+
+            self.last_unknown_fields = unknown_fields
+            self.last_assumptions = assumptions
+            self.last_evidence_status = "complete" if not unknown_fields else "partial"
+            self.last_input_quality = {
+                "unknown_experience": unknown_exp,
+                "unknown_education": not bool(edu_level),
+                "unknown_major": not bool(major),
+                "unknown_fields": unknown_fields,
+                "profile_fact_policy": "missing facts remain unknown",
+            }
             return candidate_profile
 
         cand_data = candidate_profile.get("candidate", {}) if "candidate" in candidate_profile else candidate_profile
         name = cand_data.get("name") or cand_data.get("en_name") or "候选人"
-        
-        # Education
-        degree_raw = str(cand_data.get("degree") or cand_data.get("education_level") or "硕士")
-        if "博士" in degree_raw:
+
+        # Education: strictly no default "硕士" or "本科"
+        raw_degree = cand_data.get("degree") or cand_data.get("education_level")
+        degree_raw = str(raw_degree).strip() if raw_degree is not None else ""
+        if not degree_raw:
+            edu_level = ""
+        elif "博士" in degree_raw or "ph.d" in degree_raw.lower() or "phd" in degree_raw.lower():
             edu_level = "博士"
-        elif "硕士" in degree_raw:
+        elif "硕士" in degree_raw or "master" in degree_raw.lower():
             edu_level = "硕士"
+        elif "本科" in degree_raw or "bachelor" in degree_raw.lower():
+            edu_level = "本科"
         elif "大专" in degree_raw or "专科" in degree_raw:
             edu_level = "大专"
         else:
-            edu_level = "本科"
+            edu_level = degree_raw
 
-        years_exp = float(cand_data.get("years_of_experience") or cand_data.get("experience_years") or 3.0)
-        school = str(cand_data.get("institution") or cand_data.get("school") or "")
-        major = str(cand_data.get("major") or "计算机科学与技术")
+        # Experience years: strictly no default 3.0
+        raw_exp = cand_data.get("years_of_experience")
+        if raw_exp is None:
+            raw_exp = cand_data.get("experience_years")
+        unknown_exp = (raw_exp is None)
+        try:
+            years_exp = float(raw_exp) if raw_exp is not None else 0.0
+        except (ValueError, TypeError):
+            years_exp = 0.0
+            unknown_exp = True
+
+        school = str(cand_data.get("institution") or cand_data.get("school") or "").strip()
+
+        # Major: strictly no default "计算机科学与技术"
+        raw_major = cand_data.get("major")
+        major = str(raw_major).strip() if raw_major is not None else ""
+
+        # Track unknown fields and assumptions
+        unknown_fields = []
+        assumptions = []
+        if not edu_level:
+            unknown_fields.append("education")
+            assumptions.append("学历未提供，统一标记为未知（缺失事实保持为空）。")
+        if unknown_exp:
+            unknown_fields.append("years_of_experience")
+            assumptions.append("工作年限未提供，保守设为 0.0 年并在 input_quality 中标记 unknown_experience。")
+        if not major:
+            unknown_fields.append("major")
+            assumptions.append("专业未提供，统一标记为未知（缺失事实保持为空）。")
+        if not assumptions:
+            assumptions.append("候选人基础事实完整，未引入假设。")
+
+        self.last_unknown_fields = unknown_fields
+        self.last_assumptions = assumptions
+        self.last_evidence_status = "complete" if not unknown_fields else "partial"
+        self.last_input_quality = {
+            "unknown_experience": unknown_exp,
+            "unknown_education": not bool(edu_level),
+            "unknown_major": not bool(major),
+            "unknown_fields": unknown_fields,
+            "profile_fact_policy": "missing facts remain unknown",
+        }
 
         # Collect skills
         all_skills: List[str] = []
@@ -327,8 +395,12 @@ class SkillGapROIEngine:
                                 project_desc.append(str(claim))
 
         # Build raw text
-        narrative_zh = candidate_profile.get("narrative", {}).get("summary_zh", "")
-        raw_text = f"{name} {edu_level} {school} {major} 工作{years_exp}年。\n{narrative_zh}\n" + "\n".join(project_desc)
+        narrative_zh = candidate_profile.get("narrative", {}).get("summary_zh", "") if isinstance(candidate_profile, dict) else ""
+        desc_parts = [p for p in [name, edu_level, school, major] if p]
+        if years_exp > 0:
+            desc_parts.append(f"工作{years_exp}年")
+        header_line = " ".join(desc_parts)
+        raw_text = f"{header_line}\n{narrative_zh}\n" + "\n".join(project_desc)
 
         return CandidateProfile(
             name=name,
@@ -597,6 +669,10 @@ class SkillGapROIEngine:
             "missing_skills_ranking": missing_skills_ranking,
             "top_recommendations": top_recommendations,
             "strategic_summary": strategic_summary,
+            "assumptions": list(getattr(self, "last_assumptions", [])),
+            "unknown_fields": list(getattr(self, "last_unknown_fields", [])),
+            "evidence_status": getattr(self, "last_evidence_status", "complete"),
+            "input_quality": dict(getattr(self, "last_input_quality", {})),
         }
 
     def _generate_strategic_summary(

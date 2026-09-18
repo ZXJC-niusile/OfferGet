@@ -11,48 +11,17 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-# ---------------------------------------------------------------------------
-# Constants & Pattern Banks
-# ---------------------------------------------------------------------------
-
-# Action verbs - Strong (reward)
-STRONG_ACTION_VERBS_EN = {
-    "built", "architected", "engineered", "spearheaded", "shipped", "optimized",
-    "deployed", "pioneered", "led", "scaled", "accelerated", "authored",
-    "designed", "implemented", "streamlined", "delivered", "orchestrated",
-    "formulated", "executed", "overhauled", "customized", "refactored",
-    "automated", "established", "invented", "slashed", "drove"
-}
-
-STRONG_ACTION_VERBS_ZH = {
-    "主导", "架构", "研发", "搭建", "攻坚", "优化", "实现", "交付",
-    "推进", "开源", "设计", "落地", "首创", "降低", "提升", "节省",
-    "自研", "定制", "重构", "重塑", "打通", "构建", "牵引", "主持"
-}
-
-# Action verbs - Weak (penalize)
-WEAK_ACTION_VERBS_EN = {
-    "responsible for", "assisted in", "helped with", "worked on",
-    "participated in", "contributed to", "handled", "involved in",
-    "tasked with", "supported", "aided", "collaborated on", "took part in"
-}
-
-WEAK_ACTION_VERBS_ZH = {
-    "负责", "参与", "协助", "配合", "辅助", "支持", "做过", "了解", "接触过", "跟进"
-}
-
-# Quantified metric patterns
-QUANTIFIED_PATTERNS = [
-    re.compile(r"\b\d+(?:\.\d+)?%"),                                                  # 54.2%, 62%, 100%
-    re.compile(r"\b\d+(?:\.\d+)?x\b", re.IGNORECASE),                                  # 2.8x, 3x
-    re.compile(r"[$¥￥]\s*\d+(?:,\d+)*(?:\.\d+)?"),                                   # $100k, ￥3800
-    re.compile(r"\b\d+(?:,\d+)*(?:\.\d+)?\s*(?:万|亿元|万元|k|m|b|billion|million|rmb|usd)\b", re.IGNORECASE), # 3800 万元, 38M RMB
-    re.compile(r"\b\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds?|min|minutes?|hours?|h|周|天|小时|分钟|秒|weeks?|days?|months?)\b", re.IGNORECASE), # 320ms, 8 分钟
-    re.compile(r"\b\d+(?:,\d+)?\s*(?:卡|gpus?|nodes?|tps|qps|tokens?/s|gb|tb|pb|stars?|citations?|条|篇)\b", re.IGNORECASE), # 1024 卡, 3400 stars
-    re.compile(r"\b\d+[bm]\b", re.IGNORECASE),                                         # 230B, 64B
-    re.compile(r"[+上下降提升增加缩短减少压减削减]\s*\d+(?:\.\d+)?%?"),                      # 提升 14.2%, 减少 48%
-    re.compile(r"\b(?:from|slashing|reducing|increasing|boosting)\b[^\n,;]+?\b\d+"),   # English metric phrasing
-]
+from core.profile_adapter import build_profile_evidence_index
+from core.lexicon import (
+    STRONG_ACTION_VERBS_EN,
+    STRONG_ACTION_VERBS_ZH,
+    WEAK_ACTION_VERBS_EN,
+    WEAK_ACTION_VERBS_ZH,
+    QUANTIFIED_PATTERNS,
+    AI_BUZZWORDS_LEXICON,
+    VERB_HIERARCHY,
+    ROLE_RANKS,
+)
 
 # Standard Section Names mapping
 STANDARD_SECTIONS = {
@@ -86,21 +55,6 @@ FORMATTING_RISKS = [
     ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
 ]
 
-# AI Buzzword Lexicon
-AI_BUZZWORDS_LEXICON = [
-    # English buzzwords
-    "results-driven", "results driven", "dynamic", "synergy", "passionate",
-    "proven track record", "deeply passionate", "testament to", "delve into",
-    "pivotal role", "game-changing transformation", "intricate tapestry",
-    "fast-paced environment", "thought leader", "go-getter", "team player",
-    "seasoned professional", "cutting-edge solutions", "groundbreaking",
-    "spearheading transformative", "holistic approach", "seamlessly integrate",
-    "unwavering commitment", "strategic vision", "value proposition",
-    # Chinese buzzwords
-    "具有深厚底蕴", "全面赋能", "深度赋能", "全面革新", "强力驱动", "革命性突破",
-    "显著提高", "大幅优化", "卓越成效", "顶层设计", "无缝打通", "全方位重塑",
-    "作为一名深耕", "深耕.*领域", "不仅.*而且.*更.*"
-]
 
 # Default Transferable Defense Guidance
 DEFENSE_GUIDE_TEMPLATES = {
@@ -132,36 +86,18 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
 
     # 1. Handle dict
     if isinstance(profile_or_text, dict):
+        index = build_profile_evidence_index(profile_or_text)
+        cand = index.profile.get("candidate", {})
+        yoe = cand.get("years_of_experience", 0)
+        try:
+            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
+        except (ValueError, TypeError):
+            meta["years_of_experience"] = 0
+
         meta["is_dict"] = True
-        meta["parsed_profile"] = profile_or_text
-        candidate = profile_or_text.get("candidate", {})
-        meta["years_of_experience"] = candidate.get("years_of_experience", 0)
-
-        # Extract summary bullets
-        narrative = profile_or_text.get("narrative", {})
-        for k in ["summary_zh", "summary_en"]:
-            if narrative.get(k):
-                bullets.append(narrative[k].strip())
-
-        # Extract experience highlights
-        for exp in profile_or_text.get("experience", []):
-            for h in exp.get("highlights", []):
-                if isinstance(h, dict):
-                    if h.get("claim_zh"):
-                        bullets.append(h["claim_zh"].strip())
-                    if h.get("claim_en"):
-                        bullets.append(h["claim_en"].strip())
-                elif isinstance(h, str):
-                    bullets.append(h.strip())
-
-        # Extract project descriptions
-        for proj in profile_or_text.get("projects", []):
-            if proj.get("description_zh"):
-                bullets.append(proj["description_zh"].strip())
-            if proj.get("description_en"):
-                bullets.append(proj["description_en"].strip())
-
-        meta["raw_text"] = json.dumps(profile_or_text, ensure_ascii=False)
+        meta["parsed_profile"] = index.profile
+        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
+        bullets = list(index.bullets)
         return bullets, meta
 
     # 2. Handle string (text, filepath, or json string)
@@ -785,37 +721,17 @@ def extract_candidate_skills(profile_data: Any) -> Tuple[Set[str], List[str]]:
             pass
 
     if isinstance(profile_data, dict):
-        comp_dict = profile_data.get("competencies", {})
-        if isinstance(comp_dict, dict):
-            for cat, items in comp_dict.items():
-                if isinstance(items, list):
-                    for item in items:
-                        competencies.add(item.strip())
-                        sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
-                        competencies.update(sub_tokens)
-        elif isinstance(comp_dict, list):
-            for item in comp_dict:
-                competencies.add(str(item).strip())
+        index = build_profile_evidence_index(profile_data)
+        for item in index.skills:
+            competencies.add(item.strip())
+            sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
+            competencies.update(sub_tokens)
 
-        # Experience highlights
-        for exp in profile_data.get("experience", []):
-            for h in exp.get("highlights", []):
-                if isinstance(h, dict):
-                    if h.get("claim_zh"):
-                        verified_bullets.append(h["claim_zh"])
-                    if h.get("claim_en"):
-                        verified_bullets.append(h["claim_en"])
-                elif isinstance(h, str):
-                    verified_bullets.append(h)
-
-        # Projects
-        for proj in profile_data.get("projects", []):
-            if proj.get("name"):
+        # Bullets and project names for evidence matching
+        verified_bullets.extend(index.bullets)
+        for proj in index.profile.get("projects", []):
+            if isinstance(proj, dict) and proj.get("name") and proj["name"] not in verified_bullets:
                 verified_bullets.append(proj["name"])
-            if proj.get("description_zh"):
-                verified_bullets.append(proj["description_zh"])
-            if proj.get("description_en"):
-                verified_bullets.append(proj["description_en"])
 
     elif isinstance(profile_data, str):
         lines = profile_data.splitlines()

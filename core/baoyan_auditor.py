@@ -53,10 +53,8 @@ FORBIDDEN_QUOTES: Dict[str, str] = {
 
 FORBIDDEN_DOUBLE_HYPHEN = "--"
 
-# Academic Buzzwords Forbidden (Superlatives without third-party proof)
-FORBIDDEN_BUZZWORDS: List[str] = [
-    "首创", "颠覆", "国际先进", "世界一流", "填补空白", "独家", "最优解", "全能", "领先"
-]
+# Academic Buzzwords Forbidden (Centralized from core.lexicon SSOT)
+from core.lexicon import FORBIDDEN_BUZZWORDS
 
 # Roles & Role Verb Hierarchy
 LEAD_ROLES: Set[str] = {

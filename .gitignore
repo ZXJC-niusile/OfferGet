@@ -16,11 +16,19 @@ env/
 # Generated reports and exports
 report.html
 *_report.html
+*_report.md
+test_*_report.*
+*_defense_report.*
 review*.json
 *_review.json
 *.pdf
 *.docx
 *.log
+*.tmp
+*.jpg
+*.jpeg
+*.png
+
 
 # Local anonymization maps and derived profiles
 *_map.json
@@ -33,3 +41,10 @@ review*.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated demo resume artifacts
+output/resumes_demo/*.html
+output/resumes_demo/*.pdf
+output/resumes_demo/*.tex
+output/resumes_demo/*.typ
+output/resumes_demo/*.md
