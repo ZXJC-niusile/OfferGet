@@ -52,26 +52,13 @@ def _image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optiona
 
 
 
-def escape_latex(text: str) -> str:
-    """Escapes special LaTeX characters."""
-    if not text:
-        return ""
-    text = str(text)
-    replacements = {
-        "\\": r"\textbackslash{}",
-        "&": r"\&",
-        "%": r"\%",
-        "$": r"\$",
-        "#": r"\#",
-        "_": r"\_",
-        "{": r"\{",
-        "}": r"\}",
-        "~": r"\textasciitilde{}",
-        "^": r"\textasciicircum{}",
-    }
-    for char, rep in replacements.items():
-        text = text.replace(char, rep)
-    return text
+from core.security_gate import (
+    escape_latex,
+    escape_typst,
+    escape_html_text,
+    escape_html_attribute,
+    sanitize_url,
+)
 
 
 class AcademicExporter:
@@ -94,7 +81,8 @@ class AcademicExporter:
         title = escape_latex(cand.get("title", "算法架构师"))
         email = escape_latex(cand.get("email", "candidate@example.com"))
         phone = escape_latex(cand.get("phone", "+86 138-0000-0000"))
-        degree = escape_latex(cand.get("degree", ""))
+        degree_raw = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get("degree", ""))).strip()
+        degree = escape_latex(degree_raw)
         school = escape_latex(cand.get("school", ""))
         location = escape_latex(cand.get("location", ""))
         edu_time = escape_latex(cand.get("edu_time", ""))
@@ -158,14 +146,12 @@ class AcademicExporter:
         grid = extract_education_grid(cand)
         max_cols = max((len(r) for r in grid), default=1)
 
-        school_esc = escape_latex(school)
-        degree_clean = re.sub(r"\s*[｜|·]\s*", "  ", escape_latex(degree)).strip()
-        degree_part = f" \\quad \\quad {degree_clean}" if degree_clean else ""
-        time_part = f" \\hfill {escape_latex(edu_time)}" if edu_time else ""
+        degree_part = f" \\quad \\quad {degree}" if degree else ""
+        time_part = f" \\hfill {edu_time}" if edu_time else ""
 
         lines.extend([
             r"\section*{教育背景}",
-            f"\\noindent \\textbf{{{school_esc}}}{degree_part}{time_part} \\\\[3pt]",
+            f"\\noindent \\textbf{{{school}}}{degree_part}{time_part} \\\\[3pt]",
         ])
 
         if grid:
@@ -180,8 +166,8 @@ class AcademicExporter:
             for r in grid:
                 row_cells = []
                 for i in range(max_cols):
-                    cell = escape_latex(r[i]) if i < len(r) else ""
-                    cell = re.sub(r"\s*[｜|]\s*", " ", cell).strip()
+                    cell_clean = re.sub(r"\s*[｜|]\s*", " ", r[i]).strip() if i < len(r) else ""
+                    cell = escape_latex(cell_clean)
                     row_cells.append(cell)
                 lines.append(" & ".join(row_cells) + r" \\")
             lines.append(r"\end{tabular}")
@@ -284,14 +270,14 @@ class AcademicExporter:
         Generates modern Typst source (.typ).
         """
         cand = profile.get("candidate", {})
-        name = cand.get("name", "候选人")
-        title = cand.get("title", "运营岗")
-        email = cand.get("email", "candidate@example.com")
-        phone = cand.get("phone", "+86 138-0000-0000")
-        school = cand.get("school", "")
-        degree = cand.get("degree", "")
-        location = cand.get("location", "")
-        edu_time = cand.get("edu_time", "")
+        name = escape_typst(cand.get("name", "候选人"))
+        title = escape_typst(cand.get("title", "运营岗"))
+        email = escape_typst(cand.get("email", "candidate@example.com"))
+        phone = escape_typst(cand.get("phone", "+86 138-0000-0000"))
+        school = escape_typst(cand.get("school", ""))
+        degree = escape_typst(cand.get("degree", ""))
+        location = escape_typst(cand.get("location", ""))
+        edu_time = escape_typst(cand.get("edu_time", ""))
         photo_needed = reserve_photo or cand.get("reserve_photo", False) or (photo_path is not None)
 
         lines = [
@@ -300,7 +286,7 @@ class AcademicExporter:
             "",
         ]
 
-        email_typst = str(email).replace("@", "\\@")
+        email_typst = email
 
         if photo_needed:
             loc_disp = f" | {location}" if location else ""
@@ -345,13 +331,23 @@ class AcademicExporter:
                 "",
             ])
 
+        def format_typst_bullet(text: str) -> str:
+            parts = re.split(r"\*\*(.+?)\*\*", str(text))
+            res = []
+            for idx, part in enumerate(parts):
+                if idx % 2 == 1:
+                    res.append(f"*{escape_typst(part)}*")
+                else:
+                    res.append(escape_typst(part))
+            return "".join(res)
 
         # Education
         from core.profile_adapter import extract_education_grid
         grid = extract_education_grid(cand)
         max_cols = max((len(r) for r in grid), default=1)
 
-        degree_clean = re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip()
+        degree_raw = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get("degree", ""))).strip()
+        degree_clean = escape_typst(degree_raw)
         degree_meta = f" #h(1.5em) {degree_clean}" if degree_clean else ""
         edu_meta = f" #h(1fr) {edu_time}" if edu_time else ""
 
@@ -372,8 +368,8 @@ class AcademicExporter:
             for r in grid:
                 for i in range(max_cols):
                     cell = r[i] if i < len(r) else ""
-                    cell = re.sub(r"\s*[｜|]\s*", " ", cell).strip()
-                    cell_tokens.append(f"[{cell}]")
+                    cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell).strip()
+                    cell_tokens.append(f"[{escape_typst(cell_clean)}]")
 
             lines.append(f"#grid(\n  columns: {cols_str},\n  row-gutter: 3pt,\n  " + ", ".join(cell_tokens) + ",\n)")
         lines.append("")
@@ -383,13 +379,15 @@ class AcademicExporter:
         if experiences:
             lines.append("== 实习经历")
             for exp in experiences:
-                dept_str = exp.get("dept", "")
-                role_str = exp.get("role", "")
-                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
-                lines.append(f"=== {exp.get('org', '')} ({role_label}) -- {exp.get('time', '')}")
+                dept_str = str(exp.get("dept", ""))
+                role_str = str(exp.get("role", ""))
+                role_label_raw = f"{dept_str} · {role_str}" if dept_str else role_str
+                role_label = escape_typst(role_label_raw)
+                exp_org = escape_typst(exp.get('org', ''))
+                exp_time = escape_typst(exp.get('time', ''))
+                lines.append(f"=== {exp_org} ({role_label}) -- {exp_time}")
                 for b in exp.get("bullets", []):
-                    b_typst = re.sub(r"\*\*(.+?)\*\*", r"*\1*", b)
-                    lines.append(f"- {b_typst}")
+                    lines.append(f"- {format_typst_bullet(b)}")
             lines.append("")
 
         # Projects
@@ -398,14 +396,13 @@ class AcademicExporter:
             p_title = "科研与架构项目经历" if profile.get("publications") else "校园与实践经历"
             lines.append(f"== {p_title}")
             for proj in projects:
-                p_name = proj.get("name", "项目")
-                p_role = proj.get("role", "架构 Owner")
-                p_time = proj.get("time", "")
+                p_name = escape_typst(proj.get("name", "项目"))
+                p_role = escape_typst(proj.get("role", "架构 Owner"))
+                p_time = escape_typst(proj.get("time", ""))
                 time_disp = f" -- {p_time}" if p_time else ""
                 lines.append(f"=== {p_name} ({p_role}){time_disp}")
                 for b in proj.get("bullets", []):
-                    b_typst = re.sub(r"\*\*(.+?)\*\*", r"*\1*", b)
-                    lines.append(f"- {b_typst}")
+                    lines.append(f"- {format_typst_bullet(b)}")
             lines.append("")
 
         # Publications
@@ -413,7 +410,9 @@ class AcademicExporter:
         if pubs:
             lines.append("== 学术发表与代表作")
             for p in pubs:
-                lines.append(f"- *{p.get('title', '')}* -- _{p.get('venue', '')}_")
+                p_title_str = escape_typst(p.get('title', ''))
+                p_venue_str = escape_typst(p.get('venue', ''))
+                lines.append(f"- *{p_title_str}* -- _{p_venue_str}_")
             lines.append("")
 
         # Competencies
@@ -422,8 +421,10 @@ class AcademicExporter:
             s_title = "核心技术栈" if profile.get("publications") else "专业技能"
             lines.append(f"== {s_title}")
             for k, v in comps.items():
+                k_esc = escape_typst(str(k))
                 val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                lines.append(f"- *{k}*: {val}")
+                val_esc = escape_typst(val)
+                lines.append(f"- *{k_esc}*: {val_esc}")
 
         return "\n".join(lines)
 
@@ -438,13 +439,14 @@ class AcademicExporter:
         Allows instant browser preview and headless PDF rendering without local LaTeX tools.
         """
         cand = profile.get("candidate", {})
-        name = cand.get("name", "候选人")
-        title = cand.get("title", "运营岗")
-        email = cand.get("email", "candidate@example.com")
-        phone = cand.get("phone", "+86 138-0000-0000")
-        school = cand.get("school", "")
-        location = cand.get("location", "")
-        edu_time = cand.get("edu_time", "")
+        name = escape_html_text(cand.get("name", "候选人"))
+        title = escape_html_text(cand.get("title", "运营岗"))
+        email_raw = str(cand.get("email", "candidate@example.com"))
+        email = escape_html_text(email_raw)
+        phone = escape_html_text(cand.get("phone", "+86 138-0000-0000"))
+        school = escape_html_text(cand.get("school", ""))
+        location = escape_html_text(cand.get("location", ""))
+        edu_time = escape_html_text(cand.get("edu_time", ""))
 
         from core.profile_adapter import extract_education_grid
         grid = extract_education_grid(cand)
@@ -461,10 +463,10 @@ class AcademicExporter:
             for i in range(max_cols):
                 cell_text = r[i] if i < len(r) else ""
                 cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                grid_cells_html.append(f'<div>{cell_clean}</div>')
+                grid_cells_html.append(f'<div>{escape_html_text(cell_clean)}</div>')
 
         degree = cand.get("degree", "")
-        degree_clean = re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip()
+        degree_clean = escape_html_text(re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip())
         exp_list = profile.get("experience", [])
         proj_list = profile.get("projects", [])
         comps = profile.get("competencies", {})
@@ -473,10 +475,12 @@ class AcademicExporter:
         photo_html = ""
         if photo_needed:
             photo_data_uri = _image_to_base64_data_uri(photo_path)
-            if photo_data_uri:
+            safe_data_uri = sanitize_url(photo_data_uri, allow_data_image=True) if photo_data_uri else ""
+            if safe_data_uri:
+                src_attr = escape_html_attribute(safe_data_uri)
                 photo_html = f"""
     <div style="width: 72px; height: 96px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{photo_data_uri}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+      <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
       <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
         <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
       </div>
@@ -492,6 +496,12 @@ class AcademicExporter:
                 """
 
         loc_str = f" &nbsp;|&nbsp; {location}" if location else ""
+
+        mailto_url = sanitize_url(f"mailto:{email_raw}") if email_raw else ""
+        if mailto_url:
+            email_link = f'<a href="{escape_html_attribute(mailto_url)}" style="color:inherit; text-decoration:none;">{email}</a>'
+        else:
+            email_link = f'<span>{email}</span>'
 
         html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -568,7 +578,7 @@ class AcademicExporter:
       <h1>{name}</h1>
       {'<div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 3pt;">求职意向：' + title + '</div>' if title else ''}
       <div class="contact">
-        电话：{phone} &nbsp;|&nbsp; 邮箱：{email}{loc_str}
+        电话：{phone} &nbsp;|&nbsp; 邮箱：{email_link}{loc_str}
       </div>
     </div>
     {photo_html}
@@ -587,11 +597,17 @@ class AcademicExporter:
         if exp_list:
             html += "  <h2>实习经历</h2>\n"
             for exp in exp_list:
-                dept_str = exp.get("dept", "")
-                role_str = exp.get("role", "")
-                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
-                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in exp.get("bullets", [])])
-                html += f"""  <div class='item-header'><span>{exp.get('org', '')} · {role_label}</span><span>{exp.get('time', '')}</span></div>
+                dept_str = str(exp.get("dept", ""))
+                role_str = str(exp.get("role", ""))
+                role_label_raw = f"{dept_str} · {role_str}" if dept_str else role_str
+                role_label = escape_html_text(role_label_raw)
+                exp_org_esc = escape_html_text(exp.get('org', ''))
+                exp_time_esc = escape_html_text(exp.get('time', ''))
+                bullets = "".join([
+                    f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', escape_html_text(str(b)))}</li>"
+                    for b in exp.get("bullets", [])
+                ])
+                html += f"""  <div class='item-header'><span>{exp_org_esc} · {role_label}</span><span>{exp_time_esc}</span></div>
   <ul>{bullets}</ul>
 """
 
@@ -599,8 +615,14 @@ class AcademicExporter:
             p_title = "科研与架构项目经历" if profile.get("publications") else "校园与实践经历"
             html += f"  <h2>{p_title}</h2>\n"
             for p in proj_list:
-                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in p.get("bullets", [])])
-                html += f"""  <div class='item-header'><span>{p.get('name', '')} · {p.get('role', '')}</span><span>{p.get('time', '')}</span></div>
+                p_name_esc = escape_html_text(p.get('name', ''))
+                p_role_esc = escape_html_text(p.get('role', ''))
+                p_time_esc = escape_html_text(p.get('time', ''))
+                bullets = "".join([
+                    f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', escape_html_text(str(b)))}</li>"
+                    for b in p.get("bullets", [])
+                ])
+                html += f"""  <div class='item-header'><span>{p_name_esc} · {p_role_esc}</span><span>{p_time_esc}</span></div>
   <ul>{bullets}</ul>
 """
 
@@ -608,8 +630,10 @@ class AcademicExporter:
             s_title = "核心技术栈" if profile.get("publications") else "专业技能"
             html += f"  <h2>{s_title}</h2>\n  <ul>"
             for k, v in comps.items():
+                k_esc = escape_html_text(str(k))
                 val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                html += f"<li><b>{k}：</b>{val}</li>"
+                val_esc = escape_html_text(val)
+                html += f"<li><b>{k_esc}：</b>{val_esc}</li>"
             html += "</ul>\n"
 
         html += "</body>\n</html>"

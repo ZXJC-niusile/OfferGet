@@ -17,27 +17,20 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 # ---------------------------------------------------------------------------
 # Technology & Version Whitelist & Inflation Lexicons (Centralized SSOT)
 # ---------------------------------------------------------------------------
-from core.lexicon import (
-    NON_METRIC_TECH_PATTERNS,
-    INFLATION_PATTERNS,
-    FORBIDDEN_BUZZWORDS,
+from core.profile_adapter import (
+    ProfileEvidenceIndex,
+    build_profile_evidence_index,
+)
+from core.registry import (
+    MetricPatternRegistry,
+    QualityRuleRegistry,
 )
 
-METRIC_TYPE_TO_TOPICS: Dict[str, Set[str]] = {
-    "percentage": {"mfu", "uptime", "latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain"},
-    "currency": {"savings"},
-    "time_hours": {"downtime_before", "time_hours"},
-    "time_minutes": {"downtime_after", "time_minutes"},
-    "time_ms": {"ttft_after", "time_ms"},
-    "time_s": {"ttft_before", "time_s"},
-    "time_weeks": {"time_saved", "time_weeks"},
-    "years": {"experience_years"},
-    "cluster_size": {"cluster_size"},
-    "model_param": {"model_params"},
-    "stars": {"stars"},
-    "multiplier": {"multiplier"},
-    "count": {"count"}
-}
+NON_METRIC_TECH_PATTERNS = MetricPatternRegistry.NON_METRIC_TECH_PATTERNS
+INFLATION_PATTERNS = QualityRuleRegistry.INFLATION_PATTERNS
+FORBIDDEN_BUZZWORDS = QualityRuleRegistry.FORBIDDEN_BUZZWORDS
+METRIC_TYPE_TO_TOPICS: Dict[str, Set[str]] = MetricPatternRegistry.METRIC_TYPE_TO_TOPICS
+
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +48,7 @@ class FactVerificationGuard:
     def __init__(self, master_profile: Optional[Union[dict, str, Path]] = None):
         """Initialize the guard with an optional master profile."""
         self.master_profile: Optional[dict] = None
+        self.evidence_index: Optional[ProfileEvidenceIndex] = None
         self.baseline_anchors: List[Dict[str, Any]] = []
         self.all_verified_numbers: Set[float] = set()
 
@@ -85,8 +79,12 @@ class FactVerificationGuard:
         if not self.master_profile:
             return
 
-        # 1. Candidate metadata
-        cand = self.master_profile.get("candidate", {})
+        # 1. Build immutable ProfileEvidenceIndex to unify normalized profile representation
+        self.evidence_index = build_profile_evidence_index(self.master_profile)
+        norm_profile = self.evidence_index.profile
+
+        # Candidate metadata
+        cand = norm_profile.get("candidate", {})
         if isinstance(cand, dict):
             yoe = cand.get("years_of_experience")
             if yoe is not None:
@@ -106,7 +104,7 @@ class FactVerificationGuard:
                     pass
 
         # 2. Narrative summaries
-        narrative = self.master_profile.get("narrative", {})
+        narrative = norm_profile.get("narrative", {})
         if isinstance(narrative, dict):
             for text_key in ["summary_zh", "summary_en"]:
                 text = narrative.get(text_key, "")
@@ -114,7 +112,8 @@ class FactVerificationGuard:
                     self._extract_and_index_text_metrics(text, f"narrative:{text_key}")
 
         # 3. Experience Highlights & Verified Metrics
-        for exp in self.master_profile.get("experience", []):
+        for exp in norm_profile.get("experience", []):
+
             if not isinstance(exp, dict):
                 continue
             for h in exp.get("highlights", []):
@@ -138,7 +137,7 @@ class FactVerificationGuard:
                     self._extract_and_index_text_metrics(claim_en, f"{claim_id}:claim_en", context_words)
 
         # 4. Projects
-        for proj in self.master_profile.get("projects", []):
+        for proj in norm_profile.get("projects", []):
             if not isinstance(proj, dict):
                 continue
             proj_name = proj.get("name", "Project")
@@ -167,13 +166,14 @@ class FactVerificationGuard:
                     self._extract_and_index_text_metrics(d_text, f"{proj_name}:{desc_k}", p_kw)
 
         # 5. Publications
-        for pub in self.master_profile.get("publications", []):
+        for pub in norm_profile.get("publications", []):
             if isinstance(pub, dict):
                 p_text = f"{pub.get('title', '')} {pub.get('highlight', '')}"
                 self._extract_and_index_text_metrics(p_text, "publications")
 
         # 6. Constraints / Compute Floor
-        constraints = self.master_profile.get("constraints_and_assumptions", {})
+        constraints = self.master_profile.get("constraints_and_assumptions", {}) or norm_profile.get("constraints_and_assumptions", {})
+
         if isinstance(constraints, dict):
             compute_floor = constraints.get("compute_floor", "")
             if compute_floor:
@@ -472,206 +472,10 @@ class FactVerificationGuard:
         """
         Extracts all quantified numerical metrics from a text string using regex.
         Filters out non-metric technical identifiers (C++20, FlashAttention-2, ZeRO-3, etc.).
+        Delegates to MetricPatternRegistry.extract_raw_metrics (SSOT).
         """
-        metrics: List[Dict[str, Any]] = []
+        return MetricPatternRegistry.extract_raw_metrics(text)
 
-        # 1. Mask non-metric tech terms to avoid false extraction
-        masked_text = text
-        for pat in NON_METRIC_TECH_PATTERNS:
-            masked_text = pat.sub(lambda m: "X" * len(m.group(0)), masked_text)
-
-        # 2. Extract Currencies (e.g. 3800 万元, 38M RMB, 38,000,000 RMB)
-        curr_pattern = re.compile(
-            r"(?:[$¥￥]\s*)?(\d+(?:,\d+)*(?:\.\d+)?)\s*(万元|万|亿元|M\s*RMB|m\s*rmb|million\s*rmb|RMB|usd|美元)",
-            re.IGNORECASE
-        )
-        for m in curr_pattern.finditer(masked_text):
-            raw = text[m.start():m.end()]
-            val_str = m.group(1).replace(",", "")
-            unit = m.group(2).strip()
-            num = float(val_str)
-            metrics.append({
-                "raw": raw,
-                "value": num,
-                "unit": unit,
-                "type": "currency",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # 3. Extract Percentages (e.g. 54.2%, 45%, 38.5%)
-        pct_pattern = re.compile(r"([+-]?\d+(?:\.\d+)?)\s*%")
-        for m in pct_pattern.finditer(masked_text):
-            raw = text[m.start():m.end()]
-            num = float(m.group(1))
-            metrics.append({
-                "raw": raw,
-                "value": num,
-                "unit": "%",
-                "type": "percentage",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # 4. Extract Multipliers (e.g. 2.8x, 3x, 2.8倍)
-        mult_pattern = re.compile(r"(\d+(?:\.\d+)?)\s*([xX倍])(?:\b|[^\w]|$)")
-        for m in mult_pattern.finditer(masked_text):
-            raw = text[m.start():m.end()]
-            num = float(m.group(1))
-            metrics.append({
-                "raw": raw,
-                "value": num,
-                "unit": m.group(2),
-                "type": "multiplier",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # 5. Extract Time Durations
-        # Hours
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(小时|个半小时|h\b|hours?\b|hrs?\b)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": "小时",
-                "type": "time_hours",
-                "start": m.start(),
-                "end": m.end()
-            })
-        # Minutes
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(分钟|分|min\b|minutes?\b|mins?\b)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": "分钟",
-                "type": "time_minutes",
-                "start": m.start(),
-                "end": m.end()
-            })
-        # Milliseconds
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*ms\b", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": "ms",
-                "type": "time_ms",
-                "start": m.start(),
-                "end": m.end()
-            })
-        # Seconds
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:秒|s\b|sec\b|seconds?\b)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": "s",
-                "type": "time_s",
-                "start": m.start(),
-                "end": m.end()
-            })
-        # Weeks
-        for m in re.finditer(r"(\d+)\s*(周|个星期|weeks?\b|wks?\b)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": "周",
-                "type": "time_weeks",
-                "start": m.start(),
-                "end": m.end()
-            })
-        # Days
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*(天|日|days?\b)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": "天",
-                "type": "time_days",
-                "start": m.start(),
-                "end": m.end()
-            })
-        # Years of experience (excluding calendar year dates like 2023年)
-        for m in re.finditer(r"(?<!\d)(\d{1,2})\+?\s*(年|years?\b)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            val = float(m.group(1))
-            if val < 40:  # Exclude calendar years
-                metrics.append({
-                    "raw": raw,
-                    "value": val,
-                    "unit": "年",
-                    "type": "years",
-                    "start": m.start(),
-                    "end": m.end()
-                })
-
-        # 6. Extract Hardware / Capacity / Counts
-        # Cards / GPUs
-        for m in re.finditer(r"(\d+(?:,\d+)?)\s*(卡|张卡|张|gpus?\b|nodes?\b|节点)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            val = float(m.group(1).replace(",", ""))
-            metrics.append({
-                "raw": raw,
-                "value": val,
-                "unit": "卡",
-                "type": "cluster_size",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # Model Parameters (e.g. 64B, 230B, 32B)
-        for m in re.finditer(r"(\d+(?:\.\d+)?)\s*([bBmM])\b", masked_text):
-            raw = text[m.start():m.end()]
-            metrics.append({
-                "raw": raw,
-                "value": float(m.group(1)),
-                "unit": m.group(2).upper(),
-                "type": "model_param",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # Stars & Citations
-        for m in re.finditer(r"(\d+(?:,\d+)?)\+?\s*(stars?\b|citations?\b|星|次引用|引用)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            val = float(m.group(1).replace(",", ""))
-            metrics.append({
-                "raw": raw,
-                "value": val,
-                "unit": m.group(2),
-                "type": "stars",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # Standalone count units (e.g. 50 人, 50 位, 99999 次)
-        for m in re.finditer(r"(\d+(?:,\d+)?)\s*(人|位|名|次|条|篇|款)", masked_text, re.IGNORECASE):
-            raw = text[m.start():m.end()]
-            val = float(m.group(1).replace(",", ""))
-            metrics.append({
-                "raw": raw,
-                "value": val,
-                "unit": m.group(2),
-                "type": "count",
-                "start": m.start(),
-                "end": m.end()
-            })
-
-        # Remove duplicate overlaps (prefer longer match)
-        deduped: List[Dict[str, Any]] = []
-        for met in sorted(metrics, key=lambda x: (x["start"], -(x["end"] - x["start"]))):
-            overlap = False
-            for d in deduped:
-                if not (met["end"] <= d["start"] or met["start"] >= d["end"]):
-                    overlap = True
-                    break
-            if not overlap:
-                deduped.append(met)
-
-        return deduped
 
     def verify_facts(
         self, tailored_text_or_dict: Union[str, dict, list], master_profile: Optional[dict] = None

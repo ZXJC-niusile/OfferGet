@@ -13,6 +13,7 @@ from dataclasses import asdict
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from core.profile_adapter import build_profile_evidence_index, normalize_candidate_profile
 from modules.jd_analyst.decoder import JDDecoder
 from modules.jd_analyst.matcher import JDMatcher
 from modules.jd_analyst.models import (
@@ -29,63 +30,9 @@ from modules.jd_analyst.models import (
 from modules.jd_analyst.predictor import InterviewProbabilityCalculator
 
 
-ROLE_TAXONOMIES: Dict[str, Dict[str, Any]] = {
-    "ai_algorithm": {
-        "title": "AI / 大模型与算法架构",
-        "keywords": ["Transformer", "MoE", "Megatron", "vLLM", "PyTorch", "CUDA", "Triton", "RAG", "Agent"],
-        "dimensions": [("算法与模型", 0.25), ("工程与性能", 0.25), ("业务落地", 0.20), ("数据与评测", 0.15), ("研究与生态", 0.15)],
-    },
-    "backend_distributed": {
-        "title": "后端与分布式高并发架构",
-        "keywords": ["Java", "Go", "gRPC", "Kafka", "MySQL", "Redis", "微服务", "分布式事务", "DDD"],
-        "dimensions": [("系统设计", 0.30), ("存储与一致性", 0.25), ("稳定性", 0.20), ("业务建模", 0.15), ("性能与工程", 0.10)],
-    },
-    "frontend_fullstack": {
-        "title": "前端与 Web 全栈工程",
-        "keywords": ["React", "Vue", "TypeScript", "Next.js", "Web Vitals", "SSR", "Vite", "BFF"],
-        "dimensions": [("交互架构", 0.25), ("性能治理", 0.25), ("组件工程", 0.20), ("跨端协同", 0.15), ("体验指标", 0.15)],
-    },
-    "client_mobile": {
-        "title": "客户端与移动端工程",
-        "keywords": ["iOS", "Android", "Flutter", "Swift", "Kotlin", "ANR", "SQLite", "QUIC"],
-        "dimensions": [("端侧架构", 0.25), ("稳定性", 0.25), ("跨端工程", 0.20), ("弱网与存储", 0.15), ("业务交互", 0.15)],
-    },
-    "bigdata_infra": {
-        "title": "大数据开发与实时湖仓",
-        "keywords": ["Flink", "Spark", "Iceberg", "Hudi", "ClickHouse", "StarRocks", "Doris", "数据血缘"],
-        "dimensions": [("计算引擎", 0.30), ("湖仓建模", 0.25), ("查询与存储", 0.20), ("质量与成本", 0.15), ("业务决策", 0.10)],
-    },
-    "cloudnative_sre": {
-        "title": "系统底层 / 云原生 / SRE",
-        "keywords": ["Kubernetes", "K8s", "eBPF", "Prometheus", "Docker", "Slurm", "RDMA", "FinOps"],
-        "dimensions": [("平台与调度", 0.25), ("网络与硬件", 0.25), ("稳定性", 0.20), ("系统性能", 0.15), ("成本治理", 0.15)],
-    },
-    "product": {
-        "title": "产品管理与产品策略",
-        "keywords": ["产品经理", "产品", "用户研究", "需求分析", "路线图", "PRD", "A/B测试", "用户增长", "留存", "转化"],
-        "dimensions": [("问题定义", 0.25), ("用户与需求", 0.25), ("决策与交付", 0.20), ("数据与实验", 0.15), ("业务结果", 0.15)],
-    },
-    "operations": {
-        "title": "运营与业务增长",
-        "keywords": ["运营", "增长", "活动", "内容", "用户运营", "产品运营", "流程优化", "转化", "留存", "SLA"],
-        "dimensions": [("运营策略", 0.25), ("流程执行", 0.25), ("用户与供给", 0.20), ("数据指标", 0.15), ("协同交付", 0.15)],
-    },
-    "marketing_sales": {
-        "title": "市场、销售与商务拓展",
-        "keywords": ["市场", "营销", "销售", "商务", "渠道", "获客", "线索", "客户", "ROI", "CAC", "pipeline"],
-        "dimensions": [("市场洞察", 0.25), ("渠道与获客", 0.25), ("客户经营", 0.20), ("转化与收入", 0.20), ("复盘与协同", 0.10)],
-    },
-    "project_management": {
-        "title": "项目管理与交付",
-        "keywords": ["项目管理", "项目经理", "PMO", "敏捷", "Scrum", "里程碑", "风险管理", "交付", "干系人"],
-        "dimensions": [("目标与范围", 0.25), ("计划与交付", 0.25), ("风险与质量", 0.20), ("干系人协同", 0.20), ("复盘改进", 0.10)],
-    },
-    "general": {
-        "title": "通用岗位能力",
-        "keywords": [],
-        "dimensions": [("职责匹配", 0.30), ("能力证据", 0.30), ("结果表达", 0.20), ("岗位约束", 0.20)],
-    },
-}
+from core.registry import TaxonomyRegistry
+
+ROLE_TAXONOMIES: Dict[str, Dict[str, Any]] = TaxonomyRegistry.list_taxonomies()
 
 
 class DecodedJDCompat(dict):
@@ -98,14 +45,8 @@ class DecodedJDCompat(dict):
 
 def classify_role_taxonomy(jd_text: str) -> Dict[str, Any]:
     """Classify a JD for legacy metadata without changing canonical decoding."""
-    text = jd_text or ""
-    scores = {
-        key: sum(1 for keyword in info["keywords"] if keyword.lower() in text.lower())
-        for key, info in ROLE_TAXONOMIES.items()
-    }
-    best_key = max(scores, key=scores.get) if scores and max(scores.values()) else "general"
-    info = ROLE_TAXONOMIES[best_key]
-    return {"role_key": best_key, "taxonomy": info}
+    return TaxonomyRegistry.classify_role(jd_text)
+
 
 
 def _first_match(text: str, patterns: Iterable[str], default: str) -> str:
@@ -118,12 +59,12 @@ def _first_match(text: str, patterns: Iterable[str], default: str) -> str:
 
 def _extract_metadata(text: str) -> Dict[str, str]:
     return {
-        "role": _first_match(text, [r"(?:【岗位名称】|岗位名称|职位名称|岗位|职位|Job\s*Title)[：:\s]+([^\n\r]+)"], "未指定职位"),
-        "company": _first_match(text, [r"(?:【公司名称】|公司|雇主|Company)[：:\s]+([^\n\r]+)"], "未指定公司"),
-        "department": _first_match(text, [r"(?:【所属部门】|部门|团队|Department|Team)[：:\s]+([^\n\r]+)"], "未指定部门"),
-        "location": _first_match(text, [r"(?:【工作地点】|工作地点|地点|Location)[：:\s]+([^\n\r]+)"], "未提供"),
-        "comp_band": _first_match(text, [r"(?:【薪资范围】|薪资范围|薪资|Salary|Compensation)[：:\s]+([^\n\r]+)"], "未提供"),
-        "level": _first_match(text, [r"(?:【岗位级别】|岗位级别|职级|Level)[：:\s]+([^\n\r]+)"], "未提供"),
+        "role": _first_match(text, [r"(?:【岗位名称】|岗位名称|职位名称|岗位|职位|Job\s*Title)[：:\s]*([^\n\r]+)"], "未指定职位"),
+        "company": _first_match(text, [r"(?:【公司名称】|公司|雇主|Company)[：:\s]*([^\n\r]+)"], "未指定公司"),
+        "department": _first_match(text, [r"(?:【所属部门】|部门|团队|Department|Team)[：:\s]*([^\n\r]+)"], "未指定部门"),
+        "location": _first_match(text, [r"(?:【工作地点】|工作地点|地点|Location)[：:\s]*([^\n\r]+)"], "未提供"),
+        "comp_band": _first_match(text, [r"(?:【薪资范围】|薪资范围|薪资|Salary|Compensation)[：:\s]*([^\n\r]+)"], "未提供"),
+        "level": _first_match(text, [r"(?:【岗位级别】|岗位级别|职级|Level)[：:\s]*([^\n\r]+)"], "未提供"),
     }
 
 
@@ -134,6 +75,10 @@ def _layer(title: str, zh: str, en: str = "") -> Dict[str, str]:
 def canonical_to_legacy(canonical: DecodedJD) -> DecodedJDCompat:
     """Convert the canonical dataclass result to OfferGet's historical dict shape."""
     meta = _extract_metadata(canonical.raw_text)
+    if canonical.job_title and canonical.job_title != "未指定职位":
+        meta["role"] = canonical.job_title
+    if canonical.company_or_dept and canonical.company_or_dept != "未指定公司":
+        meta["company"] = canonical.company_or_dept
     taxonomy_info = classify_role_taxonomy(canonical.raw_text)
 
     responsibilities = [item.description for item in canonical.core_responsibilities]
@@ -201,10 +146,18 @@ def _flatten_strings(value: Any) -> List[str]:
 
 
 def profile_to_canonical(profile_data: Dict[str, Any]) -> CandidateProfile:
-    """Normalize the supported profile shapes without inventing defaults."""
-    profile = profile_data or {}
-    candidate = profile.get("candidate", {}) if isinstance(profile.get("candidate", {}), dict) else {}
-    degree = str(candidate.get("degree") or candidate.get("education_level") or "")
+    """Normalize the supported profile shapes without inventing defaults.
+
+    Reuses core.profile_adapter.normalize_candidate_profile and unified evidence extraction.
+    """
+    if not isinstance(profile_data, dict):
+        profile_data = {}
+
+    norm_profile = normalize_candidate_profile(profile_data)
+    index = build_profile_evidence_index(norm_profile)
+    cand = norm_profile.get("candidate", {})
+
+    degree = str(cand.get("degree") or cand.get("education_level") or "").strip()
     if "博士" in degree or "Ph.D" in degree or "PhD" in degree:
         education_level = "博士"
     elif "硕士" in degree or "Master" in degree:
@@ -216,42 +169,21 @@ def profile_to_canonical(profile_data: Dict[str, Any]) -> CandidateProfile:
     else:
         education_level = ""
 
-    raw_years = candidate.get("years_of_experience", candidate.get("experience_years", 0))
+    raw_years = cand.get("years_of_experience", cand.get("experience_years"))
     try:
-        years = float(raw_years or 0)
+        years = float(raw_years) if raw_years is not None else 0.0
     except (TypeError, ValueError):
         years = 0.0
 
-    skills: List[str] = []
-    skills.extend(_flatten_strings(profile.get("skills", [])))
-    skills.extend(_flatten_strings(profile.get("competencies", {})))
-
-    descriptions: List[str] = []
-    for experience in profile.get("experience", []) if isinstance(profile.get("experience", []), list) else []:
-        if not isinstance(experience, dict):
-            continue
-        for highlight in experience.get("highlights", []):
-            if isinstance(highlight, dict):
-                descriptions.extend(_flatten_strings(highlight.get("claim_zh", "")))
-                descriptions.extend(_flatten_strings(highlight.get("claim_en", "")))
-            else:
-                descriptions.extend(_flatten_strings(highlight))
-
-    for project in profile.get("projects", []) if isinstance(profile.get("projects", []), list) else []:
-        if isinstance(project, dict):
-            descriptions.extend(_flatten_strings(project.get("description_zh", project.get("description", ""))))
-            descriptions.extend(_flatten_strings(project.get("description_en", "")))
-            descriptions.extend(_flatten_strings(project.get("bullets", [])))
-
-    raw_text = json.dumps(profile, ensure_ascii=False)
+    raw_text = json.dumps(norm_profile, ensure_ascii=False)
     return CandidateProfile(
-        name=str(candidate.get("name") or "候选人"),
+        name=str(cand.get("name") or "候选人"),
         education_level=education_level,
-        degree_school=str(candidate.get("institution") or candidate.get("school") or ""),
-        major=str(candidate.get("major") or ""),
+        degree_school=str(cand.get("school") or cand.get("institution") or "").strip(),
+        major=str(cand.get("major") or "").strip(),
         years_of_experience=years,
-        skills=list(dict.fromkeys(item for item in skills if item)),
-        project_descriptions=[item for item in descriptions if item],
+        skills=list(index.skills),
+        project_descriptions=list(index.bullets),
         raw_resume_text=raw_text,
     )
 

@@ -11,9 +11,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-# ---------------------------------------------------------------------------
-# Constants & Pattern Banks (Centralized from core.lexicon SSOT)
-# ---------------------------------------------------------------------------
+from core.profile_adapter import build_profile_evidence_index
 from core.lexicon import (
     STRONG_ACTION_VERBS_EN,
     STRONG_ACTION_VERBS_ZH,
@@ -88,36 +86,18 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
 
     # 1. Handle dict
     if isinstance(profile_or_text, dict):
+        index = build_profile_evidence_index(profile_or_text)
+        cand = index.profile.get("candidate", {})
+        yoe = cand.get("years_of_experience", 0)
+        try:
+            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
+        except (ValueError, TypeError):
+            meta["years_of_experience"] = 0
+
         meta["is_dict"] = True
-        meta["parsed_profile"] = profile_or_text
-        candidate = profile_or_text.get("candidate", {})
-        meta["years_of_experience"] = candidate.get("years_of_experience", 0)
-
-        # Extract summary bullets
-        narrative = profile_or_text.get("narrative", {})
-        for k in ["summary_zh", "summary_en"]:
-            if narrative.get(k):
-                bullets.append(narrative[k].strip())
-
-        # Extract experience highlights
-        for exp in profile_or_text.get("experience", []):
-            for h in exp.get("highlights", []):
-                if isinstance(h, dict):
-                    if h.get("claim_zh"):
-                        bullets.append(h["claim_zh"].strip())
-                    if h.get("claim_en"):
-                        bullets.append(h["claim_en"].strip())
-                elif isinstance(h, str):
-                    bullets.append(h.strip())
-
-        # Extract project descriptions
-        for proj in profile_or_text.get("projects", []):
-            if proj.get("description_zh"):
-                bullets.append(proj["description_zh"].strip())
-            if proj.get("description_en"):
-                bullets.append(proj["description_en"].strip())
-
-        meta["raw_text"] = json.dumps(profile_or_text, ensure_ascii=False)
+        meta["parsed_profile"] = index.profile
+        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
+        bullets = list(index.bullets)
         return bullets, meta
 
     # 2. Handle string (text, filepath, or json string)
@@ -741,37 +721,17 @@ def extract_candidate_skills(profile_data: Any) -> Tuple[Set[str], List[str]]:
             pass
 
     if isinstance(profile_data, dict):
-        comp_dict = profile_data.get("competencies", {})
-        if isinstance(comp_dict, dict):
-            for cat, items in comp_dict.items():
-                if isinstance(items, list):
-                    for item in items:
-                        competencies.add(item.strip())
-                        sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
-                        competencies.update(sub_tokens)
-        elif isinstance(comp_dict, list):
-            for item in comp_dict:
-                competencies.add(str(item).strip())
+        index = build_profile_evidence_index(profile_data)
+        for item in index.skills:
+            competencies.add(item.strip())
+            sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
+            competencies.update(sub_tokens)
 
-        # Experience highlights
-        for exp in profile_data.get("experience", []):
-            for h in exp.get("highlights", []):
-                if isinstance(h, dict):
-                    if h.get("claim_zh"):
-                        verified_bullets.append(h["claim_zh"])
-                    if h.get("claim_en"):
-                        verified_bullets.append(h["claim_en"])
-                elif isinstance(h, str):
-                    verified_bullets.append(h)
-
-        # Projects
-        for proj in profile_data.get("projects", []):
-            if proj.get("name"):
+        # Bullets and project names for evidence matching
+        verified_bullets.extend(index.bullets)
+        for proj in index.profile.get("projects", []):
+            if isinstance(proj, dict) and proj.get("name") and proj["name"] not in verified_bullets:
                 verified_bullets.append(proj["name"])
-            if proj.get("description_zh"):
-                verified_bullets.append(proj["description_zh"])
-            if proj.get("description_en"):
-                verified_bullets.append(proj["description_en"])
 
     elif isinstance(profile_data, str):
         lines = profile_data.splitlines()

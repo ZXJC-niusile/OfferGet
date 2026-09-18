@@ -37,11 +37,17 @@ class TestSkillGapROIEngine(unittest.TestCase):
         self.assertIn("missing_skills_ranking", result)
         self.assertIn("top_recommendations", result)
         self.assertIn("strategic_summary", result)
+        self.assertIn("assumptions", result)
+        self.assertIn("unknown_fields", result)
+        self.assertIn("evidence_status", result)
 
         self.assertIsInstance(result["total_near_miss_jobs"], int)
         self.assertIsInstance(result["missing_skills_ranking"], list)
         self.assertIsInstance(result["top_recommendations"], list)
         self.assertIsInstance(result["strategic_summary"], str)
+        self.assertIsInstance(result["assumptions"], list)
+        self.assertIsInstance(result["unknown_fields"], list)
+        self.assertIsInstance(result["evidence_status"], str)
 
         self.assertLessEqual(len(result["top_recommendations"]), 5)
 
@@ -87,6 +93,22 @@ class TestSkillGapROIEngine(unittest.TestCase):
         result = self.engine.analyze_gap_roi(self.profile_data, [self.jd_text, jd_2])
         self.assertGreaterEqual(result["total_near_miss_jobs"], 1)
         self.assertTrue(len(result["strategic_summary"]) > 50)
+
+    def test_05_unknown_facts_boundary_and_assumptions(self):
+        """Test missing facts (education, experience, major) are tracked without hallucination."""
+        minimal_profile = {"name": "未知候选人", "skills": ["Python"]}
+        result = self.engine.analyze_gap_roi(minimal_profile, [self.jd_text])
+
+        self.assertIn("unknown_fields", result)
+        self.assertIn("education", result["unknown_fields"])
+        self.assertIn("years_of_experience", result["unknown_fields"])
+        self.assertIn("major", result["unknown_fields"])
+
+        self.assertEqual(result["evidence_status"], "partial")
+        self.assertTrue(result["input_quality"]["unknown_experience"])
+        self.assertTrue(result["input_quality"]["unknown_education"])
+        self.assertTrue(result["input_quality"]["unknown_major"])
+        self.assertGreaterEqual(len(result["assumptions"]), 3)
 
 
 if __name__ == "__main__":

@@ -13,16 +13,9 @@ Modules:
 from __future__ import annotations
 
 import re
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
-# Ensure OfferGet root is in sys.path
-_CORE_DIR = Path(__file__).resolve().parent
-_OFFERGET_ROOT = _CORE_DIR.parent
-if str(_OFFERGET_ROOT) not in sys.path:
-    sys.path.insert(0, str(_OFFERGET_ROOT))
 
 
 # ============================================================================

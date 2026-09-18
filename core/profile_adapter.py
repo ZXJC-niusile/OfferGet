@@ -8,10 +8,11 @@ content or persisting a second profile schema.
 
 from __future__ import annotations
 
+import copy
 import json
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Set, Tuple
 
 
 @dataclass(frozen=True)
@@ -38,32 +39,24 @@ class EvidenceClaim:
         return asdict(self)
 
 
-# Deterministic aliases are deliberately small. New aliases should be added
-# deliberately and covered by a test; fuzzy matching is unsafe for fact gates.
-ALIASES: Dict[str, set[str]] = {
-    "pytorch": {"pytorch", "torch"},
-    "python": {"python"},
-    "c++": {"c++", "cpp"},
-    "cuda": {"cuda"},
-    "triton": {"triton"},
-    "megatron-lm": {"megatron-lm", "megatron"},
-    "deepspeed": {"deepspeed"},
-    "vllm": {"vllm"},
-    "tensorrt-llm": {"tensorrt-llm", "tensorrt llm"},
-    "sglang": {"sglang"},
-    "dpo": {"dpo"},
-    "ppo": {"ppo"},
-    "grpo": {"grpo"},
-    "rlhf": {"rlhf"},
-    "mcp": {"mcp", "model context protocol"},
-    "graphrag": {"graphrag", "graph rag"},
-    "flashattention": {"flashattention", "flashattention-2", "flashattention-3"},
-    "pagedattention": {"pagedattention"},
-    "awq": {"awq"},
-    "gptq": {"gptq"},
-    "rope": {"rope"},
-    "mla": {"mla", "multi-head latent attention"},
-}
+@dataclass(frozen=True)
+class ProfileEvidenceIndex:
+    profile: Dict[str, Any]
+    claims: Tuple[EvidenceClaim, ...]
+    skills: Tuple[str, ...]
+    bullets: Tuple[str, ...]
+    metric_anchors: Tuple[Dict[str, Any], ...]
+    claim_by_id: Dict[str, EvidenceClaim]
+    source_paths: Tuple[str, ...]
+    input_quality: Dict[str, Any]
+
+
+from core.registry import AliasRegistry
+
+# Deterministic aliases are centrally governed in AliasRegistry.
+# Maintained for backward compatibility.
+ALIASES: Dict[str, set[str]] = AliasRegistry.all_aliases()
+
 
 
 def _text(value: Any) -> str:
@@ -222,23 +215,13 @@ def canonical_terms(term: str) -> set[str]:
     normalized = _text(term).lower()
     if not normalized:
         return set()
-    for canonical, forms in ALIASES.items():
-        if normalized == canonical or normalized in forms:
-            return {canonical, *forms}
-    return {normalized}
+    return AliasRegistry.get_canonical_terms(normalized)
 
 
 def claim_matches(term: str, claim_text: str) -> bool:
     """Match a requirement without fuzzy substring guesses."""
-    text = _text(claim_text).lower()
-    if not text:
-        return False
-    for candidate in canonical_terms(term):
-        if re.search(r"(?<![a-z0-9])" + re.escape(candidate) + r"(?![a-z0-9])", text):
-            return True
-        if re.search(r"[一-鿿]", candidate) and candidate in text:
-            return True
-    return False
+    return AliasRegistry.claim_matches(term, claim_text)
+
 
 
 def find_evidence(term: str, claims: Iterable[EvidenceClaim]) -> List[EvidenceClaim]:
@@ -308,13 +291,17 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
     """Normalizes candidate profile into the standard SSOT schema.
 
     Supports both full standard profiles (Track 1) and minimal/flat profiles (Track 2).
+    Guarantees idempotence, copy-protection, and non-hallucination of missing fields.
     """
     if not isinstance(raw_profile, dict):
         raise TypeError(f"Expected dict for profile, got {type(raw_profile)}")
 
+    # Deep copy ensures the caller's raw_profile dict is never mutated
+    raw_profile_copy = copy.deepcopy(raw_profile)
+
     # Case A: Profile is already structured with standard top-level 'candidate'
-    if "candidate" in raw_profile and isinstance(raw_profile["candidate"], dict):
-        cand = dict(raw_profile["candidate"])
+    if "candidate" in raw_profile_copy and isinstance(raw_profile_copy["candidate"], dict):
+        cand = dict(raw_profile_copy["candidate"])
         grid = extract_education_grid(cand)
         cand["education_grid"] = grid
         cand["education_rows"] = grid
@@ -330,17 +317,20 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
 
         if "school" not in cand and "institution" in cand:
             cand["school"] = cand["institution"]
-        if "title" not in cand and "title_zh" in cand:
-            cand["title"] = cand["title_zh"]
+        if "title" not in cand:
+            cand["title"] = cand.get("title_zh") or cand.get("title_en") or ""
+        elif cand["title"] is None:
+            cand["title"] = ""
         if "reserve_photo" not in cand:
             cand["reserve_photo"] = True
 
         norm_exp = []
-        for e in raw_profile.get("experience", []):
+        for e in raw_profile_copy.get("experience", []):
             if not isinstance(e, dict):
                 continue
             e_copy = dict(e)
-            org = e_copy.get("org") or e_copy.get("company", "")
+            org = e_copy.get("org") or e_copy.get("company") or e_copy.get("organization", "")
+            role = e_copy.get("role") or e_copy.get("title", "")
             time_str = e_copy.get("time") or e_copy.get("period", "")
             bullets = list(e_copy.get("bullets", []))
             if not bullets and e_copy.get("highlights"):
@@ -353,22 +343,27 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
                         bullets.append(txt)
             e_copy["org"] = org
             e_copy["company"] = org
+            e_copy["role"] = role
             e_copy["time"] = time_str
             e_copy["period"] = time_str
             e_copy["bullets"] = bullets
             norm_exp.append(e_copy)
 
         norm_proj = []
-        for p in raw_profile.get("projects", []):
+        for p in raw_profile_copy.get("projects", []):
             if not isinstance(p, dict):
                 continue
             p_copy = dict(p)
+            p_name = p_copy.get("name") or p_copy.get("title") or "校园经历"
+            p_role = p_copy.get("role", "")
             time_str = p_copy.get("time") or p_copy.get("period", "")
             bullets = list(p_copy.get("bullets", []))
             if not bullets:
                 desc = p_copy.get("description_zh") or p_copy.get("description", "")
                 if desc:
                     bullets.append(desc)
+            p_copy["name"] = p_name
+            p_copy["role"] = p_role
             p_copy["time"] = time_str
             p_copy["period"] = time_str
             p_copy["bullets"] = bullets
@@ -376,25 +371,28 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
 
         return {
             "candidate": cand,
-            "competencies": raw_profile.get("competencies", {}),
+            "competencies": raw_profile_copy.get("competencies", {}),
             "experience": norm_exp,
             "projects": norm_proj,
-            "publications": raw_profile.get("publications", []),
-            "narrative": raw_profile.get("narrative", {}),
+            "publications": raw_profile_copy.get("publications", []),
+            "narrative": raw_profile_copy.get("narrative", {}),
         }
 
     # Case B: Minimal / Flat profile format (Track 2 / Career Review input)
-    cand_name = raw_profile.get("name") or raw_profile.get("candidate_name") or "候选人"
-    title = raw_profile.get("intent") or raw_profile.get("target_role") or raw_profile.get("title") or "运营岗"
-    phone = raw_profile.get("phone", "")
-    email = raw_profile.get("email", "")
-    location = raw_profile.get("city") or raw_profile.get("location", "")
+    cand_name = raw_profile_copy.get("name") or raw_profile_copy.get("candidate_name") or "候选人"
+    # Never hallucinate default title to "运营岗"; if not provided, default to ""
+    title = raw_profile_copy.get("intent") or raw_profile_copy.get("target_role") or raw_profile_copy.get("title") or ""
+    phone = raw_profile_copy.get("phone", "")
+    email = raw_profile_copy.get("email", "")
+    location = raw_profile_copy.get("city") or raw_profile_copy.get("location", "")
 
-    edu = raw_profile.get("education", {})
-    school = edu.get("school", "")
+    edu = raw_profile_copy.get("education", {})
+    if not isinstance(edu, dict):
+        edu = {}
+    school = edu.get("school") or edu.get("institution", "")
     major = edu.get("major", "")
-    degree = edu.get("degree", "")
-    edu_time = edu.get("time", "")
+    degree = edu.get("degree") or edu.get("education_level", "")
+    edu_time = edu.get("time") or edu.get("period", "")
 
     grid = extract_education_grid(edu)
     edu_badges = list(edu.get("education_badges", []))
@@ -403,68 +401,307 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
             edu_badges.extend(r)
 
     # Experience normalization
-    raw_exp = raw_profile.get("experience") or raw_profile.get("internships", [])
+    raw_exp = raw_profile_copy.get("experience") or raw_profile_copy.get("internships", [])
     norm_exp = []
     for e in raw_exp:
-        org = e.get("company") or e.get("org") or e.get("organization", "")
-        role = e.get("role") or e.get("title", "")
-        time_str = e.get("time") or e.get("period", "")
-        bullets = e.get("bullets", [])
-        norm_exp.append({
-            "org": org,
-            "company": org,
-            "role": role,
-            "time": time_str,
-            "bullets": bullets,
-        })
+        if not isinstance(e, dict):
+            continue
+        e_copy = dict(e)
+        org = e_copy.get("company") or e_copy.get("org") or e_copy.get("organization", "")
+        role = e_copy.get("role") or e_copy.get("title", "")
+        time_str = e_copy.get("time") or e_copy.get("period", "")
+        bullets = list(e_copy.get("bullets", []))
+        if not bullets and e_copy.get("highlights"):
+            for h in e_copy["highlights"]:
+                if isinstance(h, dict):
+                    txt = h.get("claim_zh") or h.get("claim_en") or h.get("text") or ""
+                else:
+                    txt = str(h)
+                if txt and txt not in bullets:
+                    bullets.append(txt)
+        e_copy["org"] = org
+        e_copy["company"] = org
+        e_copy["role"] = role
+        e_copy["time"] = time_str
+        e_copy["period"] = time_str
+        e_copy["bullets"] = bullets
+        norm_exp.append(e_copy)
 
     # Projects / Campus normalization
-    raw_proj = raw_profile.get("projects") or raw_profile.get("campus_experience", [])
+    raw_proj = raw_profile_copy.get("projects") or raw_profile_copy.get("campus_experience", [])
     norm_proj = []
     for p in raw_proj:
-        p_name = p.get("name") or p.get("title") or "校园经历"
-        p_role = p.get("role", "")
-        p_time = p.get("time") or p.get("period", "")
-        bullets = p.get("bullets", [])
-        norm_proj.append({
-            "name": p_name,
-            "role": p_role,
-            "time": p_time,
-            "bullets": bullets,
-        })
+        if not isinstance(p, dict):
+            continue
+        p_copy = dict(p)
+        p_name = p_copy.get("name") or p_copy.get("title") or "校园经历"
+        p_role = p_copy.get("role", "")
+        time_str = p_copy.get("time") or p_copy.get("period", "")
+        bullets = list(p_copy.get("bullets", []))
+        if not bullets:
+            desc = p_copy.get("description_zh") or p_copy.get("description", "")
+            if desc:
+                bullets.append(desc)
+        p_copy["name"] = p_name
+        p_copy["role"] = p_role
+        p_copy["time"] = time_str
+        p_copy["period"] = time_str
+        p_copy["bullets"] = bullets
+        norm_proj.append(p_copy)
 
     # Competencies normalization
-    competencies = raw_profile.get("competencies") or raw_profile.get("skills", {})
+    competencies = raw_profile_copy.get("competencies") or raw_profile_copy.get("skills", {})
 
     clean_degree = f"{major}  {degree}" if major and degree else (degree or major)
     clean_degree = re.sub(r"\s*[｜|·]\s*", "  ", clean_degree).strip()
 
+    cand_dict: Dict[str, Any] = {
+        "name": cand_name,
+        "title": title,
+        "phone": phone,
+        "email": email,
+        "location": location,
+        "school": school,
+        "major": major,
+        "degree": clean_degree,
+        "edu_time": edu_time,
+        "education_badges": edu_badges,
+        "education_rows": grid,
+        "education_grid": grid,
+        "reserve_photo": True,
+    }
+    yoe = raw_profile_copy.get("years_of_experience")
+    if yoe is None:
+        yoe = raw_profile_copy.get("experience_years")
+    if yoe is not None:
+        cand_dict["years_of_experience"] = yoe
+
     return {
-        "candidate": {
-            "name": cand_name,
-            "title": title,
-            "phone": phone,
-            "email": email,
-            "location": location,
-            "school": school,
-            "major": major,
-            "degree": clean_degree,
-            "edu_time": edu_time,
-            "education_badges": edu_badges,
-            "education_rows": grid,
-            "education_grid": grid,
-            "reserve_photo": True,
-        },
+        "candidate": cand_dict,
         "competencies": competencies,
         "experience": norm_exp,
         "projects": norm_proj,
-        "publications": raw_profile.get("publications", []),
-        "narrative": raw_profile.get("narrative", {}),
+        "publications": raw_profile_copy.get("publications", []),
+        "narrative": raw_profile_copy.get("narrative", {}),
     }
+
+
+def build_profile_evidence_index(raw_profile: Dict[str, Any]) -> ProfileEvidenceIndex:
+    """Builds an immutable, single-source-of-truth evidence index from a candidate profile."""
+    if not isinstance(raw_profile, dict):
+        raise TypeError(f"Expected dict for profile, got {type(raw_profile)}")
+
+    # 1. Normalize profile (copy-protected and idempotent)
+    profile = normalize_candidate_profile(raw_profile)
+
+    # 2. Extract claims via canonical iter_profile_claims
+    extracted_claims = iter_profile_claims(profile)
+    claims_tuple = tuple(extracted_claims)
+
+    # 3. Build claim_by_id map and source_paths tuple
+    claim_by_id: Dict[str, EvidenceClaim] = {}
+    for c in claims_tuple:
+        if c.claim_id not in claim_by_id:
+            claim_by_id[c.claim_id] = c
+    source_paths = tuple(c.source_path for c in claims_tuple)
+
+    # 4. Extract skills (deduplicated, order-preserving)
+    skills_list: List[str] = []
+    seen_skills: Set[str] = set()
+
+    def _add_skill(s: Any) -> None:
+        if not s:
+            return
+        s_str = str(s).strip()
+        if s_str and s_str not in seen_skills:
+            seen_skills.add(s_str)
+            skills_list.append(s_str)
+
+    # From competencies
+    comp = profile.get("competencies")
+    if isinstance(comp, dict):
+        for vals in comp.values():
+            if isinstance(vals, list):
+                for v in vals:
+                    _add_skill(v)
+            elif vals:
+                _add_skill(vals)
+    elif isinstance(comp, list):
+        for v in comp:
+            _add_skill(v)
+
+    # From skills
+    sk = profile.get("skills")
+    if isinstance(sk, list):
+        for v in sk:
+            _add_skill(v)
+    elif isinstance(sk, dict):
+        for vals in sk.values():
+            if isinstance(vals, list):
+                for v in vals:
+                    _add_skill(v)
+            elif vals:
+                _add_skill(vals)
+
+    skills_tuple = tuple(skills_list)
+
+    # 5. Extract bullets (narrative summaries, experience highlights/bullets, project descriptions/bullets)
+    bullets_list: List[str] = []
+    seen_bullets: Set[str] = set()
+
+    def _add_bullet(b: Any) -> None:
+        if not b:
+            return
+        b_str = str(b).strip()
+        if b_str and b_str not in seen_bullets:
+            seen_bullets.add(b_str)
+            bullets_list.append(b_str)
+
+    narrative = profile.get("narrative")
+    if isinstance(narrative, dict):
+        for k in ("summary_zh", "summary_en"):
+            _add_bullet(narrative.get(k))
+
+    for exp in profile.get("experience", []):
+        if not isinstance(exp, dict):
+            continue
+        for b in exp.get("bullets", []):
+            _add_bullet(b)
+        for h in exp.get("highlights", []):
+            if isinstance(h, dict):
+                _add_bullet(h.get("claim_zh"))
+                _add_bullet(h.get("claim_en"))
+                _add_bullet(h.get("text"))
+            else:
+                _add_bullet(h)
+
+    for proj in profile.get("projects", []):
+        if not isinstance(proj, dict):
+            continue
+        for b in proj.get("bullets", []):
+            _add_bullet(b)
+        _add_bullet(proj.get("description_zh"))
+        _add_bullet(proj.get("description_en"))
+        _add_bullet(proj.get("description"))
+
+    bullets_tuple = tuple(bullets_list)
+
+    # 6. Extract metric anchors
+    metric_anchors_list: List[Dict[str, Any]] = []
+
+    # Candidate level (e.g. years_of_experience)
+    cand = profile.get("candidate", {})
+    if isinstance(cand, dict) and cand.get("years_of_experience") is not None:
+        metric_anchors_list.append({
+            "source_path": "candidate.years_of_experience",
+            "claim_id": "candidate.years_of_experience",
+            "name": "years_of_experience",
+            "value": cand.get("years_of_experience"),
+            "raw": str(cand.get("years_of_experience")),
+        })
+
+    # Experience highlights verified_metrics
+    for exp_idx, exp in enumerate(profile.get("experience", [])):
+        if not isinstance(exp, dict):
+            continue
+        for hl_idx, hl in enumerate(exp.get("highlights", [])):
+            if isinstance(hl, dict):
+                claim_id = str(hl.get("claim_id") or f"experience[{exp_idx}].highlights[{hl_idx}]")
+                v_metrics = hl.get("verified_metrics")
+                if isinstance(v_metrics, dict):
+                    for k, v in v_metrics.items():
+                        metric_anchors_list.append({
+                            "source_path": f"experience[{exp_idx}].highlights[{hl_idx}].verified_metrics.{k}",
+                            "claim_id": claim_id,
+                            "name": k,
+                            "value": v,
+                            "raw": str(v),
+                        })
+
+    # Project verified_metrics / stars
+    for proj_idx, proj in enumerate(profile.get("projects", [])):
+        if not isinstance(proj, dict):
+            continue
+        proj_name = str(proj.get("name") or f"projects[{proj_idx}]")
+        if proj.get("stars") is not None:
+            metric_anchors_list.append({
+                "source_path": f"projects[{proj_idx}].stars",
+                "claim_id": f"{proj_name}:stars",
+                "name": "stars",
+                "value": proj.get("stars"),
+                "raw": str(proj.get("stars")),
+            })
+        if isinstance(proj.get("verified_metrics"), dict):
+            for k, v in proj["verified_metrics"].items():
+                metric_anchors_list.append({
+                    "source_path": f"projects[{proj_idx}].verified_metrics.{k}",
+                    "claim_id": proj_name,
+                    "name": k,
+                    "value": v,
+                    "raw": str(v),
+                })
+        for b_idx, b in enumerate(proj.get("bullets", [])):
+            if isinstance(b, dict) and isinstance(b.get("verified_metrics"), dict):
+                for k, v in b["verified_metrics"].items():
+                    metric_anchors_list.append({
+                        "source_path": f"projects[{proj_idx}].bullets[{b_idx}].verified_metrics.{k}",
+                        "claim_id": str(b.get("claim_id") or f"projects[{proj_idx}].bullets[{b_idx}]"),
+                        "name": k,
+                        "value": v,
+                        "raw": str(v),
+                    })
+
+    metric_anchors_tuple = tuple(metric_anchors_list)
+
+    # 7. Input quality assessment
+    cand_obj = profile.get("candidate", {}) if isinstance(profile.get("candidate"), dict) else {}
+    unknown_experience = cand_obj.get("years_of_experience") is None
+    degree_val = cand_obj.get("degree") or cand_obj.get("education_level") or ""
+    unknown_education = not bool(str(degree_val).strip())
+    major_val = cand_obj.get("major") or ""
+    unknown_major = not bool(str(major_val).strip())
+    title_val = cand_obj.get("title") or cand_obj.get("title_zh") or ""
+    unknown_title = not bool(str(title_val).strip())
+
+    unknown_fields: List[str] = []
+    if unknown_education:
+        unknown_fields.append("education")
+    if unknown_experience:
+        unknown_fields.append("years_of_experience")
+    if unknown_major:
+        unknown_fields.append("major")
+    if unknown_title:
+        unknown_fields.append("title")
+
+    input_quality = {
+        "evidence_claim_count": len(claims_tuple),
+        "total_skills": len(skills_tuple),
+        "total_bullets": len(bullets_tuple),
+        "total_metric_anchors": len(metric_anchors_tuple),
+        "unknown_experience": unknown_experience,
+        "unknown_education": unknown_education,
+        "unknown_major": unknown_major,
+        "unknown_title": unknown_title,
+        "unknown_fields": unknown_fields,
+        "profile_fact_policy": "missing facts remain unknown",
+    }
+
+    return ProfileEvidenceIndex(
+        profile=profile,
+        claims=claims_tuple,
+        skills=skills_tuple,
+        bullets=bullets_tuple,
+        metric_anchors=metric_anchors_tuple,
+        claim_by_id=claim_by_id,
+        source_paths=source_paths,
+        input_quality=input_quality,
+    )
 
 
 __all__ = [
     "EvidenceClaim",
+    "ProfileEvidenceIndex",
+    "build_profile_evidence_index",
     "iter_profile_claims",
     "find_evidence",
     "claim_matches",

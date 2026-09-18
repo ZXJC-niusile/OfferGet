@@ -25,21 +25,20 @@ import base64
 import json
 import os
 import re
-import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-# Ensure OfferGet and ApexResume are in sys.path
-CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-if str(PROJECT_ROOT / "ApexResume") not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT / "ApexResume"))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from core.profile_adapter import normalize_candidate_profile
 from core.academic_exporter import AcademicExporter
+from core.security_gate import (
+    escape_html_text,
+    escape_html_attribute,
+    sanitize_url,
+    validate_output_security,
+)
 
 try:
     from ApexResume.core.render import BrowserRenderer
@@ -57,29 +56,12 @@ except ImportError:
         ResumeAuditor = None  # type: ignore
 
 
-def _image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional[str]:
-    """Reads a local image file (jpg/png/webp) and returns a base64 data URI."""
-    if not image_path:
-        return None
-    p = Path(image_path).resolve()
-    if not p.is_file():
-        return None
-    suffix = p.suffix.lower()
-    mime_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-    }
-    mime_type = mime_types.get(suffix, "image/jpeg")
-    try:
-        data = p.read_bytes()
-        b64 = base64.b64encode(data).decode("ascii")
-        return f"data:{mime_type};base64,{b64}"
-    except Exception:
-        return None
+from core.resume_view_model import (
+    ResumeViewModel,
+    HtmlThemeRenderer,
+    AtsPlainRenderer,
+    _image_to_base64_data_uri,
+)
 
 
 
@@ -128,6 +110,13 @@ class ResumeBuilder:
         self.renderer = renderer or BrowserRenderer()
         self.autofit_engine = autofit_engine or AutoFitEngine(self.renderer)
 
+        self.html_renderer = HtmlThemeRenderer()
+        self.ats_renderer = AtsPlainRenderer()
+        self.view_model: ResumeViewModel = ResumeViewModel.from_profile(
+            self.profile,
+            photo_path=self.photo_path,
+        )
+
     def _resolve_profile(self, anonymize: Optional[str] = None) -> Dict[str, Any]:
         """Resolves profile data, applying privacy anonymization if requested."""
         level = anonymize if anonymize is not None else self.anonymize
@@ -143,203 +132,24 @@ class ResumeBuilder:
 
     def _render_sections_html(self, theme_name: str, profile: Optional[Dict[str, Any]] = None) -> str:
         """Renders standard HTML sections for HTML-based themes."""
-        prof = profile or self.profile
-        cand = prof.get("candidate", {})
-        exp_list = prof.get("experience", [])
-        proj_list = prof.get("projects", [])
-        comps = prof.get("competencies", {})
-
-        from core.profile_adapter import extract_education_grid
-        grid = extract_education_grid(cand)
-        max_cols = max((len(r) for r in grid), default=1)
-        if max_cols >= 3:
-            col_template = "38% 28% 1fr"
-        elif max_cols == 2:
-            col_template = "45% 1fr"
+        if profile is not None:
+            vm = ResumeViewModel.from_profile(profile, photo_path=self.photo_path)
         else:
-            col_template = "1fr"
-
-        grid_cells_html = []
-        for r in grid:
-            for i in range(max_cols):
-                cell_text = r[i] if i < len(r) else ""
-                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                grid_cells_html.append(f'<div>{cell_clean}</div>')
-
-        edu_grid_html = f"""
-      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3.5px; font-size:11.2px; color:var(--color-muted, #4B5563); line-height:1.54; margin-top:3.5px;">
-        {"".join(grid_cells_html)}
-      </div>"""
-
-        sections = []
-
-        school_str = cand.get('school', '')
-        degree_str = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get('degree', ''))).strip()
-        role_span = f'<span class="org-role" style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{degree_str}</span>' if degree_str else ''
-
-        # 1. Education
-        edu_html = f"""
-    <section id="education">
-      <div class="section-header">
-        <h2>教育背景</h2>
-        <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-      </div>
-      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:3px;">
-        <div class="org-left" style="display:flex; align-items:baseline; gap:16px;">
-          <span class="org-title" style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{school_str}</span>
-          {role_span}
-        </div>
-        <div class="org-right" style="font-size:11.0px; color:var(--color-muted, #64748B);">{cand.get('edu_time', '')}</div>
-      </div>
-      {edu_grid_html}
-    </section>
-    """
-        sections.append(edu_html)
-
-        # 2. Experience
-        if exp_list:
-            exp_parts = ["""
-        <section id="experience">
-          <div class="section-header">
-            <h2>实习经历</h2>
-            <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-          </div>
-        """]
-            for exp in exp_list:
-                dept_str = exp.get("dept", "")
-                role_str = exp.get("role", "")
-                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
-                formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in exp.get("bullets", [])]
-                bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
-                exp_parts.append(f"""
-            <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:7px; margin-bottom:3px;">
-              <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
-                <span class="org-title" style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{exp.get('org', '')}</span>
-                <span class="org-role" style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{role_label}</span>
-              </div>
-              <div class="org-right" style="font-size:11.0px; color:var(--color-muted, #64748B);">{exp.get('time', '')}</div>
-            </div>
-            <ul>{bullets_li}</ul>
-            """)
-            exp_parts.append("</section>")
-            sections.append("\n".join(exp_parts))
-
-        # 3. Projects & Campus
-        if proj_list:
-            proj_parts = ["""
-        <section id="projects">
-          <div class="section-header">
-            <h2>校园与实践经历</h2>
-            <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-          </div>
-        """]
-            for proj in proj_list:
-                formatted_bullets = [re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", b) for b in proj.get("bullets", [])]
-                bullets_li = "".join([f"<li>{b}</li>" for b in formatted_bullets])
-                proj_parts.append(f"""
-            <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:7px; margin-bottom:3px;">
-              <div style="display:flex; align-items:baseline; gap:8px;">
-                <span style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{proj.get('name', '')}</span>
-                <span style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{proj.get('role', '')}</span>
-              </div>
-              <div style="font-size:11.0px; color:var(--color-muted, #64748B);">{proj.get('time', '')}</div>
-            </div>
-            <ul>{bullets_li}</ul>
-            """)
-            proj_parts.append("</section>")
-            sections.append("\n".join(proj_parts))
-
-        # 4. Competencies
-        if comps:
-            skill_rows = []
-            for k, v in comps.items():
-                val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                val_formatted = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", val)
-                skill_rows.append(f"""
-            <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:4.5px; line-height:1.58; font-size:11.6px;">
-              <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">{k}：</span>
-              <span style="color:var(--color-text, #1E293B);">{val_formatted}</span>
-            </li>
-            """)
-            skills_html = f"""
-        <section id="skills">
-          <div class="section-header">
-            <h2>专业技能</h2>
-            <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-          </div>
-          <ul style="list-style:none; padding-left:0; margin-top:4px;">
-            {"".join(skill_rows)}
-          </ul>
-        </section>
-        """
-            sections.append(skills_html)
-
-        return "\n".join(sections)
+            vm = self.view_model
+        return self.html_renderer.render_sections(vm, theme_name=theme_name)
 
     def _render_header_html(
         self,
         theme_name: str,
-        photo: bool,
+        photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         profile: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Builds header markup with optional photo placeholder."""
         prof = profile or self.profile
-        cand = prof.get("candidate", {})
-        name = cand.get("name", "")
-        title = cand.get("title", "")
-        phone = cand.get("phone", "")
-        email = cand.get("email", "")
-        location = cand.get("location", "")
-
         eff_photo_path = photo_path or self.photo_path
-        cand_photo_pref = cand.get("reserve_photo", None)
-        if cand_photo_pref is not None:
-            photo_enabled = cand_photo_pref or (eff_photo_path is not None)
-        else:
-            photo_enabled = photo or (eff_photo_path is not None)
-
-        photo_html = ""
-        if photo_enabled:
-            data_uri = _image_to_base64_data_uri(eff_photo_path)
-            if data_uri:
-                photo_html = f"""
-      <div class="photo-placeholder" style="width:72px; height:96px; border:none !important; outline:none !important; box-shadow:none !important; background:transparent; border-radius:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;" title="证件照">
-        <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-        <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
-          <span style="font-size:8.5px; color:var(--color-muted, #64748B); line-height:1.2;">预留证件照<br>一寸 / 二寸</span>
-        </div>
-      </div>
-                """
-            else:
-                photo_html = """
-      <div class="photo-placeholder" style="width:72px; height:96px; border:1.5px dashed var(--color-border, #CBD5E1); background:var(--color-bg-subtle, #F8FAFC); border-radius:3px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; flex-shrink:0;" title="预留证件照位置">
-        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
-          <span style="font-size:8.5px; color:var(--color-muted, #64748B); line-height:1.2;">预留证件照<br>一寸 / 二寸</span>
-        </div>
-      </div>
-                """
-
-        loc_str = f"<span>•</span><span>{location}</span>" if location else ""
-        title_html = f'<span style="font-size:12px; font-weight:600; color:var(--color-accent, #0284C7);">求职意向：{title}</span>' if title else ''
-
-        return f"""
-    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1.5px solid var(--color-primary, #0F172A); padding-bottom:5px;">
-      <div style="flex:1; padding-right:12px;">
-        <div class="header-top" style="display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;">
-          <h1 style="font-size:22px; font-weight:700; margin-bottom:2px;">{name}</h1>
-          {title_html}
-        </div>
-        <div class="contacts" style="display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;">
-          <span>{phone}</span>
-          <span>•</span>
-          <span><a href="mailto:{email}" style="color:inherit; text-decoration:none;">{email}</a></span>
-          {loc_str}
-        </div>
-      </div>
-      {photo_html}
-    </header>
-    """
+        vm = ResumeViewModel.from_profile(prof, photo_path=eff_photo_path, reserve_photo=photo)
+        return self.html_renderer.render_header(vm, theme_name=theme_name)
 
     def build_html_theme(
         self,
@@ -357,31 +167,18 @@ class ResumeBuilder:
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        template_file = self.template_dir / f"{theme_name}.html"
-        if not template_file.exists():
-            # Fallback to ApexResume/themes
-            template_file = PROJECT_ROOT / "ApexResume" / "themes" / f"{theme_name}.html"
-        if not template_file.exists():
-            raise FileNotFoundError(f"Template not found for theme {theme_name}")
-
-        raw_template = template_file.read_text(encoding="utf-8")
-        header_html = self._render_header_html(theme_name, photo, photo_path=eff_photo_path, profile=prof)
-        sections_html = self._render_sections_html(theme_name, profile=prof)
-
-        header_regex = re.compile(r"<header>.*?</header>", re.DOTALL)
-        if header_regex.search(raw_template):
-            populated_html = header_regex.sub(header_html, raw_template)
-        else:
-            populated_html = raw_template
-
-        populated_html = populated_html.replace("{{SECTIONS_CONTENT}}", sections_html)
+        vm = ResumeViewModel.from_profile(prof, photo_path=eff_photo_path, reserve_photo=photo)
+        populated_html = self.html_renderer.render(
+            vm=vm,
+            theme_name=theme_name,
+            template_dir=self.template_dir,
+        )
 
         clean_theme_name = theme_name.replace("-", "_")
         html_path = out_dir / f"resume_{clean_theme_name}.html"
         pdf_path = out_dir / f"resume_{clean_theme_name}.pdf"
 
         if autofit:
-            # Write to a temporary file for AutoFit engine
             with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as tmp:
                 tmp.write(populated_html)
                 tmp_path = Path(tmp.name)
@@ -421,246 +218,16 @@ class ResumeBuilder:
 
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
-        cand = prof.get("candidate", {})
-        cand_photo_pref = cand.get("reserve_photo", None)
-        if cand_photo_pref is not None:
-            photo_enabled = cand_photo_pref or (eff_photo_path is not None)
-        else:
-            photo_enabled = photo or (eff_photo_path is not None)
-        comps = prof.get("competencies", {})
-        exp_list = prof.get("experience", [])
-        proj_list = prof.get("projects", [])
+        vm = ResumeViewModel.from_profile(prof, photo_path=eff_photo_path, reserve_photo=photo)
 
-        from core.profile_adapter import extract_education_grid
-        grid = extract_education_grid(cand)
-        max_cols = max((len(r) for r in grid), default=1)
-        if max_cols >= 3:
-            col_template = "38% 28% 1fr"
-        elif max_cols == 2:
-            col_template = "45% 1fr"
-        else:
-            col_template = "1fr"
-
-        grid_cells_html = []
-        for r in grid:
-            for i in range(max_cols):
-                cell_text = r[i] if i < len(r) else ""
-                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                grid_cells_html.append(f'<div>{cell_clean}</div>')
-
-        school_str = cand.get('school', '')
-        degree_str = re.sub(r"\s*[｜|·]\s*", "  ", str(cand.get('degree', ''))).strip()
-        edu_time_str = cand.get('edu_time', '')
-        head_edu = f"{school_str}    {degree_str}" if degree_str else school_str
-        head_edu_full = f"{head_edu}    {edu_time_str}" if edu_time_str else head_edu
-
-        # 1. Markdown file
-        photo_tag = f" | 照片：{eff_photo_path}" if (photo_enabled and eff_photo_path) else (" | 照片：预留证件照位置" if photo_enabled else "")
-        ats_title = cand.get('title', '')
-        md_lines = [
-            f"# {cand.get('name', '')}",
-        ]
-        if ats_title:
-            md_lines.append(f"求职意向：{ats_title}")
-        md_lines.extend([
-            f"电话：{cand.get('phone', '')} | 邮箱：{cand.get('email', '')} | {cand.get('location', '')}{photo_tag}",
-            "",
-            "---",
-            "",
-            "## 教育背景",
-            f"### {head_edu_full}",
-        ])
-        for r in grid:
-            c1 = r[0] if len(r) > 0 else ""
-            c2 = r[1] if len(r) > 1 else ""
-            c3 = r[2] if len(r) > 2 else ""
-            c1_clean = re.sub(r"\s*[｜|]\s*", " ", c1).strip()
-            c2_clean = re.sub(r"\s*[｜|]\s*", " ", c2).strip()
-            c3_clean = re.sub(r"\s*[｜|]\s*", " ", c3).strip()
-            w1 = sum(2 if ord(ch) > 127 else 1 for ch in c1_clean)
-            pad1 = max(4, 32 - w1)
-            w2 = sum(2 if ord(ch) > 127 else 1 for ch in c2_clean)
-            pad2 = max(4, 20 - w2)
-            line = f"{c1_clean}{' ' * pad1}{c2_clean}{' ' * pad2}{c3_clean}".rstrip()
-            md_lines.append(f"{line}  ")
-
-        if exp_list:
-            md_lines.extend(["", "---", "", "## 实习经历"])
-            for exp in exp_list:
-                dept_str = exp.get("dept", "")
-                role_str = exp.get("role", "")
-                role_label = f"{dept_str} ｜ {role_str}" if dept_str else role_str
-                md_lines.extend([
-                    f"### {exp.get('org', '')} ｜ {role_label}",
-                    f"**任职时间**：{exp.get('time', '')}",
-                    "",
-                ])
-                for b in exp.get("bullets", []):
-                    md_lines.append(f"- {b}")
-                md_lines.append("")
-
-        if proj_list:
-            md_lines.extend(["---", "", "## 校园与实践经历"])
-            for proj in proj_list:
-                md_lines.extend([
-                    f"### {proj.get('name', '')} ｜ {proj.get('role', '')}",
-                    f"**时间**：{proj.get('time', '')}",
-                    "",
-                ])
-                for b in proj.get("bullets", []):
-                    md_lines.append(f"- {b}")
-                md_lines.append("")
-
-        if comps:
-            md_lines.extend(["---", "", "## 专业技能"])
-            for k, v in comps.items():
-                val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                md_lines.append(f"- **{k}：**{val}")
-            md_lines.append("")
+        md_content = self.ats_renderer.render_markdown(vm)
+        html_content = self.ats_renderer.render_html(vm)
 
         md_path = out_dir / "resume_ats_plain.md"
-        md_path.write_text("\n".join(md_lines), encoding="utf-8")
-
-        # 2. ATS Single-Column Clean HTML
-        photo_box = ""
-        if photo_enabled:
-            data_uri = _image_to_base64_data_uri(eff_photo_path)
-            if data_uri:
-                photo_box = f"""
-    <div style="width: 72px; height: 96px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{data_uri}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-      <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
-        <span style="font-size: 8pt; color: #4b5563; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
-      </div>
-    </div>
-                """
-            else:
-                photo_box = """
-    <div style="width: 72px; height: 96px; border: 1.5px dashed #4b5563; background: #f9fafb; border-radius: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="预留证件照位置">
-      <span style="font-size: 8pt; color: #4b5563; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
-    </div>
-                """
-
-        ats_html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <title>Resume - ATS Plain ({cand.get('name', '')})</title>
-  <style>
-    @page {{
-      size: A4 portrait;
-      margin: 10mm 12mm;
-    }}
-    * {{
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }}
-    body {{
-      font-family: Arial, Helvetica, "SimSun", sans-serif;
-      font-size: 9.8pt;
-      line-height: 1.46;
-      color: #000000;
-      background: #FFFFFF;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }}
-    .header {{
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 7pt;
-      border-bottom: 1pt solid #000000;
-      padding-bottom: 4pt;
-    }}
-    h1 {{
-      font-size: 18.5pt;
-      font-weight: bold;
-      margin: 0 0 2pt 0;
-    }}
-    .contact {{
-      font-size: 9.8pt;
-      color: #222222;
-    }}
-    h2 {{
-      font-size: 11.2pt;
-      font-weight: bold;
-      border-bottom: 0.8pt solid #333333;
-      padding-bottom: 1.5pt;
-      margin-top: 7pt;
-      margin-bottom: 3.5pt;
-      text-transform: uppercase;
-    }}
-    .item-header {{
-      display: flex;
-      justify-content: space-between;
-      font-size: 10.2pt;
-      font-weight: bold;
-      margin-top: 4.5pt;
-    }}
-    ul {{
-      margin: 2pt 0 4pt 0;
-      padding-left: 16pt;
-    }}
-    li {{
-      font-size: 9.8pt;
-      margin-bottom: 2.2pt;
-      text-align: justify;
-      line-height: 1.44;
-    }}
-  </style>
-</head>
-<body>
-  <div class="header">
-      <div>
-        <h1>{cand.get('name', '')}</h1>
-        {'<div style="font-size: 11pt; font-weight: bold; margin-bottom: 3pt;">求职意向：' + cand.get('title', '') + '</div>' if cand.get('title', '') else ''}
-        <div class="contact">
-          电话：{cand.get('phone', '')} &nbsp;|&nbsp; 邮箱：{cand.get('email', '')} &nbsp;|&nbsp; {cand.get('location', '')}
-        </div>
-      </div>
-    {photo_box}
-  </div>
-
-  <h2>教育背景</h2>
-  <div class="item-header">
-    <span>{school_str} &nbsp;&nbsp;&nbsp;&nbsp; {degree_str}</span>
-    <span>{edu_time_str}</span>
-  </div>
-  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2pt; font-size:9.5pt; line-height:1.4; margin-top:2pt; margin-bottom:3pt;">
-    {"".join(grid_cells_html)}
-  </div>
-"""
-        if exp_list:
-            ats_html += "  <h2>实习经历</h2>\n"
-            for exp in exp_list:
-                dept_str = exp.get("dept", "")
-                role_str = exp.get("role", "")
-                role_label = f"{dept_str} · {role_str}" if dept_str else role_str
-                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in exp.get("bullets", [])])
-                ats_html += f"""  <div class='item-header'><span>{exp.get('org', '')} · {role_label}</span><span>{exp.get('time', '')}</span></div>
-  <ul>{bullets}</ul>
-"""
-
-        if proj_list:
-            ats_html += "  <h2>校园与实践经历</h2>\n"
-            for p in proj_list:
-                bullets = "".join([f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', b)}</li>" for b in p.get("bullets", [])])
-                ats_html += f"""  <div class='item-header'><span>{p.get('name', '')} · {p.get('role', '')}</span><span>{p.get('time', '')}</span></div>
-  <ul>{bullets}</ul>
-"""
-
-        if comps:
-            ats_html += "  <h2>专业技能</h2>\n  <ul>"
-            for k, v in comps.items():
-                val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                ats_html += f"<li><b>{k}：</b>{val}</li>"
-            ats_html += "</ul>\n"
-
-        ats_html += "</body>\n</html>"
+        md_path.write_text(md_content, encoding="utf-8")
 
         html_path = out_dir / "resume_ats_plain.html"
-        html_path.write_text(ats_html, encoding="utf-8")
+        html_path.write_text(html_content, encoding="utf-8")
 
         pdf_path = out_dir / "resume_ats_plain.pdf"
         self.renderer.render_pdf(html_path, pdf_path)
@@ -892,39 +459,17 @@ def audit_resume_quality(
         checks["placeholders"]["count"] = len(placeholder_issues)
         checks["placeholders"]["issues"] = placeholder_issues
 
-    # 3. Check for dangerous tags (Security / XSS gate)
-    dangerous_tag_patterns = [
-        (r"<script\b", "Script tag (<script>)"),
-        (r"<iframe\b", "Inline frame (<iframe>)"),
-        (r"<object\b", "Embedded object (<object>)"),
-        (r"<embed\b", "Plugin embed (<embed>)"),
-        (r"<form\b", "Interactive form (<form>)"),
-        (r"href\s*=\s*[\"']javascript:", "javascript: URI scheme in anchor"),
-    ]
+    # 3. Check for dangerous tags (Security / XSS gate via validate_output_security)
+    sec_violations = validate_output_security(content, format_type="html")
     dangerous_violations = []
-    for pat, desc in dangerous_tag_patterns:
-        if re.search(pat, content, re.IGNORECASE):
-            dangerous_violations.append(desc)
-            extra_findings.append({
-                "category": "security",
-                "severity": "critical",
-                "message": f"Dangerous HTML pattern detected: {desc}",
-                "target": str(path),
-                "details": {"pattern": pat},
-            })
-
-    # Check for unauthorized event handlers (allow benign onerror fallback)
-    for handler_match in re.finditer(r"\b(on\w+)\s*=\s*[\"'](.*?)[\"']", content, re.IGNORECASE):
-        event_name = handler_match.group(1).lower()
-        event_code = handler_match.group(2)
-        if event_name == "onerror" and ("display" in event_code and "style" in event_code):
-            # Benign image onerror fallback
+    for viol in sec_violations:
+        if "placeholder" in viol.lower():
             continue
-        dangerous_violations.append(f"Inline event handler '{event_name}' with suspicious code: {event_code[:30]}")
+        dangerous_violations.append(viol)
         extra_findings.append({
             "category": "security",
             "severity": "critical",
-            "message": f"Dangerous inline event handler '{event_name}' detected: {event_code[:40]}",
+            "message": f"Dangerous security violation: {viol}",
             "target": str(path),
         })
 

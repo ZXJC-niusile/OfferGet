@@ -41,3 +41,10 @@ review*.json
 .idea/
 .DS_Store
 Thumbs.db
+
+# Generated demo resume artifacts
+output/resumes_demo/*.html
+output/resumes_demo/*.pdf
+output/resumes_demo/*.tex
+output/resumes_demo/*.typ
+output/resumes_demo/*.md
