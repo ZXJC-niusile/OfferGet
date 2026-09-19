@@ -214,6 +214,8 @@ Examples:
         help="Theme for tailored resume (default: modern-navy)",
     )
     review_parser.add_argument("--resume-output-dir", default=None, help="Custom output directory for tailored resumes")
+    review_parser.add_argument("--session", help="Optional path to load an existing review session JSON")
+    review_parser.add_argument("--save-session", help="Optional path to save/update the review session JSON")
 
     # `offerget resume ...`
     subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")

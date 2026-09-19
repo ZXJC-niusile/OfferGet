@@ -11,6 +11,7 @@ Testing:
 8. CLI `review` subcommand invocation with --json and --output flags.
 """
 
+import copy
 import html
 import json
 import os
@@ -28,6 +29,10 @@ from core.job_flow import (
     generate_resume_advice,
     build_candidate_profile,
     generate_tailored_profile_from_review,
+    create_review_session,
+    validate_session_answers,
+    save_review_session,
+    load_review_session,
 )
 from core.fact_guard import FactVerificationGuard
 from core.profile_adapter import iter_profile_claims
@@ -91,7 +96,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
         answers = {
             "answers": [
                 {"question_id": 1, "answer": "通过优化，我们将模型推理吞吐提升 50%，显存降低 30%。"},
-                {"question_id": 2, "answer": "基线是 2.4h，我们基于 NCCL 心跳探针压减到 8min。"}
+                {"question_id": 2, "answer": "64B Dense 预训练 Baseline MFU 为 38%，我负责 Megatron-LM Sequence Parallel 通信重叠优化，从 38% 提升至 52%，测算口径为 H800 理论峰值。"}
             ]
         }
         res = run_career_review(self.jd_text, self.profile_data, answers_dict=answers)
@@ -124,8 +129,10 @@ class TestCareerReviewPipeline(unittest.TestCase):
         q1_fb = res["answer_feedback"][0]
         self.assertEqual(q1_fb["status"], "evaluated")
         self.assertEqual(q1_fb["diagnosis"], "experience_boundary")
-        self.assertNotIn("但我深入实践过与之底层相通的架构", q1_fb.get("refined_answer", ""))
-        self.assertIn("未在实际项目中主导过", q1_fb.get("refined_answer", ""))
+        self.assertEqual(q1_fb.get("refined_answer", ""), "")
+        self.assertEqual(q1_fb.get("revised_answer", ""), "")
+        self.assertFalse(q1_fb.get("can_revise", True))
+        self.assertIn("未在实际项目中主导过", q1_fb.get("coaching_advice", ""))
 
     def test_05_resume_advice_grounding_and_no_hallucination(self):
         """Ensure resume advice adheres to verified vs unsupported actions without inventing facts."""
@@ -413,8 +420,8 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(patches_inflated[0]["validation_status"], "rejected")
         self.assertIn("fact_guard_rejected", patches_inflated[0]["reason"])
 
-        # Case B: Grounded metric (preserving 20%) succeeds and is applied
-        grounded_review = {
+        # Case B1: 无新增依据的 Megatron-LM / 方法扩张必须被拒绝（rejected）
+        unsupported_review = {
             "resume_advice": [
                 {
                     "requirement": "Megatron-LM",
@@ -434,17 +441,60 @@ class TestCareerReviewPipeline(unittest.TestCase):
                 },
             ]
         }
+        tailored_b1 = generate_tailored_profile_from_review(unsupported_review, base)
+        bullets_b1 = tailored_b1["experience"][0]["bullets"]
+        self.assertFalse(any("Megatron-LM" in b for b in bullets_b1))
+        self.assertFalse(any("通信算子重构" in b for b in bullets_b1))
+        patches_b1 = tailored_b1.get("applied_patches", [])
+        patch_b1 = next(p for p in patches_b1 if p["source_claim_id"] == "Megatron-LM")
+        self.assertEqual(patch_b1["validation_status"], "rejected")
+        self.assertIn("fact_guard_rejected", patch_b1["reason"])
+
+        # Case B2: 真正不增加未经支持事实的改写（例如：“负责训练流水线与通信优化，通信开销降低 20%。”）被成功应用
+        grounded_review = {
+            "resume_advice": [
+                {
+                    "requirement": "训练流水线优化",
+                    "category": "skill",
+                    "state": "verified",
+                    "action": "rewrite",
+                    "safe_bullet": "负责训练流水线与通信优化，通信开销降低 20%。",
+                    "evidence_refs": [{"source_path": "experience[0].bullets[0]", "excerpt": "负责训练流水线优化，通信开销降低 20%。"}],
+                },
+                {
+                    "requirement": "幻觉技能",
+                    "category": "skill",
+                    "state": "needs_confirmation",
+                    "action": "ask_user",
+                    "safe_bullet": "",
+                    "evidence_refs": [],
+                },
+            ]
+        }
         tailored_grounded = generate_tailored_profile_from_review(grounded_review, base)
         bullets_grounded = tailored_grounded["experience"][0]["bullets"]
-        self.assertTrue(any("Megatron-LM" in b for b in bullets_grounded))
+        self.assertTrue(any("负责训练流水线与通信优化" in b for b in bullets_grounded))
         self.assertTrue(any("20%" in b for b in bullets_grounded))
         self.assertNotIn("幻觉技能", " ".join(bullets_grounded))
         patches_grounded = tailored_grounded.get("applied_patches", [])
         applied_patch = next(p for p in patches_grounded if p["validation_status"] == "applied")
         self.assertEqual(applied_patch["target_path"], "experience[0].bullets[0]")
 
+        # Case B3: 当底稿或新增确认材料确实包含 Megatron-LM 时，方可应用包含 Megatron-LM 的改写
+        base_with_megatron = copy.deepcopy(base)
+        base_with_megatron["competencies"] = {
+            "frameworks": ["Megatron-LM", "通信算子重构", "并行训练"]
+        }
+        tailored_b3 = generate_tailored_profile_from_review(unsupported_review, base_with_megatron)
+        bullets_b3 = tailored_b3["experience"][0]["bullets"]
+        self.assertTrue(any("Megatron-LM" in b for b in bullets_b3))
+        self.assertTrue(any("20%" in b for b in bullets_b3))
+        patches_b3 = tailored_b3.get("applied_patches", [])
+        applied_patch_b3 = next(p for p in patches_b3 if p["source_claim_id"] == "Megatron-LM")
+        self.assertEqual(applied_patch_b3["validation_status"], "applied")
+
         # Case C: Re-application is idempotent (already_applied, no duplicate bullets)
-        tailored_reapplied = generate_tailored_profile_from_review(grounded_review, tailored_grounded)
+        tailored_reapplied = generate_tailored_profile_from_review(unsupported_review, tailored_b3)
         self.assertEqual(len(tailored_reapplied["experience"][0]["bullets"]), 1)
         patches_reapplied = tailored_reapplied.get("applied_patches", [])
         reapplied_patch = next(p for p in patches_reapplied if p["source_claim_id"] == "Megatron-LM")
@@ -540,7 +590,124 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertEqual(redis_advice["safe_bullet"], "")
             self.assertIn(redis_advice["action"], ["ask_user", "add_evidence"])
 
+    def test_21_question_dimensions_grounding(self):
+        """Verify the 3 questions correspond strictly to the 3 defined mainline dimensions."""
+        res = run_career_review(self.jd_text, self.profile_data)
+        qs = res["interview_questions"]
+        self.assertEqual(len(qs), 3)
+
+        # Q1: core_responsibility
+        q1 = qs[0]
+        self.assertEqual(q1["question_id"], 1)
+        self.assertEqual(q1["target_dimension"], "core_responsibility")
+        self.assertEqual(q1["dimension_name_cn"], "核心岗位能力与技术架构深度考查")
+        self.assertEqual(q1["category_type"], "ARCHITECTURE")
+        self.assertTrue(len(q1["requirement_name"]) > 0)
+        self.assertGreaterEqual(len(q1["expected_elements"]), 4)
+
+        # Q2: project_deep_dive
+        q2 = qs[1]
+        self.assertEqual(q2["question_id"], 2)
+        self.assertEqual(q2["target_dimension"], "project_deep_dive")
+        self.assertEqual(q2["dimension_name_cn"], "候选人真实项目经历与关键成果深入追问")
+        self.assertEqual(q2["category_type"], "DEEP_DIVE")
+        self.assertTrue(len(q2["requirement_name"]) > 0)
+        self.assertGreaterEqual(len(q2["expected_elements"]), 4)
+
+        # Q3: gap_boundary
+        q3 = qs[2]
+        self.assertEqual(q3["question_id"], 3)
+        self.assertEqual(q3["target_dimension"], "gap_boundary")
+        self.assertEqual(q3["dimension_name_cn"], "技术缺口/证据不足边界与真实性防守考查")
+        self.assertEqual(q3["category_type"], "BQ")
+        self.assertTrue(len(q3["requirement_name"]) > 0)
+        self.assertGreaterEqual(len(q3["expected_elements"]), 4)
+
+    def test_22_session_lifecycle_and_answer_validation(self):
+        """Verify review session creation, atomic serialization, and answer validation."""
+        import tempfile
+        res = run_career_review(self.jd_text, self.profile_data)
+        session = create_review_session(self.jd_text, self.profile_data, res)
+
+        self.assertIn("session_id", session)
+        self.assertEqual(session["schema_version"], "career-review-session.v1")
+        self.assertEqual(session["status"], "awaiting_answer")
+        self.assertEqual(len(session["questions_snapshot"]), 3)
+
+        # Validate answers: valid question IDs pass
+        valid_answers = {"answers": [{"question_id": 1, "answer": "回答内容"}]}
+        is_valid, errors = validate_session_answers(session, valid_answers)
+        self.assertTrue(is_valid)
+        self.assertEqual(len(errors), 0)
+
+        # Nonexistent question ID fails validation
+        invalid_answers = {"answers": [{"question_id": 99, "answer": "不存在的题目"}]}
+        is_valid, errors = validate_session_answers(session, invalid_answers)
+        self.assertFalse(is_valid)
+        self.assertTrue(any("99" in e for e in errors))
+
+        # Save and load roundtrip
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_file = Path(tmpdir) / "session.json"
+            save_review_session(session, session_file)
+            self.assertTrue(session_file.exists())
+
+            loaded = load_review_session(session_file)
+            self.assertEqual(loaded["session_id"], session["session_id"])
+            self.assertEqual(len(loaded["questions_snapshot"]), 3)
+
+    def test_23_cli_session_flags_e2e(self):
+        """Test CLI flags --save-session and --session end-to-end."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            session_out = Path(tmpdir) / "session.json"
+            cmd_save = [
+                sys.executable,
+                str(PROJECT_ROOT / "cli.py"),
+                "review",
+                str(self.jd_path),
+                "--profile",
+                str(self.profile_path),
+                "--save-session",
+                str(session_out),
+                "--json",
+            ]
+            proc = subprocess.run(cmd_save, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
+            self.assertEqual(proc.returncode, 0, f"CLI error: {proc.stderr}")
+            self.assertTrue(session_out.exists())
+
+            with open(session_out, "r", encoding="utf-8") as f:
+                saved_sess = json.load(f)
+            self.assertEqual(saved_sess["schema_version"], "career-review-session.v1")
+            self.assertEqual(len(saved_sess["questions_snapshot"]), 3)
+
+            # Now submit answers against the saved session
+            answers_file = Path(tmpdir) / "answers.json"
+            with open(answers_file, "w", encoding="utf-8") as f:
+                json.dump({"answers": [{"question_id": 1, "answer": "主导集群训练，MFU从40%提升到54.2%。"}]}, f)
+
+            session_out2 = Path(tmpdir) / "session2.json"
+            cmd_resume = [
+                sys.executable,
+                str(PROJECT_ROOT / "cli.py"),
+                "review",
+                str(self.jd_path),
+                "--profile",
+                str(self.profile_path),
+                "--session",
+                str(session_out),
+                "--answers",
+                str(answers_file),
+                "--save-session",
+                str(session_out2),
+                "--json",
+            ]
+            proc2 = subprocess.run(cmd_resume, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
+            self.assertEqual(proc2.returncode, 0, f"CLI error: {proc2.stderr}")
+            self.assertTrue(session_out2.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
