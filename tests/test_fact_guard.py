@@ -186,6 +186,85 @@ class TestFactVerificationGuard(unittest.TestCase):
         self.assertEqual(res["verdict"], "FACT_CHECK_PASSED")
         self.assertEqual(len(res["verified_bullets"]), 2)
 
+    def test_11_detect_ungrounded_technology(self):
+        # Candidate only has SQLite in profile, bullet introduces Redis
+        profile_sqlite = {
+            "candidate": {"name": "张同学", "title_zh": "后端开发"},
+            "skills": ["Python", "SQLite"],
+            "experience": [
+                {
+                    "company": "科技公司B",
+                    "role": "后端开发",
+                    "bullets": ["使用 SQLite 设计并实现课程数据表的 SQL 查询接口。"]
+                }
+            ]
+        }
+        guard = FactVerificationGuard(profile_sqlite)
+        ungrounded_bullet = "基于 Redis 缓存热点数据，查询延迟降低 30%。"
+        res = guard.verify_facts(ungrounded_bullet)
+        self.assertFalse(res["passed"])
+        self.assertEqual(res["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv = [u["claimed_metric"] for u in res["unverified_claims"]]
+        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv))
+
+    def test_12_detect_ungrounded_method_and_framework_expansion(self):
+        # Candidate only has "负责训练流水线优化，通信开销降低 20%。"
+        base = {
+            "candidate": {"name": "李四", "title_zh": "大模型算法工程师"},
+            "experience": [
+                {
+                    "company": "科技公司A",
+                    "role": "算法研究员",
+                    "bullets": ["负责训练流水线优化，通信开销降低 20%。"]
+                }
+            ]
+        }
+        guard = FactVerificationGuard(base)
+        # Bullet introduces Megatron-LM and operator refactoring
+        hallucinated_bullet = "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 20%。"
+        res = guard.verify_facts(hallucinated_bullet)
+        self.assertFalse(res["passed"])
+        self.assertEqual(res["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv = [u["claimed_metric"] for u in res["unverified_claims"]]
+        self.assertTrue(any("Megatron-LM" in c for c in claimed_unv))
+        self.assertTrue(any("通信算子" in c or "算子重构" in c or "并行训练" in c for c in claimed_unv))
+
+    def test_13_grounded_tech_and_method_pass(self):
+        # Truly grounded rewrite without unsupported facts passes
+        base = {
+            "candidate": {"name": "李四", "title_zh": "大模型算法工程师"},
+            "experience": [
+                {
+                    "company": "科技公司A",
+                    "role": "算法研究员",
+                    "bullets": ["负责训练流水线优化，通信开销降低 20%。"]
+                }
+            ]
+        }
+        guard = FactVerificationGuard(base)
+        grounded_bullet = "负责训练流水线与通信优化，通信开销降低 20%。"
+        res = guard.verify_facts(grounded_bullet)
+        self.assertTrue(res["passed"])
+        self.assertEqual(res["verdict"], "FACT_CHECK_PASSED")
+
+        # When profile contains Megatron-LM and operator refactoring, it passes
+        base_with_megatron = {
+            "candidate": {"name": "李四", "title_zh": "大模型算法工程师"},
+            "competencies": {"frameworks": ["Megatron-LM", "通信算子重构", "并行训练"]},
+            "experience": [
+                {
+                    "company": "科技公司A",
+                    "role": "算法研究员",
+                    "bullets": ["负责训练流水线优化，通信开销降低 20%。"]
+                }
+            ]
+        }
+        guard_megatron = FactVerificationGuard(base_with_megatron)
+        megatron_bullet = "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 20%。"
+        res_megatron = guard_megatron.verify_facts(megatron_bullet)
+        self.assertTrue(res_megatron["passed"])
+        self.assertEqual(res_megatron["verdict"], "FACT_CHECK_PASSED")
+
 
 if __name__ == "__main__":
     unittest.main()

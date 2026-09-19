@@ -46,13 +46,17 @@ class DebriefQuestionItem:
     missing_elements: List[str] = field(default_factory=list)
     follow_up_questions: List[str] = field(default_factory=list)
     can_revise: bool = True
-    verification_status: str = "verified"
+    verification_status: str = "unverified"
 
     def __post_init__(self):
-        if not self.refined_answer:
-            self.refined_answer = self.revised_answer or self.coaching_advice
-        elif not self.revised_answer and self.can_revise:
-            self.revised_answer = self.refined_answer
+        if not self.can_revise:
+            self.revised_answer = ""
+            self.refined_answer = ""
+        else:
+            if not self.refined_answer and self.revised_answer:
+                self.refined_answer = self.revised_answer
+            elif not self.revised_answer and self.refined_answer:
+                self.revised_answer = self.refined_answer
 
 
 @dataclass
@@ -82,15 +86,28 @@ class InterviewDebriefEngine:
         """Removes or qualifies ungrounded numbers from candidate answer while preserving supported statements."""
         revised = answer
         for u in unverified:
+            # Skip non-numeric tech/method unverified claims — replacing a tech term
+            # with a numeric qualifier message is semantically nonsensical.
+            if u.get("claim_type") == "tech_method":
+                continue
             claimed = u.get("claimed_metric", "")
             if claimed:
-                pattern = re.compile(rf"(?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?\s*{re.escape(claimed)}%?", re.IGNORECASE)
-                revised = pattern.sub("进行结构化优化（具体提升幅度因缺乏基线压测数据不作主观量化）", revised)
+                pattern = re.compile(
+                    rf"((?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?)\s*{re.escape(str(claimed))}%?",
+                    re.IGNORECASE,
+                )
+                def _replace_unverified(match):
+                    verb_part = match.group(1).strip() if match.group(1) else ""
+                    qualifier = "（具体幅度因缺乏基线压测数据不作主观量化）"
+                    if verb_part:
+                        return f"{verb_part}{qualifier}"
+                    return qualifier
+                revised = pattern.sub(_replace_unverified, revised)
         for d in drifts:
             claimed = d.get("claimed_metric", "")
             verified = d.get("verified_baseline", "")
             if claimed and verified:
-                pattern = re.compile(re.escape(claimed), re.IGNORECASE)
+                pattern = re.compile(re.escape(str(claimed)), re.IGNORECASE)
                 revised = pattern.sub(f"{verified}（已核验基线）", revised)
         return revised
 
@@ -112,11 +129,30 @@ class InterviewDebriefEngine:
         missing_elements: List[str] = []
         follow_up_questions: List[str] = []
 
+        # Unit regex matching for metrics (ISSUE-08: strict word boundary, no single 's')
+        unit_metric_pattern = re.compile(
+            r"\b\d+(?:\.\d+)?\s*(?:s|ms|min|h)\b|\b(?:ms|min|h)\b|\b[sS]\b",
+            re.IGNORECASE,
+        )
+        has_metrics = (
+            any(marker in a_lower or marker in answer for marker in ("%", "qps", "tps", "提升", "降低", "提高", "减少", "优化了", "倍", "小时", "卡", "stars"))
+            or bool(unit_metric_pattern.search(answer))
+        )
+
+        # Strict baseline pattern matching (ISSUE-08: strict baseline regex, no isolated '从')
+        baseline_pattern = re.compile(
+            r"(?:baseline|基线|基准)"
+            r"|(?:从|由)\s*[^，。；;\n]{1,30}?\s*(?:到|至|压减到|压减至|降至|降到|提升至|提升到|提高至|提高到)"
+            r"|(?:对比|相比|相较于?)\s*[^，。；;\n]{1,20}?(?:原|旧|之前|历史|过去|baseline|基线)",
+            re.IGNORECASE,
+        )
+        has_baseline = bool(baseline_pattern.search(answer))
+
         if not any(marker in answer for marker in ("我", "本人", "个人", "负责", "参与", "协同", "团队", "主导", "牵头")):
             missing_elements.append("个人贡献与团队边界")
             follow_up_questions.append("你本人具体负责哪一段链路？团队其他成员分别负责什么？")
-        if any(marker in a_lower or marker in answer for marker in ("%", "qps", "tps", "提升", "降低", "倍", "ms")):
-            if "baseline" not in a_lower and "基线" not in answer:
+        if has_metrics:
+            if not has_baseline:
                 missing_elements.append("指标基线")
                 follow_up_questions.append("该指标的 baseline、单位、统计周期和数据来源是什么？")
             if not any(marker in answer for marker in ("周期", "日志", "看板", "压测", "数据来源", "评测集")):
@@ -126,32 +162,74 @@ class InterviewDebriefEngine:
             missing_elements.append("限制或失败复盘")
             follow_up_questions.append("该方案在哪些场景会失效？你经历过什么失败并如何修正？")
 
-        # Check boundary indicators
+        # Check boundary indicators (ISSUE-05: distinguish pure boundary from multi-claim with metrics)
         boundary_markers = ("没做过", "不了解", "不会", "未涉猎", "未主导过", "没有实际做过", "接触较少", "不太了解", "没有这方面经验", "未涉及")
         is_boundary = any(m in answer for m in boundary_markers)
+        is_pure_boundary = is_boundary and not has_metrics
 
-        # Relevance heuristic
-        stopwords = {"请问", "请谈", "谈谈", "介绍", "如何", "怎么", "什么", "以及", "通过", "进行", "针对", "基于", "可以", "说说"}
-        q_tokens = [
-            t.lower() for t in re.split(r"[^A-Za-z0-9+#.\-一-鿿]+", question)
-            if len(t) >= 2 and t not in stopwords
-        ]
-        tech_indicators = (
-            "架构", "性能", "优化", "集群", "模型", "训练", "推理", "通信", "接口", "数据库",
-            "并发", "内存", "延迟", "吞吐", "代码", "算法", "系统", "开发", "测试", "项目",
-            "模块", "方案", "实现", "设计", "sql", "redis", "vllm", "nccl", "python", "cuda"
-        )
-        is_relevant = (
-            not q_tokens
-            or any(t in a_lower for t in q_tokens)
-            or any(k in a_lower for k in tech_indicators)
-        )
+        # Relevance heuristic (ISSUE-06: core examination terms of the question)
+        q_stopwords = {
+            "请问", "请谈", "谈谈", "介绍", "如何", "怎么", "什么", "以及", "通过", "进行",
+            "针对", "基于", "可以", "说说", "简述", "描述", "阐述", "分析", "解释", "为什么",
+            "哪些", "哪种", "是否", "有没有", "掌握", "熟悉", "了解", "具体", "这是", "对于",
+            "关于", "你的", "你们", "项目中", "实际", "工作中", "遇到", "解决", "处理", "情况",
+            "怎么做", "考查", "意图", "重点", "问题", "回答", "一下", "怎样"
+        }
+        tech_vocab = {
+            "架构", "性能", "优化", "调优", "加速", "耗时", "集群", "模型", "训练", "推理", "通信", "接口", "数据库",
+            "并发", "内存", "显存", "延迟", "吞吐", "吞吐量", "算法", "系统",
+            "模块", "方案", "实现", "设计", "sql", "redis", "vllm", "nccl", "python", "cuda",
+            "sqlite", "mysql", "postgresql", "kafka", "mq", "rpc", "grpc", "http", "tcp", "udp",
+            "缓存", "索引", "分库", "分表", "锁", "事务", "死锁", "协程", "线程", "进程",
+            "算子", "梯度", "反向传播", "微调", "量化", "剪枝", "蒸馏", "lora", "sft", "deepspeed", "megatron",
+            "kv", "cache", "attention", "transformer", "p99", "qps", "tps", "显存占用",
+            "流水线", "调度", "负载均衡", "容灾", "高可用", "故障", "排查", "压测", "基线", "监控",
+            "网关", "路由", "微服务", "服务治理", "降级", "熔断", "限流", "幂等", "一致性", "分布式",
+            "击穿", "雪崩", "穿透", "分片", "分词", "召回", "排序", "重排", "精排", "向量", "嵌入"
+        }
+        q_tech_terms = {k for k in tech_vocab if k in q_lower or k in question}
+        q_en_terms = {
+            w for w in re.findall(r"[a-z0-9+#.\-]+", q_lower)
+            if len(w) >= 2 and w not in q_stopwords
+        }
+        q_zh_candidates = set()
+        for chunk in re.split(r"[^一-鿿]+", question):
+            chunk = chunk.strip()
+            if len(chunk) >= 2 and chunk not in q_stopwords:
+                q_zh_candidates.add(chunk)
+                if len(chunk) > 2:
+                    for i in range(len(chunk) - 1):
+                        sub = chunk[i:i+2]
+                        if sub not in q_stopwords:
+                            q_zh_candidates.add(sub)
 
-        has_metrics = any(marker in a_lower or marker in answer for marker in ("%", "qps", "tps", "提升", "降低", "倍", "ms", "s", "min", "小时", "卡", "stars"))
-        has_baseline = ("baseline" in a_lower or "基线" in answer or "从" in answer)
+        # Domain concept expansion for question core terms
+        perf_keywords = {"性能", "优化", "调优", "加速", "耗时", "延迟", "吞吐", "吞吐量"}
+        if any(pk in q_lower or pk in question for pk in perf_keywords):
+            q_tech_terms.update({"性能", "优化", "调优", "加速", "耗时", "延迟", "吞吐", "吞吐量", "显存", "qps", "tps", "p99", "压测", "基线"})
+
+        db_keywords = {"数据库", "sql", "查询", "sqlite", "mysql", "postgresql"}
+        if any(dk in q_lower or dk in question for dk in db_keywords):
+            q_tech_terms.update({"数据库", "sql", "查询", "sqlite", "mysql", "postgresql", "索引", "事务", "表"})
+
+        q_core_terms = q_tech_terms | q_en_terms | q_zh_candidates
+
+        # Gap/transfer questions: interviewer asks candidate to honestly state gap and present adjacent/transferable experience
+        is_gap_transfer_question = any(gk in question for gk in ("相邻经验", "可迁移能力", "可迁移", "迁移能力", "底层能力可迁移", "缺口"))
+
+        # Check relevance (ISSUE-06: must relate to question's core terms, not arbitrary irrelevant tech words)
+        matches_q_core = any(term in a_lower or term in answer for term in q_core_terms) if q_core_terms else True
+        if matches_q_core:
+            is_relevant = True
+        elif is_gap_transfer_question:
+            # For gap/transfer questions, candidate provides adjacent technical experience
+            has_substantive_tech = any(k in a_lower for k in ("nccl", "vllm", "cuda", "redis", "sql", "模型", "架构", "接口", "探针", "心跳", "分布式", "训练", "推理"))
+            is_relevant = (has_substantive_tech and (has_baseline or has_metrics)) or is_pure_boundary
+        else:
+            is_relevant = False
 
         can_revise = True
-        verification_status = "verified"
+        verification_status = "unverified"
 
         # Heuristics for diagnosis
         if not answer.strip():
@@ -161,21 +239,23 @@ class InterviewDebriefEngine:
             refined = ""
             can_revise = False
             takeaway = "技术面试避免交白卷，可从基础原理切入。"
-        elif is_boundary:
+        elif is_pure_boundary:
+            # ISSUE-05: Pure boundary without other quantified claims is classified as EXPERIENCE_BOUNDARY
             diagnosis = QuestionDiagnosis.EXPERIENCE_BOUNDARY
             analysis = "诚实界定个人经验边界，明确未在实际项目中主导该技术。技术面试中坦陈边界优于编造经历；建议在此基础上说明底层相通机制与快速学习迁移能力。"
             coaching = "坦诚说明未在实际项目中主导过该技术，避免强行推测细节；可说明所掌握的相通底层原理（如有），并阐述面对未知技术时的调研路径与攻坚方法。"
             refined = ""
             can_revise = False
             takeaway = "诚实说明经验边界，重点展示基础功底与学习迁移路径。"
-        elif len(answer.strip()) < 80 and not is_relevant:
+        elif not is_relevant:
+            # ISSUE-07: Removed len < 80 bypass. Any irrelevant answer is UNCERTAIN.
             diagnosis = QuestionDiagnosis.UNCERTAIN
             analysis = "回答内容与题目考查的核心技术点缺乏语义关联，未正面作答。无法可靠判断技术深度与真实经历。"
             coaching = "请围绕题目关注的核心技术点（如架构选型、实现方案、指标基线与故障排查）进行正面阐述。"
             refined = ""
             can_revise = False
             takeaway = "正面回答题目考查要点，避免答非所问。"
-        elif any(k in q_lower or k in question for k in ["源码", "推导", "底层", "公式", "nccl", "算子"]) and len(answer) < 35:
+        elif any(k in q_lower or k in question for k in ["源码", "推导", "公式", "底层原理", "算子内核", "原语实现"]) and len(answer) < 35:
             diagnosis = QuestionDiagnosis.DEPTH_DEFICIENT
             analysis = "面试官直击底层实现与推导细节，但回答偏向宏观 API 描述，深度明显不足。"
             coaching = "建议深入到底层通信原语、内存/显存数据结构、算子实现细节或数学推导，展示硬核功底。"
@@ -194,8 +274,8 @@ class InterviewDebriefEngine:
             refined = answer
             takeaway = "表现稳定，注意保持数据与口径一致性。"
 
-        # Fact Guard verification
-        if fact_guard is not None and answer.strip() and not is_boundary:
+        # Fact Guard verification (ISSUE-05: do not skip when boundary statement exists alongside other claims)
+        if fact_guard is not None and answer.strip():
             guard_result = fact_guard.verify_facts(answer)
             if not guard_result.get("passed", False):
                 drifts = guard_result.get("drifts", [])
@@ -211,15 +291,32 @@ class InterviewDebriefEngine:
                 takeaway = "先核对事实底稿，再回答数字问题。"
                 refined = self._create_conservative_revision(answer, drifts, unverified)
                 can_revise = True
+            else:
+                if not is_pure_boundary and is_relevant:
+                    verification_status = "verified"
 
         # Incremental fact check on refined_answer
         if fact_guard is not None and refined and refined.strip():
             rev_guard = fact_guard.verify_facts(refined)
             if not rev_guard.get("passed", False):
-                refined = ""
-                can_revise = False
-                verification_status = "revision_failed_fact_check"
+                # Tech-method-only failures (e.g., "Redis" in "没做过 Redis") should not
+                # block the revision — these terms are from the original answer context.
+                rev_drifts = rev_guard.get("drifts", [])
+                rev_unverified = rev_guard.get("unverified_claims", [])
+                has_numeric_issues = bool(rev_drifts) or any(
+                    u.get("claim_type") != "tech_method" for u in rev_unverified
+                )
+                if has_numeric_issues:
+                    refined = ""
+                    can_revise = False
+                    verification_status = "revision_failed_fact_check"
+                else:
+                    verification_status = "verified_with_tech_context"
+            else:
+                verification_status = "verified"
 
+        # ISSUE-04: refined_answer and revised_answer must be empty if cannot revise, never use coaching_advice
+        final_revised = refined if can_revise else ""
         return DebriefQuestionItem(
             question=question,
             candidate_answer=answer,
@@ -227,8 +324,8 @@ class InterviewDebriefEngine:
             diagnosis=diagnosis,
             analysis_zh=analysis,
             coaching_advice=coaching,
-            revised_answer=refined,
-            refined_answer=refined or coaching,
+            revised_answer=final_revised,
+            refined_answer=final_revised,
             key_takeaway=takeaway,
             claim_refs=claim_refs,
             missing_elements=list(dict.fromkeys(missing_elements)),

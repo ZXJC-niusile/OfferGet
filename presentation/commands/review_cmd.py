@@ -18,14 +18,20 @@ from core.cli_helpers import (
 )
 from core.services import (
     run_career_review,
+    create_review_session,
+    save_review_session,
+    load_review_session,
+    validate_session_answers,
 )
 
 
 def cmd_career_review(args):
-    """Handler for `offerget review <jd.txt> --profile <profile.json> [--answers <answers.json>]`."""
+    """Handler for `offerget review <jd.txt> --profile <profile.json> [--answers <answers.json>] [--session <session.json>] [--save-session <out.json>]`."""
     jd_path = args.jd_file
     profile_path = args.profile
     answers_path = args.answers
+    session_path = getattr(args, "session", None)
+    save_session_path = getattr(args, "save_session", None)
 
     if not os.path.exists(jd_path):
         emit_stderr(f"[-] Error: JD file not found: {jd_path}")
@@ -34,12 +40,23 @@ def cmd_career_review(args):
         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
         sys.exit(1)
 
+    session_data = None
+    if session_path:
+        if not os.path.exists(session_path):
+            emit_stderr(f"[-] Error: Session file not found: {session_path}")
+            sys.exit(1)
+        session_data = load_review_session(session_path)
+
     answers_data = None
     if answers_path:
         if not os.path.exists(answers_path):
             emit_stderr(f"[-] Error: Answers file not found: {answers_path}")
             sys.exit(1)
         answers_data = load_json(answers_path)
+        if session_data:
+            valid, errors = validate_session_answers(session_data, answers_data)
+            if not valid:
+                emit_stderr(f"[-] Warning: Answers do not match session snapshot: {'; '.join(errors)}")
 
     jd_text = read_text(jd_path)
     profile_data = load_json(profile_path)
@@ -52,6 +69,14 @@ def cmd_career_review(args):
         resume_theme=getattr(args, "resume_theme", "modern-navy"),
         resume_output_dir=getattr(args, "resume_output_dir", None),
     )
+
+    if save_session_path:
+        session = create_review_session(jd_text, profile_data, review_result)
+        save_review_session(session, save_session_path)
+        if args.json:
+            emit_stderr(f"[+] Review session saved to {save_session_path}")
+        else:
+            print(f"[+] Review session saved to {save_session_path}")
 
     if args.output:
         write_json(review_result, args.output)

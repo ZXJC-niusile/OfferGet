@@ -33,7 +33,13 @@ from core.profile_adapter import (
     normalize_candidate_profile,
 )
 from core.cli_helpers import read_text
-from core.job_flow import run_career_review
+from core.job_flow import (
+    run_career_review,
+    create_review_session,
+    validate_session_answers,
+    save_review_session,
+    load_review_session,
+)
 
 
 class JDService:
@@ -121,6 +127,37 @@ class CareerReviewService:
             resume_output_dir=resume_output_dir,
             reserve_photo=reserve_photo,
         )
+
+    def create_session(
+        self,
+        jd_text: Union[str, Path],
+        profile_dict: Dict[str, Any],
+        review_result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Creates a verifiable lightweight JSON session snapshot."""
+        if isinstance(jd_text, dict):
+            raw_jd = str(jd_text.get("raw_text") or jd_text.get("clean_text") or "")
+        elif isinstance(jd_text, Path):
+            raw_jd = jd_text.read_text(encoding="utf-8")
+        else:
+            raw_jd = read_text(str(jd_text or ""))
+        return create_review_session(raw_jd, profile_dict, review_result)
+
+    def validate_session(
+        self,
+        session: Dict[str, Any],
+        incoming_answers: Dict[str, Any],
+    ) -> Tuple[bool, List[str]]:
+        """Validates incoming answers against the session's question snapshot."""
+        return validate_session_answers(session, incoming_answers)
+
+    def save_session(self, session: Dict[str, Any], output_path: Union[str, Path]) -> None:
+        """Atomically saves review session JSON."""
+        save_review_session(session, output_path)
+
+    def load_session(self, session_path: Union[str, Path]) -> Dict[str, Any]:
+        """Loads review session JSON."""
+        return load_review_session(session_path)
 
 
 class ResumeService:
