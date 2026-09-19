@@ -12,6 +12,8 @@ import argparse
 import subprocess
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 from core.cli_helpers import (
     emit_stderr,
 )

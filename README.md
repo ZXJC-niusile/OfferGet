@@ -48,7 +48,7 @@
 │                                             【底层支撑引擎与单页压制子系统】                                                             │
 │  • ApexResume: 11 个手法、13 个句式模板、Mini-RFC 叙事、无头 Chrome 像素级 A4 单页压制                                                    │
 │  • PrivacyAnonymizer: 双向可逆去隐私化脱敏网关 (支持 Standard 与 Strict 双层模式)                                                       │
-│  • Automated Test Suite: OfferGet 169 项 + ApexResume 34 项（当前基线共 203 项）                                                        │
+│  • Automated Test Suite: 完整自动化测试矩阵 (OfferGet 根测试 + ApexResume 子系统 + 闭环自测流水线)                                      │
 └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -107,11 +107,11 @@ python cli.py selftest
 
 ### 3. 企业求职核心指令
 ```bash
-# 1. 赛题二全闭环求职审查（脱敏、非完美样例）
-python cli.py review examples/sample_career_jd.txt --profile examples/candidate_profile_minimal.json --json
+# 1. 轻量求职审查全闭环 (岗位JD拆解 -> 真实事实简历建议 -> 3道针对性面试题)
+python cli.py review examples/synthetic_intern_jd.txt --profile examples/synthetic_intern_profile.json --json
 
-# 2. 提交一轮回答并获得反馈
-python cli.py review examples/sample_career_jd.txt --profile examples/candidate_profile_minimal.json --answers examples/answers_example.json --output review.json --json
+# 2. 提交一轮真实作答并获取具体诊断反馈 (指标核验、证据边界与保守精修)
+python cli.py review examples/synthetic_intern_jd.txt --profile examples/synthetic_intern_profile.json --answers examples/synthetic_intern_answers.json --output review.json --json
 
 # 2. 穿透解码企业 JD (提取 5 图层、6 大能力树与隐性黑话)
 python cli.py jd decode examples/sample_ai_jd.txt

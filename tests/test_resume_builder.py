@@ -2,6 +2,7 @@
 Tests for OfferGet Unified Resume Builder Engine (tests/test_resume_builder.py)
 """
 
+import copy
 import json
 import shutil
 import tempfile
@@ -9,6 +10,7 @@ import unittest
 from pathlib import Path
 
 from core.resume_builder import ResumeBuilder, audit_resume_quality
+from core.resume_view_model import ResumeViewModel
 
 
 class TestResumeBuilder(unittest.TestCase):
@@ -334,6 +336,111 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertIn("#grid(", typ_text)
         self.assertIn("[GPA 3.12，专业前15%]", typ_text)
         self.assertIn("[全国计算机二级（WPS Office）]", typ_text)
+
+    def test_resume_builder_view_model_caching(self):
+        """Test ResumeBuilder caches ResumeViewModel across multiple theme renders."""
+        builder = ResumeBuilder(self.minimal_profile)
+        vm1 = builder._get_view_model()
+        vm2 = builder._get_view_model()
+        self.assertIs(vm1, vm2)
+
+        # Header and sections reuse the same cached view model
+        header_html = builder._render_header_html("modern-navy")
+        self.assertIn("测试候选人", header_html)
+        self.assertIs(builder._get_view_model(), vm1)
+
+        # Passing identical content in a separate dict reuses cached VM due to SHA-256 fingerprint
+        dup_profile = copy.deepcopy(self.minimal_profile)
+        vm_dup = builder._get_view_model(profile=dup_profile)
+        self.assertIs(vm1, vm_dup)
+
+        # Modifying content invalidates cache key and creates a fresh ViewModel
+        modified_profile = copy.deepcopy(builder.profile)
+        modified_profile["candidate"]["name"] = "王五"
+        vm_mod = builder._get_view_model(profile=modified_profile)
+        self.assertIsNot(vm1, vm_mod)
+        self.assertEqual(vm_mod.name, "王五")
+
+    def test_resume_builder_anonymization_view_model_isolation(self):
+        """Test that different anonymization levels produce distinct ViewModels."""
+        builder = ResumeBuilder(self.minimal_profile)
+        vm_raw = builder._get_view_model()
+
+        prof_std = builder._resolve_profile(anonymize="standard")
+        vm_std = builder._get_view_model(profile=prof_std)
+        self.assertIsNot(vm_raw, vm_std)
+
+        prof_strict = builder._resolve_profile(anonymize="strict")
+        vm_strict = builder._get_view_model(profile=prof_strict)
+        self.assertIsNot(vm_std, vm_strict)
+        self.assertEqual(vm_strict.name, "Dr. Alex Chen")
+
+    def test_resume_builder_with_profile_context(self):
+        """Test ResumeBuilder seamlessly accepts ProfileContext."""
+        from core.profile_adapter import build_profile_context
+
+        ctx = build_profile_context(self.minimal_profile)
+        builder = ResumeBuilder(ctx)
+        self.assertEqual(builder.profile["candidate"]["name"], "测试候选人")
+        self.assertIsInstance(builder.view_model, ResumeViewModel)
+        self.assertEqual(builder.view_model.name, "测试候选人")
+
+
+    def test_resume_builder_no_repeated_normalization_in_rendering(self):
+        """Test that ResumeBuilder does not call normalize_candidate_profile during rendering."""
+        from unittest.mock import patch
+
+        builder = ResumeBuilder(self.minimal_profile)
+        with patch("core.resume_builder.normalize_candidate_profile") as mock_norm:
+            vm1 = builder._get_view_model()
+            vm2 = builder._get_view_model(profile=builder.profile)
+            header = builder._render_header_html("modern-navy")
+            sections = builder._render_sections_html("modern-navy")
+            self.assertEqual(mock_norm.call_count, 0)
+            self.assertIs(vm1, vm2)
+
+    def test_resume_builder_raw_track1_profile_normalized(self):
+        """Test that passing a raw Track 1 dict with candidate/institution/title_zh is properly normalized."""
+        raw_track1 = {
+            "candidate": {
+                "name": "李雷",
+                "title_zh": "大模型预训练工程师",
+                "institution": "清华大学 (Tsinghua University)",
+                "degree": "计算机硕士",
+            },
+            "experience": [
+                {
+                    "company": "前沿AI实验室",
+                    "role": "算法工程师",
+                    "period": "2022.06 - 2024.06",
+                    "highlights": [
+                        {
+                            "claim_id": "EXP-1",
+                            "claim_zh": "主导万卡集群Megatron预训练优化，提升MFU达50%",
+                        }
+                    ],
+                }
+            ],
+        }
+
+        builder = ResumeBuilder(self.minimal_profile)
+
+        # 1. Passing raw unnormalized dict to _get_view_model must trigger normalization
+        vm = builder._get_view_model(raw_track1)
+        self.assertEqual(vm.name, "李雷")
+        self.assertEqual(vm.edu_school, "清华大学 (Tsinghua University)")
+        self.assertEqual(vm.title, "大模型预训练工程师")
+        self.assertEqual(len(vm.experiences), 1)
+        self.assertEqual(vm.experiences[0]["time"], "2022.06 - 2024.06")
+        self.assertTrue(any("提升MFU达50%" in b for b in vm.experiences[0]["bullets"]))
+
+        # 2. Passing ProfileContext must also work smoothly
+        from core.profile_adapter import build_profile_context
+
+        ctx = build_profile_context(raw_track1)
+        vm_ctx = builder._get_view_model(ctx)
+        self.assertEqual(vm_ctx.edu_school, "清华大学 (Tsinghua University)")
+        self.assertEqual(vm_ctx.title, "大模型预训练工程师")
 
 
 if __name__ == "__main__":

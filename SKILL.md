@@ -5,9 +5,13 @@ allowed-tools: Read Write Edit Bash Glob Grep WebSearch WebFetch
 license: MIT
 ---
 
-# OfferGet · 工业级 Offer 战略全景操作系统 (Offer Strategy OS)
+# OfferGet · 轻量求职 Agent 与战略操作系统 (Offer Strategy OS)
 
-OfferGet 是面向前沿技术岗位（大模型算法、分布式基础架构、AI Agent、高性能计算与复杂系统工程）的**终极求职战略决策与工程交付平台**。它穿透 HR 格式化 JD 文案修辞迷雾，结合候选人单事实源（SSOT）真实凭证库，输出集**解码、匹配、避坑、答题、时间线与单页简历**于一体的工业级高势能交付物。
+OfferGet 是面向前沿技术岗位（大模型算法、分布式基础架构、AI Agent、高性能计算与系统工程）的**轻量求职 Agent / Skill**，聚焦高置信度闭环：
+
+$$\text{岗位 JD 拆解} \longrightarrow \text{基于真实事实的简历建议} \longrightarrow \text{针对性面试问题 (≥3 题)} \longrightarrow \text{用户真实作答} \longrightarrow \text{基于证据边界的具体反馈}$$
+
+主打深磨：**基于真实经历与证据边界的面试训练（Interview Training Grounded in Truthful Experience and Evidence Boundaries）**。系统基于确定性规则与单事实源（SSOT）真实凭证底稿运行，绝无外部数据库或黑盒 LLM API 依赖。
 
 ---
 
@@ -23,7 +27,7 @@ OfferGet 是面向前沿技术岗位（大模型算法、分布式基础架构�
 │ • 32 项大厂黑话潜台词词典│ • Mini-RFC 架构叙事改写  │ • 三态技能台账防伪审查   │ • 标准/严格双层脱敏引擎   │ • 50-80% 错失区间跃迁建议 │
 │ • 5 大技术红旗与反问探针 │ • 动词五级阶梯与证据约束 │ • 可见度系统多变体隔离   │ • 事实锚点提取与虚标拦截 │ • 6 大劳动合同陷阱深度识别│
 │ • Top 20 硬核面试真题库  │ • AutoFit 像素级压页算法 │ • 四大反 AI 指纹拦截过滤 │ • 指标漂移 (Anti-Drift)   │ • 高情商薪酬博弈与反制谈判│
-│ • 渠道权重与 Ghost Job   │ • 34 项独立单测 100% 覆盖│ • 成对双胞胎双语合规核验 │ • 零幻觉/零虚构绝对断言   │ • 中英双语薪酬对谈策略信  │
+│ • 渠道权重与 Ghost Job   │ • 34 项独立单测 100% 覆盖│ • 成对双胞胎双语合规核验 │ • 确定性真实底稿核验门禁 │ • 中英双语薪酬对谈策略信  │
 └──────────────────────────┴──────────────────────────┴──────────────────────────┴──────────────────────────┴───────────────────────────┘
 ```
 
@@ -364,17 +368,22 @@ invoke_subagent(
   offerget defense simulate "面向长序列大语言模型的高效分布式 KV-Cache 压缩机制" --profile examples/academic_profile.json --intensity 严刑拷打
   ```
 
-### 5. 赛题二全闭环求职审查工作台 (Career Review v1)
-- **赛题标准契约**：严格遵循 `career-review.v1` 输出协议，纯 Python 确定性规则引擎，无外部 API/LLM 依赖。
-- **全流程闭环**：
-  1. **JD 精细化拆解 (`jd_breakdown`)**：5 图层技术要求、硬门槛与隐性信号。
-  2. **基于事实的简历建议 (`resume_advice`)**：映射到候选人 profile 路径，区分直接、相邻、弱证据和缺失；数字、角色范围或个人归因未闭合时先追问，`unsupported` 不生成 bullet。
-  3. **默认 3 道针对性面试问题 (`interview_questions`)**：基于岗位 gap、隐性信号与职责从兼容题库排序，带考查意图、备考要点和证据引用；这是确定性题库选择，不是模型动态出题。
-  4. **一轮问答复盘反馈 (`answer_feedback`)**：支持无回答时的待提交状态 (`awaiting_answer`)，以及作答后的指标漂移诊断 (`metric_drift`)、盲区判定 (`fatal_gap`) 与严密防守 (`well_defended`)。
-  5. **终面防守重点打磨 (`polish_focus`: "interview_defense")**：深挖指标 baseline 真实性与底层推导。
+### 5. 轻量求职闭环审查工作台 (Career Review Agent / Skill v1)
+- **标准化契约**：严格遵循 `career-review.v1` 输出协议，纯 Python 确定性规则引擎，无外部 API/LLM 依赖。
+- **全流程五步闭环**：
+  1. **岗位 JD 精细化拆解 (`jd_breakdown`)**：结构化拆解职责、必备硬门槛（学历/年限/专业）、核心技术技能、加分项与待确认信息。
+  2. **基于真实事实的简历建议 (`resume_advice`)**：严格锚定候选人真实凭证路径（`source_path`），区分直接 (`direct`)、相邻 (`adjacent`)、弱证据 (`weak`) 和缺失 (`missing`)；严禁编造经历、技能或业绩，`unsupported` 严格不生成 safe_bullet。通过 `ResumePatch` 结构化实施，杜绝跨项目数字借用与无锚点经验污染。
+  3. **针对性面试问题生成 (`interview_questions`)**：至少 3 道针对当前岗位与候选人的面试问题，涵盖核心职责验证 (`core_responsibility`)、项目深入挖掘 (`project_deep_dive`) 与技能边界考查 (`gap_boundary`)，自带考查意图、备考要点与关联证据。
+  4. **一轮问答复盘反馈 (`answer_feedback`)**：接收候选人作答并进行确定性诊断：
+     - `awaiting_answer`: 候选人尚未提交回答时的待提交状态；
+     - `metric_drift`: 识别未在底稿中核验的量化指标与百分比漂移，输出保守修正答案并剥离虚高数字；
+     - `experience_boundary`: 当候选人诚实说明“没做过/不了解”时，客观界定经验边界，指导如何沟通底层相通原理与技术调研路径，彻底废除模板化虚构说辞；
+     - `well_defended`: 当回答具备明确基线、数据来源、个人因果归因与复盘时，予以认可并提炼进攻防守要点；
+     - `uncertain`: 回答偏离主题或与问题不相关时，提醒重新聚焦核心考查点。
+  5. **终面防守重点打磨 (`polish_focus`: "interview_defense")**：深挖指标 baseline 真实性、个人贡献边界与底层推导，输出针对性追问清单。
 - **CLI 示例**：
   ```bash
-  offerget review examples/sample_career_jd.txt --profile examples/candidate_profile_minimal.json --answers examples/answers_example.json --output review.json --json
+  python cli.py review examples/synthetic_intern_jd.txt --profile examples/synthetic_intern_profile.json --answers examples/synthetic_intern_answers.json --output review.json --json
   ```
 
 ---

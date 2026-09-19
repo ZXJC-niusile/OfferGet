@@ -133,6 +133,7 @@ class JDDecoder:
         TechDomain.GENERAL_ML: [
             {"keywords": ["PyTorch", "TensorFlow", "JAX"], "category": "framework"},
             {"keywords": ["Python", "C++", "Golang", "Rust", "Shell", "Linux"], "category": "language"},
+            {"keywords": ["SQL", "MySQL", "PostgreSQL", "Redis", "SQLite", "MongoDB"], "category": "database"},
             {"keywords": ["Transformer", "Attention", "CNN", "RNN", "Diffusion", "多模态", "Multimodal", "CLIP", "ViT"], "category": "theory"},
         ]
     }

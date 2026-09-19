@@ -13,28 +13,38 @@ Implements the competition track 2 closed-loop job-seeking pipeline:
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 import re
-from dataclasses import asdict
-from typing import Any, Dict, List, Optional, Union
+from dataclasses import dataclass, field, asdict
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from core.interview_debrief import InterviewDebriefEngine
+from core.interview_debrief import InterviewDebriefEngine, QuestionDiagnosis
 from core.jd_compat import profile_to_canonical
 from core.fact_guard import FactVerificationGuard
 from core.asu_modeler import AsuModeler
 from core.validator import validate_anti_ai_slop
-from core.profile_adapter import EvidenceClaim, claim_ref, find_evidence, iter_profile_claims
+from core.profile_adapter import (
+    EvidenceClaim,
+    ProfileContext,
+    build_profile_context,
+    claim_ref,
+    find_evidence,
+    iter_profile_claims,
+)
 from modules.jd_analyst.decoder import JDDecoder
 from modules.jd_analyst.matcher import JDMatcher
 from modules.jd_analyst.models import CandidateProfile, DecodedJD, GapState, MatcherResult
 from modules.jd_analyst.predictor import JDPredictor
 
 
-def build_candidate_profile(profile_dict: Dict[str, Any]) -> CandidateProfile:
+def build_candidate_profile(profile_dict: Union[Dict[str, Any], ProfileContext]) -> CandidateProfile:
     """Use the shared profile adapter so missing facts remain unknown."""
+    if isinstance(profile_dict, ProfileContext):
+        return profile_dict.get_canonical_profile()
     return profile_to_canonical(profile_dict if isinstance(profile_dict, dict) else {})
 
 
@@ -48,10 +58,18 @@ def _claim_risk_flags(claim: EvidenceClaim) -> List[Dict[str, str]]:
     flags: List[Dict[str, str]] = []
     text = claim.text
 
+    declared_role = "contributor"
+    if claim.role_scope:
+        role_lower = claim.role_scope.lower()
+        if any(k in role_lower for k in ("architect", "架构", "lead", "负责人")):
+            declared_role = "tech_lead"
+        else:
+            declared_role = "module_owner"
+
     for issue in AsuModeler().audit_bullet_inflation(
         text,
         verification=claim.verification,
-        user_declared_role="contributor" if not claim.role_scope else "module_owner",
+        user_declared_role=declared_role,
     ):
         risk = issue.get("risk", "")
         flags.append({
@@ -194,7 +212,6 @@ def generate_resume_advice(
                 state = "needs_confirmation"
                 action = "ask_user"
                 safe_bullet = ""
-                evidence_type = "none"
                 grounding_note = "候选人原文包含未通过事实核验的数字或指标，补充来源后再改写。"
 
         blocking_codes = {
@@ -202,8 +219,6 @@ def generate_resume_advice(
             "P2_UNBOUNDED_SUPERLATIVE",
             "P3_TEMPORAL_CONFUSION",
             "role_scope_unverified",
-            "metric_context_missing",
-            "personal_attribution_missing",
             "fact_guard_failed",
         }
         if safe_bullet and any(flag["code"] in blocking_codes for flag in risk_flags):
@@ -246,17 +261,39 @@ def generate_resume_advice(
     return advice_list
 
 
+@dataclass
+class ResumePatch:
+    source_claim_id: str
+    target_path: str
+    before: str
+    after: str
+    evidence_refs: List[Dict[str, Any]] = field(default_factory=list)
+    validation_status: str = "applied"  # "applied", "rejected", "already_applied", "pending_user_confirmation"
+    reason: str = ""
+    unresolved_risks: List[Dict[str, str]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
 def generate_tailored_profile_from_review(
     review_result: Dict[str, Any],
-    base_profile: Dict[str, Any],
+    base_profile: Union[Dict[str, Any], ProfileContext],
+    fact_guard: Optional[FactVerificationGuard] = None,
 ) -> Dict[str, Any]:
     """Derive targeted tailored candidate profile from career review advice.
 
-    Extracts safe_bullet recommendations (verified, un-inflated, fact-grounded)
-    and injects or supplements them into corresponding experiences or projects
-    in base_profile, generating a highly tailored profile for the target JD.
+    Applies verified, un-inflated, fact-grounded recommendations to the candidate profile
+    via structured ResumePatch audits. Preserves base_profile immutability and enforces:
+    1. Idempotency (does not duplicate bullets on repeated execution)
+    2. Zero unanchored fallback (never blindly injects into experience[0])
+    3. Fact Guard verification on all incoming recommendations
+    4. Unresolved risks and patch audit tracking
     """
-    tailored = copy.deepcopy(base_profile if isinstance(base_profile, dict) else {})
+    if isinstance(base_profile, ProfileContext):
+        tailored = copy.deepcopy(base_profile.normalized_profile)
+    else:
+        tailored = copy.deepcopy(base_profile if isinstance(base_profile, dict) else {})
 
     # 1. Candidate metadata & photo slot
     if "candidate" in tailored and isinstance(tailored["candidate"], dict):
@@ -325,13 +362,20 @@ def generate_tailored_profile_from_review(
             else:
                 proj["bullets"] = list(p_bullets)
 
-    # 4. Extract and inject verified safe_bullet evidence
+    # 4. Extract and inject verified safe_bullet evidence via ResumePatch
     if isinstance(review_result, list):
         advice_list = review_result
     elif isinstance(review_result, dict):
         advice_list = review_result.get("resume_advice", [])
     else:
         advice_list = []
+
+    guard = fact_guard
+    if guard is None and base_profile:
+        guard = FactVerificationGuard(base_profile)
+
+    applied_patches: List[Dict[str, Any]] = []
+    unresolved_risks: List[Dict[str, Any]] = []
 
     for advice in advice_list:
         if not isinstance(advice, dict):
@@ -341,6 +385,8 @@ def generate_tailored_profile_from_review(
             continue
         safe_bullet = safe_bullet.strip()
         if not safe_bullet:
+            if advice.get("risk_flags"):
+                unresolved_risks.extend(advice["risk_flags"])
             continue
 
         # Clean diagnostic prefixes
@@ -355,6 +401,32 @@ def generate_tailored_profile_from_review(
         action = advice.get("action", "")
         requirement = advice.get("requirement", "")
         evidence_refs = advice.get("evidence_refs", [])
+        risk_flags = advice.get("risk_flags", [])
+
+        # Fact Guard Verification on safe_bullet
+        if guard is not None and safe_bullet:
+            guard_res = guard.verify_facts(safe_bullet)
+            if not guard_res.get("passed", False):
+                drift_items = guard_res.get("drifts", [])
+                unv_items = guard_res.get("unverified_claims", [])
+                reason_detail = []
+                for d in drift_items:
+                    reason_detail.append(f"指标虚标: {d.get('claimed_metric')} (底稿基线: {d.get('verified_baseline')})")
+                for u in unv_items:
+                    reason_detail.append(f"未核验指标: {u.get('claimed_metric')}")
+                patch = ResumePatch(
+                    source_claim_id=requirement,
+                    target_path="unapplied",
+                    before="",
+                    after=safe_bullet,
+                    evidence_refs=evidence_refs,
+                    validation_status="rejected",
+                    reason=f"fact_guard_rejected: {'; '.join(reason_detail)}",
+                    unresolved_risks=risk_flags,
+                )
+                applied_patches.append(patch.to_dict())
+                unresolved_risks.extend(risk_flags)
+                continue
 
         # Filter candidate metadata
         is_candidate_meta = False
@@ -376,19 +448,26 @@ def generate_tailored_profile_from_review(
         target_exp_indices: List[int] = []
         target_proj_indices: List[int] = []
         excerpts: List[str] = []
+        matched_claim_id = ""
 
         for ref in evidence_refs:
             sp = ref.get("source_path", "")
             cid = ref.get("claim_id", "")
+            if cid and not matched_claim_id:
+                matched_claim_id = cid
             if ref.get("excerpt"):
                 excerpts.append(ref["excerpt"])
 
             m_exp = re.search(r"experience\[(\d+)\]", sp)
             if m_exp:
-                target_exp_indices.append(int(m_exp.group(1)))
+                idx = int(m_exp.group(1))
+                if 0 <= idx < len(experiences):
+                    target_exp_indices.append(idx)
             m_proj = re.search(r"projects\[(\d+)\]", sp)
             if m_proj:
-                target_proj_indices.append(int(m_proj.group(1)))
+                idx = int(m_proj.group(1))
+                if projects and 0 <= idx < len(projects):
+                    target_proj_indices.append(idx)
 
             if cid and experiences:
                 for e_idx, exp in enumerate(experiences):
@@ -398,27 +477,41 @@ def generate_tailored_profile_from_review(
                         if isinstance(h, dict) and h.get("claim_id") == cid:
                             target_exp_indices.append(e_idx)
 
-        # Keyword matching fallback
-        if not target_exp_indices and not target_proj_indices and experiences:
-            best_idx = -1
-            best_score = 0
-            for e_idx, exp in enumerate(experiences):
-                if not isinstance(exp, dict):
-                    continue
-                exp_text = f"{exp.get('company', '')} {exp.get('role', '')} {' '.join(exp.get('bullets', []))}".lower()
-                score = 0
-                if requirement and requirement.lower() in exp_text:
-                    score += 5
-                for token in re.split(r"[/,、\s\-]+", safe_bullet):
-                    if len(token) >= 2 and token.lower() in exp_text:
-                        score += 1
-                if score > best_score:
-                    best_score = score
-                    best_idx = e_idx
-            if best_idx >= 0 and best_score >= 1:
-                target_exp_indices.append(best_idx)
-            elif category in ("responsibility", "experience") or action == "rewrite":
-                target_exp_indices.append(0)
+        # Content/excerpt matching fallback (strictly scoped, no blind index 0)
+        if not target_exp_indices and not target_proj_indices:
+            if excerpts and experiences:
+                for e_idx, exp in enumerate(experiences):
+                    if not isinstance(exp, dict):
+                        continue
+                    exp_text = " ".join(exp.get("bullets", [])).lower()
+                    if any(ex.lower() in exp_text for ex in excerpts if len(ex) >= 4):
+                        target_exp_indices.append(e_idx)
+                        break
+
+            if not target_exp_indices and excerpts and projects:
+                for p_idx, proj in enumerate(projects):
+                    if not isinstance(proj, dict):
+                        continue
+                    proj_text = f"{proj.get('name', '')} {' '.join(proj.get('bullets', []))}".lower()
+                    if any(ex.lower() in proj_text for ex in excerpts if len(ex) >= 4):
+                        target_proj_indices.append(p_idx)
+                        break
+
+        # Strictly reject if target location is unresolved (DO NOT fall back to experience[0])
+        if not target_exp_indices and not target_proj_indices:
+            patch = ResumePatch(
+                source_claim_id=matched_claim_id or requirement,
+                target_path="unresolved",
+                before="",
+                after=safe_bullet,
+                evidence_refs=evidence_refs,
+                validation_status="rejected",
+                reason="target_location_unresolved: evidence cannot be anchored to a specific experience or project",
+                unresolved_risks=risk_flags,
+            )
+            applied_patches.append(patch.to_dict())
+            unresolved_risks.extend(risk_flags)
+            continue
 
         # Inject / rewrite into matched experiences
         for e_idx in dict.fromkeys(target_exp_indices):
@@ -427,20 +520,44 @@ def generate_tailored_profile_from_review(
                 bullets = exp.setdefault("bullets", [])
 
                 if safe_bullet in bullets:
+                    patch = ResumePatch(
+                        source_claim_id=matched_claim_id or requirement,
+                        target_path=f"experience[{e_idx}].bullets[{bullets.index(safe_bullet)}]",
+                        before=safe_bullet,
+                        after=safe_bullet,
+                        evidence_refs=evidence_refs,
+                        validation_status="already_applied",
+                        reason="idempotent: bullet already present in target",
+                        unresolved_risks=risk_flags,
+                    )
+                    applied_patches.append(patch.to_dict())
                     continue
 
                 replaced = False
+                before_str = ""
+                b_target_idx = -1
                 if action == "rewrite":
                     for b_idx, existing_b in enumerate(bullets):
                         if any(ex and ex in existing_b for ex in excerpts):
+                            before_str = existing_b
                             bullets[b_idx] = safe_bullet
                             replaced = True
+                            b_target_idx = b_idx
                             break
 
                 if not replaced:
                     bullets.append(safe_bullet)
+                    b_target_idx = len(bullets) - 1
 
+                # Check whether original had verified metrics (do not invent verified_metrics=True)
+                has_orig_verified = False
                 if "highlights" in exp and isinstance(exp["highlights"], list):
+                    for h in exp["highlights"]:
+                        if isinstance(h, dict) and (h.get("claim_id") == matched_claim_id or (before_str and before_str in (h.get("claim_zh") or ""))):
+                            if h.get("verified_metrics"):
+                                has_orig_verified = True
+                                break
+
                     has_h = any(
                         (isinstance(h, dict) and (h.get("claim_zh") == safe_bullet or h.get("safe_bullet") == safe_bullet))
                         or h == safe_bullet
@@ -451,24 +568,66 @@ def generate_tailored_profile_from_review(
                             "claim_id": f"TAILORED-{len(exp['highlights'])+1}",
                             "claim_zh": safe_bullet,
                             "safe_bullet": safe_bullet,
-                            "verified_metrics": True,
+                            "verified_metrics": has_orig_verified,
                             "tailored": True,
                         })
+
+                patch = ResumePatch(
+                    source_claim_id=matched_claim_id or requirement,
+                    target_path=f"experience[{e_idx}].bullets[{b_target_idx}]",
+                    before=before_str,
+                    after=safe_bullet,
+                    evidence_refs=evidence_refs,
+                    validation_status="applied",
+                    reason="grounded rewrite" if replaced else "grounded supplement",
+                    unresolved_risks=risk_flags,
+                )
+                applied_patches.append(patch.to_dict())
 
         # Inject into matched projects
         for p_idx in dict.fromkeys(target_proj_indices):
             if projects and 0 <= p_idx < len(projects):
                 proj = projects[p_idx]
                 p_bullets = proj.setdefault("bullets", [])
-                if safe_bullet not in p_bullets:
-                    p_bullets.append(safe_bullet)
+                if safe_bullet in p_bullets:
+                    patch = ResumePatch(
+                        source_claim_id=matched_claim_id or requirement,
+                        target_path=f"projects[{p_idx}].bullets[{p_bullets.index(safe_bullet)}]",
+                        before=safe_bullet,
+                        after=safe_bullet,
+                        evidence_refs=evidence_refs,
+                        validation_status="already_applied",
+                        reason="idempotent: bullet already present in project",
+                        unresolved_risks=risk_flags,
+                    )
+                    applied_patches.append(patch.to_dict())
+                    continue
+                p_bullets.append(safe_bullet)
+                patch = ResumePatch(
+                    source_claim_id=matched_claim_id or requirement,
+                    target_path=f"projects[{p_idx}].bullets[{len(p_bullets)-1}]",
+                    before="",
+                    after=safe_bullet,
+                    evidence_refs=evidence_refs,
+                    validation_status="applied",
+                    reason="grounded project supplement",
+                    unresolved_risks=risk_flags,
+                )
+                applied_patches.append(patch.to_dict())
+
+    tailored["applied_patches"] = applied_patches
+    tailored["unresolved_risks"] = unresolved_risks
+    tailored["_audit"] = {
+        "applied_patches": applied_patches,
+        "unresolved_risks": unresolved_risks,
+    }
 
     return tailored
 
 
 def run_career_review(
     jd_text: str,
-    profile_dict: Dict[str, Any],
+    profile_dict: Union[Dict[str, Any], ProfileContext],
     answers_dict: Optional[Dict[str, Any]] = None,
     listing_age_days: int = 15,
     build_resume: bool = False,
@@ -479,8 +638,9 @@ def run_career_review(
     decoder = JDDecoder()
     decoded_jd = decoder.decode(jd_text)
 
-    cand_profile = build_candidate_profile(profile_dict)
-    claims = iter_profile_claims(profile_dict)
+    profile_ctx = build_profile_context(profile_dict if isinstance(profile_dict, (dict, ProfileContext)) else {})
+    cand_profile = profile_ctx.get_canonical_profile()
+    claims = list(profile_ctx.claims)
 
     matcher = JDMatcher()
     matcher_result = matcher.match(decoded_jd, cand_profile)
@@ -489,8 +649,15 @@ def run_career_review(
     probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days)
     questions = predictor.predict_targeted_questions(decoded_jd, matcher_result, count=3)
 
+    target_dims = [
+        ("core_responsibility", "核心岗位能力与技术架构深度考查"),
+        ("project_deep_dive", "候选人真实项目经历与关键成果深入追问"),
+        ("gap_boundary", "技术缺口/证据不足边界与真实性防守考查"),
+    ]
+
     formatted_questions: List[Dict[str, Any]] = []
-    for q in questions:
+    for idx, q in enumerate(questions[:3], 1):
+        dim_key, dim_name = target_dims[idx - 1] if idx <= len(target_dims) else ("core_competency", "核心能力考查")
         q_keywords = [w for w in re.split(r"[/,、\s]+", q.question_cn + " " + q.jd_signal) if len(w) >= 2]
         related_claims = []
         for kw in q_keywords[:5]:
@@ -499,17 +666,22 @@ def run_career_review(
                 related_claims.extend(matched)
 
         evidence_refs = [claim_ref(c) for c in related_claims[:3]]
+        evidence_claim_ids = [ref.get("claim_id") for ref in evidence_refs if ref.get("claim_id")]
 
         formatted_questions.append({
             "question_id": q.question_id,
+            "target_dimension": dim_key,
+            "dimension_name_cn": dim_name,
             "category": q.category_cn,
             "category_type": q.category_type.value if hasattr(q.category_type, "value") else str(q.category_type),
             "question_zh": q.question_cn,
             "question_en": q.question_en,
             "jd_signal": q.jd_signal,
             "interviewer_intent": q.interviewer_intent,
+            "expected_elements": ["个人负责动作", "方案与技术选型", "指标Baseline与数据来源", "边界限制与反思"],
             "prep_keypoints": q.prep_keypoints,
             "evidence_refs": evidence_refs,
+            "evidence_claim_ids": evidence_claim_ids,
             "gap_refs": [gap.requirement_name for gap in matcher_result.gap_matrix if any(
                 token and token.lower() in (q.question_cn + " " + q.jd_signal).lower()
                 for token in re.split(r"[/,、\s\-]+", gap.requirement_name.replace("技能-", "").replace("职责-", ""))
@@ -517,7 +689,7 @@ def run_career_review(
             )][:3],
         })
 
-    fact_guard = FactVerificationGuard(profile_dict if isinstance(profile_dict, dict) else {})
+    fact_guard = FactVerificationGuard(profile_ctx)
     resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard)
 
     debrief_engine = InterviewDebriefEngine()
@@ -577,11 +749,16 @@ def run_career_review(
                 feedback_items.append({
                     "question_id": qid,
                     "question_zh": q["question_zh"],
+                    "target_dimension": q.get("target_dimension", ""),
                     "candidate_answer": user_ans,
                     "status": "evaluated",
                     "diagnosis": debrief.diagnosis.value if hasattr(debrief.diagnosis, "value") else str(debrief.diagnosis),
                     "analysis": debrief.analysis_zh,
+                    "coaching_advice": debrief.coaching_advice,
+                    "revised_answer": debrief.revised_answer,
                     "refined_answer": debrief.refined_answer,
+                    "can_revise": debrief.can_revise,
+                    "verification_status": debrief.verification_status,
                     "key_takeaway": debrief.key_takeaway,
                     "evidence_refs": debrief.claim_refs,
                     "missing_elements": debrief.missing_elements,
@@ -591,24 +768,38 @@ def run_career_review(
                 feedback_items.append({
                     "question_id": qid,
                     "question_zh": q["question_zh"],
+                    "target_dimension": q.get("target_dimension", ""),
                     "candidate_answer": "",
                     "status": "awaiting_answer",
                     "diagnosis": "not_submitted",
                     "analysis": "未提供回答。请针对该问题提交您的作答以获得针对性攻防诊断。",
+                    "coaching_advice": q["prep_keypoints"],
+                    "revised_answer": "",
                     "refined_answer": q["prep_keypoints"],
+                    "can_revise": False,
+                    "verification_status": "unverified",
                     "key_takeaway": "参考题目的考查意图与备考要点构思 STAR 框架回答。",
+                    "missing_elements": [],
+                    "follow_up_questions": [],
                 })
     else:
         for q in formatted_questions:
             feedback_items.append({
                 "question_id": q["question_id"],
                 "question_zh": q["question_zh"],
+                "target_dimension": q.get("target_dimension", ""),
                 "candidate_answer": "",
                 "status": "awaiting_answer",
                 "diagnosis": "not_submitted",
                 "analysis": "候选人尚未提交该题的一轮回答。请提交回答以触发基于指标与证据的诊断。",
+                "coaching_advice": q["prep_keypoints"],
+                "revised_answer": "",
                 "refined_answer": q["prep_keypoints"],
+                "can_revise": False,
+                "verification_status": "unverified",
                 "key_takeaway": "明确指标口径、数据来源和个人贡献边界。",
+                "missing_elements": [],
+                "follow_up_questions": [],
             })
 
     polish_focus = {
@@ -676,9 +867,11 @@ def run_career_review(
 
     tailored_profile = generate_tailored_profile_from_review(
         {"resume_advice": resume_advices, "match_summary": matcher_result},
-        profile_dict,
+        profile_ctx,
+        fact_guard=fact_guard,
     )
     result["tailored_profile"] = tailored_profile
+    result["resume_patches"] = tailored_profile.get("_audit", {}).get("applied_patches", [])
 
     if build_resume:
         from core.resume_builder import ResumeBuilder
@@ -715,4 +908,55 @@ def run_career_review(
             }
 
     return result
+
+
+def create_review_session(
+    jd_text: str,
+    profile_dict: Union[Dict[str, Any], ProfileContext],
+    review_result: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Creates a verifiable lightweight JSON session snapshot."""
+    jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
+    raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
+    profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+    session_id = f"SESSION-{jd_hash}-{profile_hash}"
+
+    questions_snapshot = []
+    for q in review_result.get("interview_questions", []):
+        questions_snapshot.append({
+            "question_id": q.get("question_id"),
+            "target_dimension": q.get("target_dimension", ""),
+            "question_zh": q.get("question_zh", ""),
+            "jd_signal": q.get("jd_signal", ""),
+            "interviewer_intent": q.get("interviewer_intent", ""),
+        })
+
+    return {
+        "session_id": session_id,
+        "schema_version": "career-review-session.v1",
+        "jd_fingerprint": jd_hash,
+        "profile_fingerprint": profile_hash,
+        "status": "awaiting_answer" if any(f.get("status") == "awaiting_answer" for f in review_result.get("answer_feedback", [])) else "completed",
+        "questions_snapshot": questions_snapshot,
+        "answers": review_result.get("input_quality", {}).get("answers", []),
+        "answer_feedback": review_result.get("answer_feedback", []),
+    }
+
+
+def validate_session_answers(
+    session: Dict[str, Any],
+    incoming_answers: Dict[str, Any],
+) -> Tuple[bool, List[str]]:
+    """Validates that submitted answers correspond to the session's question snapshot."""
+    errors = []
+    if not isinstance(session, dict):
+        return False, ["invalid_session_object"]
+    valid_qids = {q.get("question_id") for q in session.get("questions_snapshot", [])}
+    answers_list = incoming_answers.get("answers", []) if isinstance(incoming_answers, dict) else []
+    for ans in answers_list:
+        if isinstance(ans, dict):
+            qid = ans.get("question_id")
+            if qid not in valid_qids:
+                errors.append(f"question_id_{qid}_not_in_session_snapshot")
+    return len(errors) == 0, errors
 

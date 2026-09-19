@@ -17,7 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from core.profile_adapter import (
     EvidenceClaim,
+    ProfileContext,
     ProfileEvidenceIndex,
+    build_profile_context,
     build_profile_evidence_index,
     normalize_candidate_profile,
 )
@@ -183,6 +185,158 @@ class TestProfileAdapter(unittest.TestCase):
         self.assertEqual(norm_a["candidate"].get("title"), "")
         self.assertNotEqual(norm_a["candidate"].get("title"), "运营岗")
 
+    def test_06_profile_context_creation_and_fields(self):
+        """Test ProfileContext holds SSOT data, claims, index, and projections."""
+        ctx = build_profile_context(self.profile_data)
+        self.assertIsInstance(ctx, ProfileContext)
+        self.assertIsInstance(ctx.raw_profile, dict)
+        self.assertIsInstance(ctx.normalized_profile, dict)
+        self.assertIsInstance(ctx.evidence_index, ProfileEvidenceIndex)
+        self.assertIsInstance(ctx.claims, tuple)
+        self.assertIsInstance(ctx.skills, tuple)
+        self.assertIsInstance(ctx.bullets, tuple)
+        self.assertIsInstance(ctx.metric_anchors, tuple)
+        self.assertIsInstance(ctx.input_quality, dict)
+
+        # Ensure raw_profile was deep-copied (mutating source does not corrupt ctx.raw_profile)
+        source = copy.deepcopy(self.profile_data)
+        ctx2 = build_profile_context(source)
+        source["candidate"]["name"] = "MODIFIED_NAME"
+        self.assertNotEqual(ctx2.raw_profile["candidate"]["name"], "MODIFIED_NAME")
+
+    def test_07_profile_context_idempotence_and_caching(self):
+        """Test ProfileContext is idempotent and skips redundant normalization."""
+        ctx1 = build_profile_context(self.profile_data)
+        # Passing ProfileContext to build_profile_context returns the same context
+        ctx2 = build_profile_context(ctx1)
+        self.assertIs(ctx1, ctx2)
+
+        # Passing ProfileContext to from_profile returns the same context
+        ctx3 = ProfileContext.from_profile(ctx1)
+        self.assertIs(ctx1, ctx3)
+
+        # normalize_candidate_profile accepts ProfileContext without recalculation
+        norm = normalize_candidate_profile(ctx1)
+        self.assertEqual(norm, ctx1.normalized_profile)
+
+        # build_profile_evidence_index accepts ProfileContext and returns existing index
+        idx = build_profile_evidence_index(ctx1)
+        self.assertIs(idx, ctx1.evidence_index)
+
+    def test_08_profile_context_integration_with_fact_guard_and_canonical(self):
+        """Test ProfileContext with FactVerificationGuard and profile_to_canonical."""
+        from core.fact_guard import FactVerificationGuard
+        from core.jd_compat import profile_to_canonical
+
+        ctx = build_profile_context(self.profile_data)
+
+        # Canonical profile lazy evaluation & defensive copies
+        cand1 = ctx.get_canonical_profile()
+        cand2 = ctx.get_canonical_profile()
+        self.assertEqual(cand1, cand2)
+        self.assertIsNot(cand1, cand2)  # Defensive copy on every get
+        self.assertEqual(cand1.name, ctx.normalized_profile["candidate"]["name"])
+
+        # Mutating cand1 does not mutate ctx internal canonical profile
+        cand1.skills.clear()
+        self.assertEqual(len(cand1.skills), 0)
+        self.assertGreater(len(ctx.get_canonical_profile().skills), 0)
+        self.assertGreater(len(ctx.canonical_profile_copy().skills), 0)
+
+        # profile_to_canonical directly on ctx returns identical data
+        cand3 = profile_to_canonical(ctx)
+        self.assertEqual(cand2.name, cand3.name)
+
+        # FactVerificationGuard reuses ctx.evidence_index directly
+        guard = FactVerificationGuard(ctx)
+        self.assertIs(guard.evidence_index, ctx.evidence_index)
+        self.assertEqual(guard.master_profile, ctx.normalized_profile)
+        self.assertGreater(len(guard.baseline_anchors), 0)
+
+    def test_09_profile_context_immutability_and_defensive_copies(self):
+        """Test that ProfileContext and ProfileEvidenceIndex protect internal state from external mutation."""
+        ctx = build_profile_context(self.profile_data)
+
+        # 1. Mutating returned normalized_profile does not affect ctx
+        p1 = ctx.normalized_profile
+        orig_exp_count = len(p1["experience"])
+        p1["experience"].clear()
+        self.assertEqual(len(p1["experience"]), 0)
+        self.assertEqual(len(ctx.normalized_profile["experience"]), orig_exp_count)
+        self.assertEqual(len(ctx.profile_copy()["experience"]), orig_exp_count)
+
+        # 2. Mutating returned raw_profile does not affect ctx
+        raw = ctx.raw_profile
+        raw["name"] = "Malicious Modification"
+        self.assertNotEqual(ctx.raw_profile.get("name"), "Malicious Modification")
+        self.assertNotEqual(ctx.raw_profile_copy().get("name"), "Malicious Modification")
+
+        # 3. Mutating evidence_index.profile does not affect index
+        idx_p = ctx.evidence_index.profile
+        idx_p["skills"] = ["Hacker"]
+        self.assertNotIn("Hacker", ctx.evidence_index.profile.get("skills", []))
+        self.assertNotIn("Hacker", ctx.evidence_index.skills)
+
+        # 4. Attempting to overwrite attributes on ctx or evidence_index raises AttributeError
+        with self.assertRaises(AttributeError):
+            ctx.skills = ()  # type: ignore
+
+        with self.assertRaises(AttributeError):
+            ctx.normalized_profile = {}  # type: ignore
+
+        with self.assertRaises(AttributeError):
+            ctx.evidence_index.bullets = ()  # type: ignore
+
+        with self.assertRaises(AttributeError):
+            ctx.evidence_index.profile = {}  # type: ignore
+
+        # 5. Mutating metric_anchors dictionaries does not affect ctx or evidence_index
+        self.assertGreater(len(ctx.metric_anchors), 0)
+        orig_val = ctx.metric_anchors[0].get("value")
+        ctx.metric_anchors[0]["value"] = "POISON_VALUE"
+        self.assertEqual(ctx.metric_anchors[0].get("value"), orig_val)
+
+        orig_idx_val = ctx.evidence_index.metric_anchors[0].get("value")
+        ctx.evidence_index.metric_anchors[0]["value"] = "POISON_VALUE"
+        self.assertEqual(ctx.evidence_index.metric_anchors[0].get("value"), orig_idx_val)
+
+    def test_10_profile_context_rejection_of_private_and_cache_tampering(self):
+        """Test that ProfileContext unconditionally rejects any attribute assignment (including private fields)."""
+        ctx = build_profile_context(self.profile_data)
+
+        # 1. Private fields tampering must be blocked
+        with self.assertRaises(AttributeError):
+            ctx._canonical_profile = "malicious_override"
+
+        with self.assertRaises(AttributeError):
+            ctx._raw_profile = {}
+
+        with self.assertRaises(AttributeError):
+            ctx._normalized_profile = {}
+
+        with self.assertRaises(AttributeError):
+            ctx._metric_anchors = ()
+
+        with self.assertRaises(AttributeError):
+            ctx.new_unknown_attr = 999
+
+        # 2. Canonical profile mutations do not corrupt subsequent reads
+        canonical = ctx.get_canonical_profile()
+        original_skills = list(canonical.skills)
+        canonical.skills.append("POISON_SKILL")
+        canonical.name = "POISON_NAME"
+
+        fresh_canonical = ctx.get_canonical_profile()
+        self.assertEqual(fresh_canonical.skills, original_skills)
+        self.assertNotIn("POISON_SKILL", fresh_canonical.skills)
+        self.assertNotEqual(fresh_canonical.name, "POISON_NAME")
+
+        # 3. Context version alignment: evidence_index, claims, and canonical_profile reflect the same version
+        self.assertEqual(fresh_canonical.name, ctx.normalized_profile["candidate"]["name"])
+        self.assertEqual(set(fresh_canonical.skills), set(ctx.evidence_index.skills))
+        self.assertEqual(len(ctx.claims), len(ctx.evidence_index.claims))
+
 
 if __name__ == "__main__":
     unittest.main()
+

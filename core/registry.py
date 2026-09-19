@@ -253,19 +253,19 @@ class MetricPatternRegistry:
     ]
 
     METRIC_TYPE_TO_TOPICS: Dict[str, Set[str]] = {
-        "percentage": {"mfu", "uptime", "latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain"},
-        "currency": {"savings"},
-        "time_hours": {"downtime_before", "time_hours"},
-        "time_minutes": {"downtime_after", "time_minutes"},
-        "time_ms": {"ttft_after", "time_ms"},
-        "time_s": {"ttft_before", "time_s"},
-        "time_weeks": {"time_saved", "time_weeks"},
-        "years": {"experience_years"},
-        "cluster_size": {"cluster_size"},
-        "model_param": {"model_params"},
-        "stars": {"stars"},
-        "multiplier": {"multiplier"},
-        "count": {"count"},
+        "percentage": {"mfu", "uptime", "latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain", "percentage", "generic"},
+        "currency": {"savings", "currency", "generic"},
+        "time_hours": {"downtime_before", "time_hours", "generic"},
+        "time_minutes": {"downtime_after", "time_minutes", "generic"},
+        "time_ms": {"ttft_after", "time_ms", "generic"},
+        "time_s": {"ttft_before", "time_s", "generic"},
+        "time_weeks": {"time_saved", "time_weeks", "generic"},
+        "years": {"experience_years", "years", "generic"},
+        "cluster_size": {"cluster_size", "generic"},
+        "model_param": {"model_params", "model_param", "generic"},
+        "stars": {"stars", "generic"},
+        "multiplier": {"multiplier", "generic"},
+        "count": {"count", "generic"},
     }
 
     @classmethod

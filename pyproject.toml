@@ -11,7 +11,7 @@ license = {text = "MIT"}
 
 [project.optional-dependencies]
 test = ["pytest"]
-render = ["playwright", "pypdf"]
+render = ["pypdf"]
 dev = ["ruff"]
 
 [project.scripts]
@@ -26,4 +26,9 @@ py-modules = ["cli"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "modules*", "presentation*"]
+include = ["core*", "modules*", "presentation*", "ApexResume*", "templates*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.html", "*.css", "*.md"]
+"templates" = ["*.html", "*.css"]
+"ApexResume" = ["themes/*", "themes/**/*"]

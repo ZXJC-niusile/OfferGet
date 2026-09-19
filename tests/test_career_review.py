@@ -114,7 +114,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(q3_fb["status"], "awaiting_answer")
 
     def test_04_answer_feedback_with_fatal_gap(self):
-        """Diagnose fatal_gap when candidate admits not knowing or having no experience."""
+        """Diagnose experience_boundary when candidate admits not knowing or having no experience."""
         answers = {
             "answers": [
                 {"question_id": 1, "answer": "这块技术我之前没做过，不太了解底层细节。"}
@@ -123,7 +123,9 @@ class TestCareerReviewPipeline(unittest.TestCase):
         res = run_career_review(self.jd_text, self.profile_data, answers_dict=answers)
         q1_fb = res["answer_feedback"][0]
         self.assertEqual(q1_fb["status"], "evaluated")
-        self.assertEqual(q1_fb["diagnosis"], "fatal_gap")
+        self.assertEqual(q1_fb["diagnosis"], "experience_boundary")
+        self.assertNotIn("但我深入实践过与之底层相通的架构", q1_fb.get("refined_answer", ""))
+        self.assertIn("未在实际项目中主导过", q1_fb.get("refined_answer", ""))
 
     def test_05_resume_advice_grounding_and_no_hallucination(self):
         """Ensure resume advice adheres to verified vs unsupported actions without inventing facts."""
@@ -367,7 +369,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertTrue(res["tailored_profile"]["candidate"].get("reserve_photo", False))
 
     def test_18_generate_tailored_profile_from_review_unit(self):
-        """Test unit behavior of generate_tailored_profile_from_review."""
+        """Test unit behavior of generate_tailored_profile_from_review with ResumePatch gates."""
         base = {
             "candidate": {
                 "name": "李四",
@@ -385,7 +387,8 @@ class TestCareerReviewPipeline(unittest.TestCase):
                 }
             ],
         }
-        review = {
+        # Case A: Metric inflation (20% -> 35%) is rejected by FactVerificationGuard gate
+        inflated_review = {
             "resume_advice": [
                 {
                     "requirement": "Megatron-LM",
@@ -393,6 +396,32 @@ class TestCareerReviewPipeline(unittest.TestCase):
                     "state": "verified",
                     "action": "rewrite",
                     "safe_bullet": "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 35%。",
+                    "evidence_refs": [{"source_path": "experience[0].bullets[0]", "excerpt": "负责训练流水线优化"}],
+                },
+            ]
+        }
+        tailored_inflated = generate_tailored_profile_from_review(inflated_review, base)
+        # Base profile should remain untouched (immutability)
+        self.assertEqual(len(base["experience"][0]["bullets"]), 1)
+        self.assertNotIn("Megatron-LM", base["experience"][0]["bullets"][0])
+        # Tailored profile must NOT accept the inflated 35%
+        bullets_inflated = tailored_inflated["experience"][0]["bullets"]
+        self.assertFalse(any("35%" in b for b in bullets_inflated))
+        # Patch must be recorded as rejected
+        patches_inflated = tailored_inflated.get("applied_patches", [])
+        self.assertEqual(len(patches_inflated), 1)
+        self.assertEqual(patches_inflated[0]["validation_status"], "rejected")
+        self.assertIn("fact_guard_rejected", patches_inflated[0]["reason"])
+
+        # Case B: Grounded metric (preserving 20%) succeeds and is applied
+        grounded_review = {
+            "resume_advice": [
+                {
+                    "requirement": "Megatron-LM",
+                    "category": "skill",
+                    "state": "verified",
+                    "action": "rewrite",
+                    "safe_bullet": "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 20%。",
                     "evidence_refs": [{"source_path": "experience[0].bullets[0]", "excerpt": "负责训练流水线优化"}],
                 },
                 {
@@ -405,22 +434,26 @@ class TestCareerReviewPipeline(unittest.TestCase):
                 },
             ]
         }
-        tailored = generate_tailored_profile_from_review(review, base)
+        tailored_grounded = generate_tailored_profile_from_review(grounded_review, base)
+        bullets_grounded = tailored_grounded["experience"][0]["bullets"]
+        self.assertTrue(any("Megatron-LM" in b for b in bullets_grounded))
+        self.assertTrue(any("20%" in b for b in bullets_grounded))
+        self.assertNotIn("幻觉技能", " ".join(bullets_grounded))
+        patches_grounded = tailored_grounded.get("applied_patches", [])
+        applied_patch = next(p for p in patches_grounded if p["validation_status"] == "applied")
+        self.assertEqual(applied_patch["target_path"], "experience[0].bullets[0]")
 
-        # Base profile should remain untouched (immutability)
-        self.assertEqual(len(base["experience"][0]["bullets"]), 1)
-        self.assertNotIn("Megatron-LM", base["experience"][0]["bullets"][0])
-
-        # Tailored profile must contain safe_bullet rewritten experience
-        bullets = tailored["experience"][0]["bullets"]
-        self.assertTrue(any("Megatron-LM" in b for b in bullets))
-        self.assertTrue(any("35%" in b for b in bullets))
-        self.assertNotIn("幻觉技能", " ".join(bullets))
+        # Case C: Re-application is idempotent (already_applied, no duplicate bullets)
+        tailored_reapplied = generate_tailored_profile_from_review(grounded_review, tailored_grounded)
+        self.assertEqual(len(tailored_reapplied["experience"][0]["bullets"]), 1)
+        patches_reapplied = tailored_reapplied.get("applied_patches", [])
+        reapplied_patch = next(p for p in patches_reapplied if p["source_claim_id"] == "Megatron-LM")
+        self.assertEqual(reapplied_patch["validation_status"], "already_applied")
 
         # Photo reservation and bridged candidate fields
-        self.assertTrue(tailored["candidate"]["reserve_photo"])
-        self.assertEqual(tailored["candidate"]["school"], "上海交通大学")
-        self.assertEqual(tailored["candidate"]["title"], "大模型算法工程师")
+        self.assertTrue(tailored_grounded["candidate"]["reserve_photo"])
+        self.assertEqual(tailored_grounded["candidate"]["school"], "上海交通大学")
+        self.assertEqual(tailored_grounded["candidate"]["title"], "大模型算法工程师")
 
     def test_19_career_review_default_build_resume(self):
         """Test run_career_review with default build_resume=True parameters."""
@@ -433,6 +466,79 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertTrue(pdf_path.exists())
             self.assertTrue(pdf_path.stat().st_size > 0)
             self.assertEqual(res["generated_resumes"]["theme"], "modern-navy")
+
+    def test_20_synthetic_sqlite_case_interview_and_resume(self):
+        """
+        Synthetic case required by acceptance criteria:
+        JD: Python 后端实习生 (接口开发, SQL, 了解 Redis)
+        Profile: 高校课程管理系统 (SQLite, 查询接口, 无 Redis, 无压测)
+        Candidate Answer: "我负责查询接口，访问速度提升了 50%。"
+        Expected:
+        - 50% flagged as unverified (metric_drift diagnosis)
+        - SQLite and query interface duties preserved
+        - No hallucinated Redis or stress benchmarks injected
+        - Conservative revision generated
+        - Follow-up probe questions generated
+        """
+        jd = (
+            "职位：Python 后端实习生\n"
+            "职责：\n"
+            "1. 负责核心业务 HTTP 查询接口开发与维护\n"
+            "2. 编写高效 SQL 查询并配合 SQLite/MySQL 完成数据持久化\n"
+            "3. 了解 Redis 缓存机制与常见应用场景\n"
+        )
+        profile = {
+            "candidate": {
+                "name": "张同学",
+                "degree": "本科",
+                "institution": "某大学",
+                "major": "软件工程",
+            },
+            "skills": ["Python", "SQLite", "SQL"],
+            "projects": [
+                {
+                    "name": "高校课程管理系统",
+                    "role": "后端开发",
+                    "bullets": [
+                        "使用 Python 开发高校课程管理系统后端模块",
+                        "使用 SQLite 设计并实现课程与选课数据表的 SQL 查询接口",
+                    ],
+                }
+            ],
+        }
+        answers = {
+            "answers": [
+                {
+                    "question_id": 1,
+                    "answer": "我负责查询接口，访问速度提升了 50%。",
+                }
+            ]
+        }
+        res = run_career_review(jd, profile, answers_dict=answers)
+
+        # 1. 3 targeted questions generated
+        self.assertEqual(len(res["interview_questions"]), 3)
+
+        # 2. Candidate answer diagnosed as metric_drift
+        fb = res["answer_feedback"][0]
+        self.assertEqual(fb["status"], "evaluated")
+        self.assertEqual(fb["diagnosis"], "metric_drift")
+        self.assertTrue(len(fb["follow_up_questions"]) > 0)
+        self.assertIn("missing_elements", fb)
+
+        # 3. Conservative revision generated, preserving interface duties without hallucinating Redis/benchmarks
+        refined = fb["refined_answer"]
+        self.assertNotIn("50%", refined)
+        self.assertNotIn("Redis", refined)
+        self.assertNotIn("QPS", refined)
+        self.assertTrue("查询接口" in refined or "SQLite" in refined)
+        self.assertTrue("缺乏基线" in refined or "不作主观量化" in refined)
+
+        # 4. Resume advice grounded: Redis marked as unsupported / ask_user without safe_bullet
+        redis_advice = next((a for a in res["resume_advice"] if "Redis" in a["requirement"]), None)
+        if redis_advice:
+            self.assertEqual(redis_advice["safe_bullet"], "")
+            self.assertIn(redis_advice["action"], ["ask_user", "add_evidence"])
 
 
 if __name__ == "__main__":

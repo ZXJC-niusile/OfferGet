@@ -8,6 +8,7 @@ without terminal prints, CLI interactions, or side-effects.
 
 from __future__ import annotations
 
+import importlib
 import os
 import re
 from pathlib import Path
@@ -24,36 +25,15 @@ from core.jd_compat import (
 )
 from core.profile_adapter import (
     EvidenceClaim,
+    ProfileContext,
     ProfileEvidenceIndex,
+    build_profile_context,
     build_profile_evidence_index,
     iter_profile_claims,
     normalize_candidate_profile,
 )
+from core.cli_helpers import read_text
 from core.job_flow import run_career_review
-from core.resume_builder import ResumeBuilder, audit_resume_quality
-from core.offer_negotiator import OfferNegotiator, evaluate_offer_package
-from core.report_generator import generate_report
-from core.security_gate import validate_output_security
-from core.jd_decoder import decode_jd
-from core.jd_matcher import match_profile_to_jd
-from core.validator import validate_bilingual_html, validate_anti_ai_slop
-from core.ats_checker import audit_resume_ats, generate_skill_ledger, filter_profile_by_visibility
-from core.gap_roi import calculate_gap_roi
-from core.anonymizer import PrivacyAnonymizer, anonymize_profile, deanonymize_text
-from core.fact_guard import FactVerificationGuard, verify_resume_facts
-from core.defense_simulator import DefenseSimulator, simulate_project_defense
-from core.baoyan_auditor import BaoyanAuditor, audit_baoyan_entry, compress_baoyan_entry, count_baoyan_words
-from core.baoyan_pipeline import BaoyanPipeline, BaoyanStatus, validate_academic_profile, generate_camp_checklist
-from core.advisor_matcher import AdvisorMatcher, match_advisor_and_draft_email
-
-from modules.jd_analyst.models import (
-    CandidateProfile,
-    DecodedJD,
-    MatcherResult,
-    PredictionResult,
-    RedFlagReport,
-)
-from modules.jd_analyst.reporter import OfferStrategyReporter
 
 
 class JDService:
@@ -75,10 +55,9 @@ class JDService:
 
     @staticmethod
     def _read_text_or_path(jd_text_or_path: Union[str, Path]) -> str:
-        if isinstance(jd_text_or_path, Path) or (isinstance(jd_text_or_path, str) and os.path.isfile(jd_text_or_path)):
-            with open(jd_text_or_path, "r", encoding="utf-8") as f:
-                return f.read()
-        return str(jd_text_or_path or "")
+        if isinstance(jd_text_or_path, Path):
+            return jd_text_or_path.read_text(encoding="utf-8")
+        return read_text(str(jd_text_or_path or ""))
 
 
 class ProfileService:
@@ -87,6 +66,10 @@ class ProfileService:
     def normalize(self, profile_data: Dict[str, Any]) -> Dict[str, Any]:
         """Normalizes candidate profile into standard SSOT schema."""
         return normalize_candidate_profile(profile_data)
+
+    def get_context(self, profile_data: Union[Dict[str, Any], ProfileContext]) -> ProfileContext:
+        """Constructs or returns a unified, immutable ProfileContext from candidate profile without cross-call caching."""
+        return build_profile_context(profile_data)
 
     def get_evidence_index(self, profile_data: Dict[str, Any]) -> ProfileEvidenceIndex:
         """Extracts deterministic, auditable evidence index from candidate profile."""
@@ -101,8 +84,8 @@ class ProfileService:
 class MatchService:
     """Domain service for matching candidate profiles against decoded JDs."""
 
-    def match(self, jd_compat: Any, profile_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Matches profile against decoded JD using canonical matcher and returns compatibility view."""
+    def match(self, jd_compat: Any, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
+        """Matches profile or ProfileContext against decoded JD using canonical matcher and returns compatibility view."""
         return match_legacy(jd_compat, profile_data)
 
 
@@ -121,13 +104,12 @@ class CareerReviewService:
         reserve_photo: bool = True,
     ) -> Dict[str, Any]:
         """Executes full career review pipeline with optional resume building."""
-        if isinstance(jd_text, Path) or (isinstance(jd_text, str) and os.path.isfile(jd_text)):
-            with open(jd_text, "r", encoding="utf-8") as f:
-                raw_jd = f.read()
-        elif isinstance(jd_text, dict):
+        if isinstance(jd_text, dict):
             raw_jd = str(jd_text.get("raw_text") or jd_text.get("clean_text") or "")
+        elif isinstance(jd_text, Path):
+            raw_jd = jd_text.read_text(encoding="utf-8")
         else:
-            raw_jd = str(jd_text or "")
+            raw_jd = read_text(str(jd_text or ""))
 
         return run_career_review(
             jd_text=raw_jd,
@@ -146,6 +128,8 @@ class ResumeService:
 
     @property
     def supported_themes(self) -> List[str]:
+        from core.resume_builder import ResumeBuilder
+
         return list(ResumeBuilder.THEMES)
 
     def build_resume(
@@ -159,6 +143,8 @@ class ResumeService:
         anonymize: Optional[str] = None,
     ) -> Dict[str, Path]:
         """Builds a single resume theme."""
+        from core.resume_builder import ResumeBuilder
+
         builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize)
         return builder.build_theme(
             theme=theme,
@@ -178,6 +164,8 @@ class ResumeService:
         anonymize: Optional[str] = None,
     ) -> Dict[str, Dict[str, Path]]:
         """Builds all supported resume variants."""
+        from core.resume_builder import ResumeBuilder
+
         builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize)
         return builder.build_all(
             output_dir=output_dir,
@@ -189,14 +177,24 @@ class ResumeService:
 
     def audit_resume(self, html_path: Union[str, Path]) -> Dict[str, Any]:
         """Audits generated resume HTML quality, layout health, and security."""
+        from core.resume_builder import audit_resume_quality
+
         return audit_resume_quality(html_path)
 
 
 class OfferService:
     """Domain service for compensation valuation, trap detection, and tactical counter-offers."""
 
-    def __init__(self, negotiator: Optional[OfferNegotiator] = None):
-        self.negotiator = negotiator or OfferNegotiator()
+    def __init__(self, negotiator: Optional[Any] = None):
+        self._negotiator = negotiator
+
+    @property
+    def negotiator(self) -> Any:
+        if self._negotiator is None:
+            from core.offer_negotiator import OfferNegotiator
+
+            self._negotiator = OfferNegotiator()
+        return self._negotiator
 
     def evaluate_offer(
         self,
@@ -252,8 +250,16 @@ class OfferService:
 class ReportService:
     """Domain service for generating and validating strategy reports across dual tracks."""
 
-    def __init__(self, canonical_reporter: Optional[OfferStrategyReporter] = None):
-        self.canonical_reporter = canonical_reporter or OfferStrategyReporter()
+    def __init__(self, canonical_reporter: Optional[Any] = None):
+        self._canonical_reporter = canonical_reporter
+
+    @property
+    def canonical_reporter(self) -> Any:
+        if self._canonical_reporter is None:
+            from modules.jd_analyst.reporter import OfferStrategyReporter
+
+            self._canonical_reporter = OfferStrategyReporter()
+        return self._canonical_reporter
 
     def generate_offer_strategy_report(
         self,
@@ -263,21 +269,22 @@ class ReportService:
         template_path: Optional[Union[str, Path]] = None,
     ) -> str:
         """Generates the Offer Strategy HTML report using template replacement with XSS sanitization."""
-        tpl = str(template_path) if template_path else "templates/offer_strategy.html"
+        from core.report_generator import generate_report
+
         return generate_report(
             decoded_jd=decoded_jd,
             match_result=match_result,
-            template_path=tpl,
-            output_path=str(output_path),
+            template_path=template_path,
+            output_path=output_path,
         )
 
     def generate_canonical_report(
         self,
-        jd: DecodedJD,
-        candidate: CandidateProfile,
-        matcher: MatcherResult,
-        redflags: RedFlagReport,
-        prediction: PredictionResult,
+        jd: Any,
+        candidate: Any,
+        matcher: Any,
+        redflags: Any,
+        prediction: Any,
         output_path: Union[str, Path],
     ) -> str:
         """Generates canonical interactive standalone HTML report."""
@@ -292,13 +299,10 @@ class ReportService:
 
     def validate_report_security(self, report_path_or_content: Union[str, Path]) -> List[str]:
         """Audits report HTML for residual unreplaced placeholders and dangerous patterns."""
-        if isinstance(report_path_or_content, Path) or (
-            isinstance(report_path_or_content, str) and os.path.isfile(report_path_or_content)
-        ):
-            with open(report_path_or_content, "r", encoding="utf-8") as f:
-                content = f.read()
+        if isinstance(report_path_or_content, Path):
+            content = report_path_or_content.read_text(encoding="utf-8")
         else:
-            content = str(report_path_or_content)
+            content = read_text(str(report_path_or_content))
 
         unreplaced = re.findall(r"\{\{[A-Z0-9_]+\}\}", content)
         risks = []
@@ -306,6 +310,62 @@ class ReportService:
             for p in sorted(set(unreplaced)):
                 risks.append(f"Unreplaced placeholder detected: {p}")
         return risks
+
+
+_LAZY_EXPORTS: Dict[str, Tuple[str, str]] = {
+    "ResumeBuilder": ("core.resume_builder", "ResumeBuilder"),
+    "audit_resume_quality": ("core.resume_builder", "audit_resume_quality"),
+    "OfferNegotiator": ("core.offer_negotiator", "OfferNegotiator"),
+    "evaluate_offer_package": ("core.offer_negotiator", "evaluate_offer_package"),
+    "generate_report": ("core.report_generator", "generate_report"),
+    "resolve_report_template": ("core.report_generator", "resolve_report_template"),
+    "validate_output_security": ("core.security_gate", "validate_output_security"),
+    "decode_jd": ("core.jd_decoder", "decode_jd"),
+    "match_profile_to_jd": ("core.jd_matcher", "match_profile_to_jd"),
+    "validate_bilingual_html": ("core.validator", "validate_bilingual_html"),
+    "validate_anti_ai_slop": ("core.validator", "validate_anti_ai_slop"),
+    "audit_resume_ats": ("core.ats_checker", "audit_resume_ats"),
+    "generate_skill_ledger": ("core.ats_checker", "generate_skill_ledger"),
+    "filter_profile_by_visibility": ("core.ats_checker", "filter_profile_by_visibility"),
+    "calculate_gap_roi": ("core.gap_roi", "calculate_gap_roi"),
+    "PrivacyAnonymizer": ("core.anonymizer", "PrivacyAnonymizer"),
+    "anonymize_profile": ("core.anonymizer", "anonymize_profile"),
+    "deanonymize_text": ("core.anonymizer", "deanonymize_text"),
+    "FactVerificationGuard": ("core.fact_guard", "FactVerificationGuard"),
+    "verify_resume_facts": ("core.fact_guard", "verify_resume_facts"),
+    "DefenseSimulator": ("core.defense_simulator", "DefenseSimulator"),
+    "simulate_project_defense": ("core.defense_simulator", "simulate_project_defense"),
+    "BaoyanAuditor": ("core.baoyan_auditor", "BaoyanAuditor"),
+    "audit_baoyan_entry": ("core.baoyan_auditor", "audit_baoyan_entry"),
+    "compress_baoyan_entry": ("core.baoyan_auditor", "compress_baoyan_entry"),
+    "count_baoyan_words": ("core.baoyan_auditor", "count_baoyan_words"),
+    "BaoyanPipeline": ("core.baoyan_pipeline", "BaoyanPipeline"),
+    "BaoyanStatus": ("core.baoyan_pipeline", "BaoyanStatus"),
+    "validate_academic_profile": ("core.baoyan_pipeline", "validate_academic_profile"),
+    "generate_camp_checklist": ("core.baoyan_pipeline", "generate_camp_checklist"),
+    "AdvisorMatcher": ("core.advisor_matcher", "AdvisorMatcher"),
+    "match_advisor_and_draft_email": ("core.advisor_matcher", "match_advisor_and_draft_email"),
+    "CandidateProfile": ("modules.jd_analyst.models", "CandidateProfile"),
+    "DecodedJD": ("modules.jd_analyst.models", "DecodedJD"),
+    "MatcherResult": ("modules.jd_analyst.models", "MatcherResult"),
+    "PredictionResult": ("modules.jd_analyst.models", "PredictionResult"),
+    "RedFlagReport": ("modules.jd_analyst.models", "RedFlagReport"),
+    "OfferStrategyReporter": ("modules.jd_analyst.reporter", "OfferStrategyReporter"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_EXPORTS:
+        mod_name, attr_name = _LAZY_EXPORTS[name]
+        mod = importlib.import_module(mod_name)
+        val = getattr(mod, attr_name)
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
+
+def __dir__() -> List[str]:
+    return sorted(set(globals().keys()) | set(_LAZY_EXPORTS.keys()))
 
 
 __all__ = [
@@ -319,6 +379,7 @@ __all__ = [
     "decode_jd",
     "match_profile_to_jd",
     "generate_report",
+    "resolve_report_template",
     "validate_bilingual_html",
     "validate_anti_ai_slop",
     "audit_resume_ats",

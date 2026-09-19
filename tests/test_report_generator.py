@@ -15,7 +15,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from core.report_generator import generate_report
+from core.report_generator import (
+    generate_report,
+    get_canonical_default_template_path,
+    is_default_template,
+    read_default_template_content,
+    resolve_report_template,
+)
 from core.security_gate import validate_output_security
 from core.validator import validate_bilingual_html
 from modules.jd_analyst.models import (
@@ -349,6 +355,152 @@ class TestReportGenerator(unittest.TestCase):
         self.assertIn("Candidate: 张无忌", content)
         self.assertIn("Match Score: 88%", content)
         self.assertNotIn("{{COMPANY}}", content)
+
+    def test_default_template_none_resolution(self):
+        out_file = os.path.join(self.tmp_dir.name, "default_none_report.html")
+        result_path = generate_report(
+            decoded_jd=self.sample_decoded_jd,
+            match_result=self.sample_match_result,
+            template_path=None,
+            output_path=out_file,
+        )
+        self.assertTrue(os.path.exists(result_path))
+        content = open(result_path, encoding="utf-8").read()
+        self.assertIn("整体匹配度与通关判定", content)
+        self.assertIn("DeepTech AI", content)
+
+    def test_custom_template_named_offer_strategy_in_external_dir(self):
+        # Create an external directory with a custom template named offer_strategy.html
+        custom_dir = Path(self.tmp_dir.name) / "custom_tpls"
+        custom_dir.mkdir(parents=True, exist_ok=True)
+        custom_tpl = custom_dir / "offer_strategy.html"
+        custom_tpl.write_text(
+            """<!DOCTYPE html>
+<html><head><title>Custom Name Clashing</title></head>
+<body>
+<h1>External Custom Override {{COMPANY}}</h1>
+<p>Score: {{MATCH_SCORE_NUM}}%</p>
+<p>Candidate: {{CANDIDATE_NAME}}</p>
+<p>Role: {{ROLE}}</p>
+<p>Verdict: {{VERDICT_TITLE_ZH}} ({{VERDICT_TITLE_EN}})</p>
+<p>Prob: {{INTERVIEW_PROB_NUM}}%</p>
+<p>Must: {{MUST_HAVE_SCORE}}, Nice: {{NICE_HAVE_SCORE}}, Hidden: {{HIDDEN_FIT_SCORE}}</p>
+<div>Date: {{REPORT_DATE}}</div>
+<div>Level: {{LEVEL}}, Band: {{COMP_BAND}}, Loc: {{LOCATION}}, Dept: {{DEPARTMENT}}, Arch: {{ARCHITECTURE_LAYER}}</div>
+<div>Verdict Desc: {{VERDICT_DESC_ZH}} - {{VERDICT_DESC_EN}}</div>
+<div>L1: {{L1_JD_TEXT_ZH}} - {{L1_REALITY_ZH}}</div>
+<div>L2: {{L2_JD_TEXT_ZH}} - {{L2_REALITY_ZH}}</div>
+<div>L3: {{L3_JD_TEXT_ZH}} - {{L3_REALITY_ZH}}</div>
+<div>L4: {{L4_JD_TEXT_ZH}} - {{L4_REALITY_ZH}}</div>
+<div>L5: {{L5_JD_TEXT_ZH}} - {{L5_REALITY_ZH}}</div>
+<div>L1 EN: {{L1_JD_TEXT_EN}} - {{L1_REALITY_EN}}</div>
+<div>L2 EN: {{L2_JD_TEXT_EN}} - {{L2_REALITY_EN}}</div>
+<div>L3 EN: {{L3_JD_TEXT_EN}} - {{L3_REALITY_EN}}</div>
+<div>L4 EN: {{L4_JD_TEXT_EN}} - {{L4_REALITY_EN}}</div>
+<div>L5 EN: {{L5_JD_TEXT_EN}} - {{L5_REALITY_EN}}</div>
+</body></html>""",
+            encoding="utf-8",
+        )
+
+        self.assertFalse(is_default_template(custom_tpl))
+
+        out_file = os.path.join(self.tmp_dir.name, "custom_named_report.html")
+        result_path = generate_report(
+            decoded_jd=self.sample_decoded_jd,
+            match_result=self.sample_match_result,
+            template_path=str(custom_tpl),
+            output_path=out_file,
+        )
+
+        content = open(result_path, encoding="utf-8").read()
+        self.assertIn("External Custom Override DeepTech AI", content)
+        # Should NOT use canonical OfferStrategyReporter
+        self.assertNotIn("整体匹配度与通关判定", content)
+
+    def test_missing_template_raises_file_not_found(self):
+        with self.assertRaises(FileNotFoundError):
+            resolve_report_template("completely_nonexistent_template_xyz.html")
+
+        with self.assertRaises(FileNotFoundError):
+            generate_report(
+                decoded_jd=self.sample_decoded_jd,
+                match_result=self.sample_match_result,
+                template_path="completely_nonexistent_template_xyz.html",
+                output_path=os.path.join(self.tmp_dir.name, "fail.html"),
+            )
+
+    def test_read_default_template_content(self):
+        content = read_default_template_content()
+        self.assertIsInstance(content, str)
+        self.assertTrue(len(content) > 100)
+        self.assertIn("<!DOCTYPE html>", content)
+
+    def test_traversable_non_path_fallback(self):
+        """Test that in a zip importer or non-filesystem environment, Traversable is read directly without requiring a Path."""
+        from unittest.mock import MagicMock, patch
+
+        mock_traversable = MagicMock()
+        mock_traversable.read_text.return_value = "<!DOCTYPE html><html><body>Mock Zip Template</body></html>"
+        # Explicitly ensure mock is NOT an instance of Path
+        self.assertNotIsInstance(mock_traversable, Path)
+
+        with patch("importlib.resources.files") as mock_files:
+            mock_files.return_value.joinpath.return_value = mock_traversable
+
+            # Temporarily simulate that local filesystem template is not present
+            with patch("pathlib.Path.is_file") as mock_is_file:
+                # Local default template returns False
+                mock_is_file.return_value = False
+
+                content = read_default_template_content()
+                self.assertIn("Mock Zip Template", content)
+
+                # Default template resolution via generate_report(template_path=None) succeeds
+                out_file = os.path.join(self.tmp_dir.name, "zip_test_out.html")
+                res = generate_report(
+                    decoded_jd=self.sample_decoded_jd,
+                    match_result=self.sample_match_result,
+                    template_path=None,
+                    output_path=out_file,
+                )
+                self.assertTrue(os.path.exists(res))
+
+    def test_cmd_jd_report_integration(self):
+        """Test presentation.commands.jd_cmd.cmd_jd_report forwards template directly and catches errors."""
+        import argparse
+        from presentation.commands.jd_cmd import cmd_jd_report
+
+        # Create temporary JD and Profile files
+        jd_file = os.path.join(self.tmp_dir.name, "sample_jd.txt")
+        with open(jd_file, "w", encoding="utf-8") as f:
+            f.write("职位：大模型架构师\n要求：精通深度学习。")
+
+        profile_file = os.path.join(self.tmp_dir.name, "sample_prof.json")
+        with open(profile_file, "w", encoding="utf-8") as f:
+            f.write('{"candidate": {"name": "张三", "title_zh": "算法工程师"}}')
+
+        out_file = os.path.join(self.tmp_dir.name, "cli_report_out.html")
+
+        # 1. Default template (template=None)
+        args_default = argparse.Namespace(
+            jd_file=jd_file,
+            profile=profile_file,
+            output=out_file,
+            template=None,
+        )
+        cmd_jd_report(args_default)
+        self.assertTrue(os.path.exists(out_file))
+
+        # 2. Non-existent template raises SystemExit(1)
+        args_missing = argparse.Namespace(
+            jd_file=jd_file,
+            profile=profile_file,
+            output=out_file,
+            template="definitely_not_existing_tpl.html",
+        )
+        with self.assertRaises(SystemExit) as cm:
+            cmd_jd_report(args_missing)
+        self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":

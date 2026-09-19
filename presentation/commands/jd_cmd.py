@@ -11,6 +11,8 @@ import os
 import sys
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 from core.cli_helpers import (
     read_text,
     load_json,
@@ -132,16 +134,13 @@ def cmd_jd_report(args):
     jd_path = args.jd_file
     profile_path = args.profile
     output_path = args.output or "report.html"
-    template_path = args.template or str(PROJECT_ROOT / "templates" / "offer_strategy.html")
+    template_arg = getattr(args, "template", None)
 
     if not os.path.exists(jd_path):
         emit_stderr(f"[-] Error: JD file not found: {jd_path}")
         sys.exit(1)
     if not os.path.exists(profile_path):
         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
-        sys.exit(1)
-    if not os.path.exists(template_path):
-        emit_stderr(f"[-] Error: Template file not found: {template_path}")
         sys.exit(1)
 
     print(f"[*] Decoding Job Description: {jd_path} ...")
@@ -154,7 +153,11 @@ def cmd_jd_report(args):
     match_result = match_profile_to_jd(decoded, profile_data)
 
     print(f"[*] Generating Industrial-grade Bilingual HTML Report ...")
-    out_file = generate_report(decoded, match_result, template_path, output_path)
+    try:
+        out_file = generate_report(decoded, match_result, template_path=template_arg, output_path=output_path)
+    except FileNotFoundError as e:
+        emit_stderr(f"[-] Error: {e}")
+        sys.exit(1)
 
     print(f"[*] Validating Bilingual Twin Integrity on {out_file} ...")
     val = validate_bilingual_html(out_file)

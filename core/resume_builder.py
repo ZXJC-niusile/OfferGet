@@ -22,12 +22,14 @@ Central orchestrator for multi-template resume generation, compiling, and compac
 from __future__ import annotations
 
 import base64
+import copy
+import hashlib
 import json
 import os
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -65,6 +67,19 @@ from core.resume_view_model import (
 
 
 
+def _compute_profile_fingerprint(profile_data: Any) -> str:
+    """Computes a deterministic SHA-256 fingerprint from profile data for caching."""
+    if hasattr(profile_data, "normalized_profile"):
+        payload = profile_data.normalized_profile
+    else:
+        payload = profile_data
+    try:
+        encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()[:16]
+    except Exception:
+        return str(id(payload))
+
+
 class ResumeBuilder:
     """Unified engine for building all 6 resume variants from candidate profile data."""
 
@@ -92,17 +107,23 @@ class ResumeBuilder:
                 raise FileNotFoundError(f"Candidate profile not found at {p_path}")
             with open(p_path, "r", encoding="utf-8") as f:
                 raw_data = json.load(f)
+        elif hasattr(profile_or_path, "raw_profile") and hasattr(profile_or_path, "normalized_profile"):
+            raw_data = profile_or_path.raw_profile
         elif isinstance(profile_or_path, dict):
             raw_data = profile_or_path
         else:
-            raise TypeError("profile_or_path must be a dictionary or file path")
+            raise TypeError("profile_or_path must be a dictionary, ProfileContext, or file path")
 
         self.raw_profile = raw_data
         self.anonymize = anonymize
         self.photo_path = Path(photo_path).resolve() if photo_path else None
         self.deanon_map: Dict[str, str] = {}
+        self._vm_cache: Dict[Tuple[str, Optional[str], bool], ResumeViewModel] = {}
 
-        self.profile = self._resolve_profile(anonymize=self.anonymize)
+        if hasattr(profile_or_path, "normalized_profile") and not anonymize:
+            self.profile = copy.deepcopy(profile_or_path.normalized_profile)
+        else:
+            self.profile = self._resolve_profile(anonymize=self.anonymize)
         self.academic_exporter = AcademicExporter()
 
         self.template_dir = Path(template_dir).resolve() if template_dir else (PROJECT_ROOT / "ApexResume" / "themes")
@@ -112,14 +133,53 @@ class ResumeBuilder:
 
         self.html_renderer = HtmlThemeRenderer()
         self.ats_renderer = AtsPlainRenderer()
-        self.view_model: ResumeViewModel = ResumeViewModel.from_profile(
+        self.view_model: ResumeViewModel = self._get_view_model(
             self.profile,
             photo_path=self.photo_path,
+            reserve_photo=True,
         )
+
+    def _get_view_model(
+        self,
+        profile: Optional[Union[Dict[str, Any], Any]] = None,
+        photo_path: Optional[Union[str, Path]] = None,
+        reserve_photo: bool = True,
+    ) -> ResumeViewModel:
+        """Retrieves cached ResumeViewModel or constructs and caches a new one."""
+        eff_photo_path = str(photo_path) if photo_path else (str(self.photo_path) if self.photo_path else None)
+
+        # 1. If no profile passed or self.profile passed: it is ALREADY normalized by ResumeBuilder.__init__
+        if profile is None or profile is self.profile:
+            norm_profile = self.profile
+            raw_p = getattr(self, "raw_profile", None)
+        # 2. If ProfileContext passed: read Context's normalized profile directly
+        elif hasattr(profile, "normalized_profile"):
+            norm_profile = profile.normalized_profile
+            raw_p = getattr(profile, "raw_profile", None)
+        # 3. External plain dict or other profile: default to treating as raw profile, normalize via normalize_candidate_profile
+        else:
+            norm_profile = normalize_candidate_profile(profile)
+            raw_p = profile if isinstance(profile, dict) else getattr(self, "raw_profile", None)
+
+        profile_fp = _compute_profile_fingerprint(norm_profile)
+        cache_key = (profile_fp, eff_photo_path, reserve_photo)
+        if cache_key in self._vm_cache:
+            return self._vm_cache[cache_key]
+
+        vm = ResumeViewModel.from_normalized_profile(
+            norm_profile,
+            photo_path=eff_photo_path,
+            reserve_photo=reserve_photo,
+            raw_profile=raw_p,
+        )
+        self._vm_cache[cache_key] = vm
+        return vm
 
     def _resolve_profile(self, anonymize: Optional[str] = None) -> Dict[str, Any]:
         """Resolves profile data, applying privacy anonymization if requested."""
         level = anonymize if anonymize is not None else self.anonymize
+        if hasattr(self, "profile") and not level:
+            return self.profile
         normalized = normalize_candidate_profile(self.raw_profile)
         if level:
             if level not in ("standard", "strict"):
@@ -132,10 +192,7 @@ class ResumeBuilder:
 
     def _render_sections_html(self, theme_name: str, profile: Optional[Dict[str, Any]] = None) -> str:
         """Renders standard HTML sections for HTML-based themes."""
-        if profile is not None:
-            vm = ResumeViewModel.from_profile(profile, photo_path=self.photo_path)
-        else:
-            vm = self.view_model
+        vm = self._get_view_model(profile=profile, photo_path=self.photo_path, reserve_photo=True)
         return self.html_renderer.render_sections(vm, theme_name=theme_name)
 
     def _render_header_html(
@@ -146,9 +203,7 @@ class ResumeBuilder:
         profile: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Builds header markup with optional photo placeholder."""
-        prof = profile or self.profile
-        eff_photo_path = photo_path or self.photo_path
-        vm = ResumeViewModel.from_profile(prof, photo_path=eff_photo_path, reserve_photo=photo)
+        vm = self._get_view_model(profile=profile, photo_path=photo_path, reserve_photo=photo)
         return self.html_renderer.render_header(vm, theme_name=theme_name)
 
     def build_html_theme(
@@ -167,7 +222,7 @@ class ResumeBuilder:
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        vm = ResumeViewModel.from_profile(prof, photo_path=eff_photo_path, reserve_photo=photo)
+        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
         populated_html = self.html_renderer.render(
             vm=vm,
             theme_name=theme_name,
@@ -218,7 +273,7 @@ class ResumeBuilder:
 
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
-        vm = ResumeViewModel.from_profile(prof, photo_path=eff_photo_path, reserve_photo=photo)
+        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
 
         md_content = self.ats_renderer.render_markdown(vm)
         html_content = self.ats_renderer.render_html(vm)

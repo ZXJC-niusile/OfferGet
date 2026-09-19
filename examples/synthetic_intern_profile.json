@@ -1,0 +1,23 @@
+{
+  "candidate": {
+    "name": "张同学",
+    "degree": "本科在读",
+    "institution": "某大学",
+    "major": "软件工程",
+    "years_of_experience": 0
+  },
+  "skills": {
+    "languages": ["Python"],
+    "databases": ["SQLite", "SQL"]
+  },
+  "projects": [
+    {
+      "name": "高校课程管理系统",
+      "role": "后端开发",
+      "bullets": [
+        "使用 Python 开发高校课程管理系统后端模块",
+        "使用 SQLite 设计并实现课程与选课数据表的 SQL 查询接口"
+      ]
+    }
+  ]
+}
