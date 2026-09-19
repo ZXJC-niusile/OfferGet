@@ -299,28 +299,107 @@ def _adapt_match_result(
     return candidate, matcher, redflags, prediction
 
 
-def _is_default_template(template_path: Optional[str]) -> bool:
-    """Checks whether the template path points to OfferGet's default offer_strategy.html."""
+def get_canonical_default_template_path() -> Optional[Path]:
+    """Returns the resolved Path to the canonical default template if available on disk."""
+    local_default = (PROJECT_ROOT / "templates" / "offer_strategy.html").resolve()
+    if local_default.is_file():
+        return local_default
+    try:
+        import importlib.resources as pkg_resources
+
+        ref = pkg_resources.files("templates").joinpath("offer_strategy.html")
+        if isinstance(ref, Path) and ref.is_file():
+            return ref.resolve()
+    except Exception:
+        pass
+    return None
+
+
+def read_default_template_content() -> str:
+    """Reads the canonical default report template content directly."""
+    local_default = PROJECT_ROOT / "templates" / "offer_strategy.html"
+    if local_default.is_file():
+        return local_default.read_text(encoding="utf-8")
+
+    import importlib.resources as pkg_resources
+
+    ref = pkg_resources.files("templates").joinpath("offer_strategy.html")
+    return ref.read_text(encoding="utf-8")
+
+
+def resolve_custom_template_path(template_path: Union[str, Path]) -> Path:
+    """
+    Resolves an explicit user-specified custom template path to a physical filesystem Path.
+    Checks if path exists directly or relative to PROJECT_ROOT.
+    Raises FileNotFoundError if template_path does not exist on disk.
+    """
+    if not template_path:
+        raise ValueError("template_path must be a non-empty string or Path.")
+    p = Path(template_path)
+    if p.is_file():
+        return p.resolve()
+    candidate = (PROJECT_ROOT / template_path).resolve()
+    if candidate.is_file():
+        return candidate
+    raise FileNotFoundError(f"Report template not found: '{template_path}'")
+
+
+def resolve_report_template(template_path: Optional[Union[str, Path]] = None) -> Path:
+    """
+    Compatibility API for resolving template paths to a physical filesystem Path.
+    For user custom templates, prefer resolve_custom_template_path(path).
+    For package-internal default template content, prefer read_default_template_content().
+    """
+    if template_path:
+        return resolve_custom_template_path(template_path)
+
+    canonical = get_canonical_default_template_path()
+    if canonical is not None and canonical.is_file():
+        return canonical
+
+    local_default = (PROJECT_ROOT / "templates" / "offer_strategy.html").resolve()
+    if local_default.is_file():
+        return local_default
+
+    raise FileNotFoundError(
+        "Canonical default template file is not available as a physical filesystem Path. "
+        "Use read_default_template_content() for Traversable content access."
+    )
+
+
+def is_default_template(template_path: Optional[Union[str, Path]]) -> bool:
+    """
+    Checks whether the template path points strictly to the canonical default template.
+    Returns True if template_path is None, empty, or resolves to the canonical default template.
+    Returns False for custom templates (even if named 'offer_strategy.html') or invalid paths.
+    """
     if not template_path:
         return True
-    p = Path(template_path)
-    return p.name == "offer_strategy.html"
+    try:
+        resolved = resolve_custom_template_path(template_path)
+    except (FileNotFoundError, ValueError):
+        return False
+    canonical = get_canonical_default_template_path()
+    if canonical is not None:
+        return resolved == canonical
+    return False
+
+
+# Backwards compatibility alias
+_is_default_template = is_default_template
 
 
 def _safe_fallback_render(
-    template_path: str,
+    template_path: Union[str, Path],
     decoded_jd: Dict[str, Any],
     match_result: Dict[str, Any],
 ) -> str:
     """Fallback renderer for non-default custom template files, preserving secure string replacements."""
-    p = Path(template_path)
-    if not p.is_file():
-        p = PROJECT_ROOT / template_path
+    p = resolve_custom_template_path(template_path)
     if not p.is_file():
         raise FileNotFoundError(f"Custom template not found at: {template_path}")
 
-    with open(p, "r", encoding="utf-8") as f:
-        html = f.read()
+    html = p.read_text(encoding="utf-8")
 
     meta = decoded_jd.get("metadata", {}) if isinstance(decoded_jd, dict) else {}
     layers = decoded_jd.get("layers", {}) if isinstance(decoded_jd, dict) else {}
@@ -404,8 +483,8 @@ def _safe_fallback_render(
 def generate_report(
     decoded_jd: Dict[str, Any],
     match_result: Dict[str, Any],
-    template_path: str,
-    output_path: str,
+    template_path: Optional[Union[str, Path]] = None,
+    output_path: Union[str, Path] = "report.html",
 ) -> str:
     """
     Renders high-fidelity Offer Strategy Report HTML by dispatching to
@@ -414,15 +493,23 @@ def generate_report(
 
     Guarantees:
     1. Complete convergence to OfferStrategyReporter with zero fragile regex templating.
-    2. Strict output security audit via core.security_gate.validate_output_security.
-    3. Bilingual twin audit via core.validator.validate_bilingual_html.
+    2. Strict validation that explicit template paths must exist (no silent fallback).
+    3. Custom templates outside canonical default path are cleanly handled via safe fallback render.
+    4. Strict output security audit via core.security_gate.validate_output_security.
+    5. Bilingual twin audit via core.validator.validate_bilingual_html.
     """
     # 1. Adapt inputs into canonical models
     canonical_jd = _adapt_decoded_jd(decoded_jd)
     candidate, matcher, redflags, prediction = _adapt_match_result(match_result, canonical_jd)
 
-    # 2. Render HTML report
-    if _is_default_template(template_path):
+    # 2. Check template existence if specified
+    if template_path:
+        resolved_template: Optional[Path] = resolve_custom_template_path(template_path)
+    else:
+        resolved_template = None
+
+    # 3. Render HTML report
+    if is_default_template(resolved_template):
         reporter = OfferStrategyReporter()
         html = reporter.generate_html(
             jd=canonical_jd,
@@ -432,7 +519,7 @@ def generate_report(
             prediction=prediction,
         )
 
-        # 3. Verify bilingual parity on default reports
+        # 4. Verify bilingual parity on default reports
         bilingual_res = validate_bilingual_html(html)
         if not bilingual_res["passed"]:
             raise ValueError(
@@ -440,14 +527,14 @@ def generate_report(
             )
     else:
         # Safe fallback for non-default custom templates
-        html = _safe_fallback_render(template_path, decoded_jd, match_result)
+        html = _safe_fallback_render(resolved_template, decoded_jd, match_result)
 
-    # 4. Strict security audit across all generated HTML reports
+    # 5. Strict security audit across all generated HTML reports
     sec_risks = validate_output_security(html, format_type="html")
     if sec_risks:
         raise ValueError(f"Generated report failed security audit: {sec_risks}")
 
-    # 5. Write to output destination
+    # 6. Write to output destination
     out_path = Path(output_path).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
@@ -456,4 +543,11 @@ def generate_report(
     return str(out_path)
 
 
-__all__ = ["generate_report"]
+__all__ = [
+    "generate_report",
+    "resolve_report_template",
+    "resolve_custom_template_path",
+    "read_default_template_content",
+    "is_default_template",
+    "get_canonical_default_template_path",
+]

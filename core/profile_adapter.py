@@ -12,7 +12,7 @@ import copy
 import json
 import re
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Iterable, List, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 
 @dataclass(frozen=True)
@@ -39,16 +39,178 @@ class EvidenceClaim:
         return asdict(self)
 
 
-@dataclass(frozen=True)
 class ProfileEvidenceIndex:
-    profile: Dict[str, Any]
-    claims: Tuple[EvidenceClaim, ...]
-    skills: Tuple[str, ...]
-    bullets: Tuple[str, ...]
-    metric_anchors: Tuple[Dict[str, Any], ...]
-    claim_by_id: Dict[str, EvidenceClaim]
-    source_paths: Tuple[str, ...]
-    input_quality: Dict[str, Any]
+    """Immutable index of claims, skills, bullets, and evidence anchors."""
+
+    def __init__(
+        self,
+        profile: Dict[str, Any],
+        claims: Tuple[EvidenceClaim, ...],
+        skills: Tuple[str, ...],
+        bullets: Tuple[str, ...],
+        metric_anchors: Tuple[Dict[str, Any], ...],
+        claim_by_id: Dict[str, EvidenceClaim],
+        source_paths: Tuple[str, ...],
+        input_quality: Dict[str, Any],
+    ):
+        object.__setattr__(self, "_profile", copy.deepcopy(profile))
+        object.__setattr__(self, "claims", tuple(claims))
+        object.__setattr__(self, "skills", tuple(skills))
+        object.__setattr__(self, "bullets", tuple(bullets))
+        object.__setattr__(self, "_metric_anchors", tuple(copy.deepcopy(a) for a in metric_anchors))
+        object.__setattr__(self, "_claim_by_id", {k: copy.deepcopy(v) for k, v in claim_by_id.items()})
+        object.__setattr__(self, "source_paths", tuple(source_paths))
+        object.__setattr__(self, "_input_quality", copy.deepcopy(input_quality))
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError(f"ProfileEvidenceIndex is immutable, cannot modify '{name}'")
+
+    @property
+    def profile(self) -> Dict[str, Any]:
+        """Returns a defensive deep copy of the normalized profile."""
+        return copy.deepcopy(self._profile)
+
+    @property
+    def metric_anchors(self) -> Tuple[Dict[str, Any], ...]:
+        """Returns a defensive deep copy of metric anchors tuple with deepcopied dicts."""
+        return tuple(copy.deepcopy(a) for a in self._metric_anchors)
+
+    @property
+    def claim_by_id(self) -> Dict[str, EvidenceClaim]:
+        """Returns a copy of the claim_by_id dictionary with defensive claim copies."""
+        return {k: copy.deepcopy(v) for k, v in self._claim_by_id.items()}
+
+    @property
+    def input_quality(self) -> Dict[str, Any]:
+        """Returns a defensive deep copy of the input quality mapping."""
+        return copy.deepcopy(self._input_quality)
+
+    def profile_copy(self) -> Dict[str, Any]:
+        """Explicit helper returning a defensive copy of the profile."""
+        return copy.deepcopy(self._profile)
+
+    def __repr__(self) -> str:
+        return f"ProfileEvidenceIndex(skills={len(self.skills)}, bullets={len(self.bullets)}, claims={len(self.claims)})"
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ProfileEvidenceIndex):
+            return False
+        return (
+            self._profile == other._profile
+            and self.claims == other.claims
+            and self.skills == other.skills
+            and self.bullets == other.bullets
+            and self._metric_anchors == other._metric_anchors
+            and self.source_paths == other.source_paths
+            and self._input_quality == other._input_quality
+        )
+
+
+class ProfileContext:
+    """Unified candidate profile context holding SSOT normalized profile and evidence index.
+
+    Eliminates redundant normalization, claim extraction, and index parsing across OfferGet pipelines.
+    Enforces immutability by storing private deep copies and returning defensive copies through properties.
+    """
+
+    def __init__(
+        self,
+        raw_profile: Dict[str, Any],
+        normalized_profile: Dict[str, Any],
+        evidence_index: ProfileEvidenceIndex,
+        claims: Tuple[EvidenceClaim, ...],
+        skills: Tuple[str, ...],
+        bullets: Tuple[str, ...],
+        metric_anchors: Tuple[Dict[str, Any], ...],
+        input_quality: Dict[str, Any],
+        canonical_profile: Optional[Any] = None,
+    ):
+        object.__setattr__(self, "_raw_profile", copy.deepcopy(raw_profile))
+        object.__setattr__(self, "_normalized_profile", copy.deepcopy(normalized_profile))
+        object.__setattr__(self, "evidence_index", evidence_index)
+        object.__setattr__(self, "claims", tuple(claims))
+        object.__setattr__(self, "skills", tuple(skills))
+        object.__setattr__(self, "bullets", tuple(bullets))
+        object.__setattr__(self, "_metric_anchors", tuple(copy.deepcopy(a) for a in metric_anchors))
+        object.__setattr__(self, "_input_quality", copy.deepcopy(input_quality))
+        object.__setattr__(self, "_canonical_profile", canonical_profile)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError(f"ProfileContext is immutable, cannot modify '{name}'")
+
+    @classmethod
+    def from_profile(cls, profile_or_context: Union[Dict[str, Any], ProfileContext]) -> ProfileContext:
+        """Factory method to obtain or construct a ProfileContext."""
+        if isinstance(profile_or_context, ProfileContext):
+            return profile_or_context
+        return build_profile_context(profile_or_context)
+
+    @property
+    def raw_profile(self) -> Dict[str, Any]:
+        """Returns a defensive deep copy of the raw profile."""
+        return copy.deepcopy(self._raw_profile)
+
+    @property
+    def normalized_profile(self) -> Dict[str, Any]:
+        """Returns a defensive deep copy of the normalized profile."""
+        return copy.deepcopy(self._normalized_profile)
+
+    @property
+    def profile(self) -> Dict[str, Any]:
+        """Convenience alias returning a defensive copy of the normalized profile."""
+        return copy.deepcopy(self._normalized_profile)
+
+    @property
+    def metric_anchors(self) -> Tuple[Dict[str, Any], ...]:
+        """Returns a defensive deep copy of metric anchors tuple with deepcopied dicts."""
+        return tuple(copy.deepcopy(a) for a in self._metric_anchors)
+
+    @property
+    def input_quality(self) -> Dict[str, Any]:
+        """Returns a defensive deep copy of the input quality mapping."""
+        return copy.deepcopy(self._input_quality)
+
+    def profile_copy(self) -> Dict[str, Any]:
+        """Returns a defensive copy of the normalized profile."""
+        return copy.deepcopy(self._normalized_profile)
+
+    def normalized_profile_copy(self) -> Dict[str, Any]:
+        """Returns a defensive copy of the normalized profile."""
+        return copy.deepcopy(self._normalized_profile)
+
+    def raw_profile_copy(self) -> Dict[str, Any]:
+        """Returns a defensive copy of the raw profile."""
+        return copy.deepcopy(self._raw_profile)
+
+    def get_canonical_profile(self) -> Any:
+        """Lazily extracts and caches the canonical CandidateProfile representation, returning a defensive copy."""
+        if self._canonical_profile is None:
+            from core.jd_compat import profile_to_canonical
+
+            canonical = profile_to_canonical(self)
+            object.__setattr__(self, "_canonical_profile", canonical)
+        return copy.deepcopy(self._canonical_profile)
+
+    def canonical_profile_copy(self) -> Any:
+        """Explicit helper returning a defensive copy of the canonical CandidateProfile."""
+        return self.get_canonical_profile()
+
+    def __repr__(self) -> str:
+        name = self._normalized_profile.get("candidate", {}).get("name", "unknown")
+        return f"ProfileContext(candidate={name}, skills={len(self.skills)})"
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ProfileContext):
+            return False
+        return (
+            self._raw_profile == other._raw_profile
+            and self._normalized_profile == other._normalized_profile
+            and self.claims == other.claims
+            and self.skills == other.skills
+            and self.bullets == other.bullets
+            and self._metric_anchors == other._metric_anchors
+            and self._input_quality == other._input_quality
+        )
 
 
 from core.registry import AliasRegistry
@@ -124,37 +286,57 @@ def iter_profile_claims(profile: Dict[str, Any]) -> List[EvidenceClaim]:
                     _append_claim(claims, f"skills.{group}[{idx}]", f"skills.{group}[{idx}]", value, "competency", False)
 
     experiences = profile.get("experience")
+    if experiences is None and "internships" in profile:
+        experiences = profile.get("internships")
     if isinstance(experiences, list):
         for exp_idx, experience in enumerate(experiences):
             if not isinstance(experience, dict):
                 continue
             _append_claim(claims, f"experience[{exp_idx}].role", f"experience[{exp_idx}].role", experience.get("role"), "experience_metadata", True)
             highlights = experience.get("highlights", [])
-            if not isinstance(highlights, list):
-                continue
-            for high_idx, highlight in enumerate(highlights):
-                if isinstance(highlight, dict):
-                    claim_id = str(highlight.get("claim_id") or f"experience[{exp_idx}].highlights[{high_idx}]")
-                    verification = "verified" if highlight.get("verified_metrics") else "claimed"
-                    role_scope = _text(highlight.get("role_scope") or experience.get("role_scope") or experience.get("role"))
-                    metric_context = _text(highlight.get("verified_metrics"))
-                    attribution = _text(highlight.get("attribution"))
-                    for lang in ("claim_zh", "claim_en"):
-                        if highlight.get(lang):
-                            _append_claim(
-                                claims,
-                                claim_id,
-                                f"experience[{exp_idx}].highlights[{high_idx}].{lang}",
-                                highlight.get(lang),
-                                "experience",
-                                True,
-                                verification=verification,
-                                role_scope=role_scope,
-                                metric_context=metric_context,
-                                attribution=attribution,
-                            )
-                else:
-                    _append_claim(claims, f"experience[{exp_idx}].highlights[{high_idx}]", f"experience[{exp_idx}].highlights[{high_idx}]", highlight, "experience", True, verification="claimed")
+            if isinstance(highlights, list):
+                for high_idx, highlight in enumerate(highlights):
+                    if isinstance(highlight, dict):
+                        claim_id = str(highlight.get("claim_id") or f"experience[{exp_idx}].highlights[{high_idx}]")
+                        verification = "verified" if highlight.get("verified_metrics") else "claimed"
+                        role_scope = _text(highlight.get("role_scope") or experience.get("role_scope") or experience.get("role"))
+                        metric_context = _text(highlight.get("verified_metrics"))
+                        attribution = _text(highlight.get("attribution"))
+                        for lang in ("claim_zh", "claim_en"):
+                            if highlight.get(lang):
+                                _append_claim(
+                                    claims,
+                                    claim_id,
+                                    f"experience[{exp_idx}].highlights[{high_idx}].{lang}",
+                                    highlight.get(lang),
+                                    "experience",
+                                    True,
+                                    verification=verification,
+                                    role_scope=role_scope,
+                                    metric_context=metric_context,
+                                    attribution=attribution,
+                                )
+                    else:
+                        _append_claim(claims, f"experience[{exp_idx}].highlights[{high_idx}]", f"experience[{exp_idx}].highlights[{high_idx}]", highlight, "experience", True, verification="claimed")
+            bullets = experience.get("bullets")
+            if isinstance(bullets, list):
+                for bullet_idx, bullet in enumerate(bullets):
+                    if isinstance(bullet, dict):
+                        bullet_text = bullet.get("text") or bullet.get("claim_zh") or bullet.get("claim_en")
+                        b_ver = "verified" if bullet.get("verified_metrics") else "claimed"
+                    else:
+                        bullet_text = bullet
+                        b_ver = "claimed"
+                    _append_claim(
+                        claims,
+                        f"experience[{exp_idx}].bullets[{bullet_idx}]",
+                        f"experience[{exp_idx}].bullets[{bullet_idx}]",
+                        bullet_text,
+                        "experience",
+                        True,
+                        verification=b_ver,
+                        role_scope=_text(experience.get("role_scope") or experience.get("role")),
+                    )
 
     projects = profile.get("projects")
     if isinstance(projects, list):
@@ -225,9 +407,9 @@ def claim_matches(term: str, claim_text: str) -> bool:
 
 
 def find_evidence(term: str, claims: Iterable[EvidenceClaim]) -> List[EvidenceClaim]:
-    """Return direct and declared evidence, with direct evidence first."""
+    """Return direct and declared evidence, with direct evidence first and zh before en."""
     matches = [claim for claim in claims if claim_matches(term, claim.text)]
-    return sorted(matches, key=lambda claim: (not claim.direct, claim.source_path))
+    return sorted(matches, key=lambda claim: (not claim.direct, "claim_en" in claim.source_path, claim.source_path))
 
 
 def claim_ref(claim: EvidenceClaim) -> Dict[str, str]:
@@ -287,12 +469,81 @@ def group_education_badges_into_rows(badges: Iterable[str]) -> List[str]:
     return ["    ".join(r) for r in grid]
 
 
-def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
+def _normalize_single_experience(e: Dict[str, Any], *, prefer_org_key: bool = True) -> Dict[str, Any]:
+    """Normalizes a single experience entry into standard org, company, role, time, period, bullets schema."""
+    e_copy = dict(e)
+    if prefer_org_key:
+        org = e_copy.get("org") or e_copy.get("company") or e_copy.get("organization", "")
+    else:
+        org = e_copy.get("company") or e_copy.get("org") or e_copy.get("organization", "")
+
+    role = e_copy.get("role") or e_copy.get("title", "")
+    time_str = e_copy.get("time") or e_copy.get("period", "")
+    bullets = list(e_copy.get("bullets", []))
+    if not bullets and e_copy.get("highlights"):
+        for h in e_copy["highlights"]:
+            if isinstance(h, dict):
+                txt = h.get("claim_zh") or h.get("claim_en") or h.get("text") or ""
+            else:
+                txt = str(h)
+            if txt and txt not in bullets:
+                bullets.append(txt)
+
+    e_copy["org"] = org
+    e_copy["company"] = org
+    e_copy["role"] = role
+    e_copy["time"] = time_str
+    e_copy["period"] = time_str
+    e_copy["bullets"] = bullets
+    return e_copy
+
+
+def _normalize_experiences(items: Iterable[Any], *, prefer_org_key: bool = True) -> List[Dict[str, Any]]:
+    """Normalizes an iterable of experience entries, filtering out non-dict items."""
+    norm_exp = []
+    for item in items:
+        if isinstance(item, dict):
+            norm_exp.append(_normalize_single_experience(item, prefer_org_key=prefer_org_key))
+    return norm_exp
+
+
+def _normalize_single_project(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalizes a single project entry into standard name, role, time, period, bullets schema."""
+    p_copy = dict(p)
+    p_name = p_copy.get("name") or p_copy.get("title") or "校园经历"
+    p_role = p_copy.get("role", "")
+    time_str = p_copy.get("time") or p_copy.get("period", "")
+    bullets = list(p_copy.get("bullets", []))
+    if not bullets:
+        desc = p_copy.get("description_zh") or p_copy.get("description", "")
+        if desc:
+            bullets.append(desc)
+
+    p_copy["name"] = p_name
+    p_copy["role"] = p_role
+    p_copy["time"] = time_str
+    p_copy["period"] = time_str
+    p_copy["bullets"] = bullets
+    return p_copy
+
+
+def _normalize_projects(items: Iterable[Any]) -> List[Dict[str, Any]]:
+    """Normalizes an iterable of project entries, filtering out non-dict items."""
+    norm_proj = []
+    for item in items:
+        if isinstance(item, dict):
+            norm_proj.append(_normalize_single_project(item))
+    return norm_proj
+
+
+def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
     """Normalizes candidate profile into the standard SSOT schema.
 
     Supports both full standard profiles (Track 1) and minimal/flat profiles (Track 2).
     Guarantees idempotence, copy-protection, and non-hallucination of missing fields.
     """
+    if isinstance(raw_profile, ProfileContext):
+        return copy.deepcopy(raw_profile.normalized_profile)
     if not isinstance(raw_profile, dict):
         raise TypeError(f"Expected dict for profile, got {type(raw_profile)}")
 
@@ -324,50 +575,8 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
         if "reserve_photo" not in cand:
             cand["reserve_photo"] = True
 
-        norm_exp = []
-        for e in raw_profile_copy.get("experience", []):
-            if not isinstance(e, dict):
-                continue
-            e_copy = dict(e)
-            org = e_copy.get("org") or e_copy.get("company") or e_copy.get("organization", "")
-            role = e_copy.get("role") or e_copy.get("title", "")
-            time_str = e_copy.get("time") or e_copy.get("period", "")
-            bullets = list(e_copy.get("bullets", []))
-            if not bullets and e_copy.get("highlights"):
-                for h in e_copy["highlights"]:
-                    if isinstance(h, dict):
-                        txt = h.get("claim_zh") or h.get("claim_en") or h.get("text") or ""
-                    else:
-                        txt = str(h)
-                    if txt and txt not in bullets:
-                        bullets.append(txt)
-            e_copy["org"] = org
-            e_copy["company"] = org
-            e_copy["role"] = role
-            e_copy["time"] = time_str
-            e_copy["period"] = time_str
-            e_copy["bullets"] = bullets
-            norm_exp.append(e_copy)
-
-        norm_proj = []
-        for p in raw_profile_copy.get("projects", []):
-            if not isinstance(p, dict):
-                continue
-            p_copy = dict(p)
-            p_name = p_copy.get("name") or p_copy.get("title") or "校园经历"
-            p_role = p_copy.get("role", "")
-            time_str = p_copy.get("time") or p_copy.get("period", "")
-            bullets = list(p_copy.get("bullets", []))
-            if not bullets:
-                desc = p_copy.get("description_zh") or p_copy.get("description", "")
-                if desc:
-                    bullets.append(desc)
-            p_copy["name"] = p_name
-            p_copy["role"] = p_role
-            p_copy["time"] = time_str
-            p_copy["period"] = time_str
-            p_copy["bullets"] = bullets
-            norm_proj.append(p_copy)
+        norm_exp = _normalize_experiences(raw_profile_copy.get("experience", []), prefer_org_key=True)
+        norm_proj = _normalize_projects(raw_profile_copy.get("projects", []))
 
         return {
             "candidate": cand,
@@ -402,52 +611,11 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
 
     # Experience normalization
     raw_exp = raw_profile_copy.get("experience") or raw_profile_copy.get("internships", [])
-    norm_exp = []
-    for e in raw_exp:
-        if not isinstance(e, dict):
-            continue
-        e_copy = dict(e)
-        org = e_copy.get("company") or e_copy.get("org") or e_copy.get("organization", "")
-        role = e_copy.get("role") or e_copy.get("title", "")
-        time_str = e_copy.get("time") or e_copy.get("period", "")
-        bullets = list(e_copy.get("bullets", []))
-        if not bullets and e_copy.get("highlights"):
-            for h in e_copy["highlights"]:
-                if isinstance(h, dict):
-                    txt = h.get("claim_zh") or h.get("claim_en") or h.get("text") or ""
-                else:
-                    txt = str(h)
-                if txt and txt not in bullets:
-                    bullets.append(txt)
-        e_copy["org"] = org
-        e_copy["company"] = org
-        e_copy["role"] = role
-        e_copy["time"] = time_str
-        e_copy["period"] = time_str
-        e_copy["bullets"] = bullets
-        norm_exp.append(e_copy)
+    norm_exp = _normalize_experiences(raw_exp, prefer_org_key=False)
 
     # Projects / Campus normalization
     raw_proj = raw_profile_copy.get("projects") or raw_profile_copy.get("campus_experience", [])
-    norm_proj = []
-    for p in raw_proj:
-        if not isinstance(p, dict):
-            continue
-        p_copy = dict(p)
-        p_name = p_copy.get("name") or p_copy.get("title") or "校园经历"
-        p_role = p_copy.get("role", "")
-        time_str = p_copy.get("time") or p_copy.get("period", "")
-        bullets = list(p_copy.get("bullets", []))
-        if not bullets:
-            desc = p_copy.get("description_zh") or p_copy.get("description", "")
-            if desc:
-                bullets.append(desc)
-        p_copy["name"] = p_name
-        p_copy["role"] = p_role
-        p_copy["time"] = time_str
-        p_copy["period"] = time_str
-        p_copy["bullets"] = bullets
-        norm_proj.append(p_copy)
+    norm_proj = _normalize_projects(raw_proj)
 
     # Competencies normalization
     competencies = raw_profile_copy.get("competencies") or raw_profile_copy.get("skills", {})
@@ -486,13 +654,22 @@ def normalize_candidate_profile(raw_profile: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_profile_evidence_index(raw_profile: Dict[str, Any]) -> ProfileEvidenceIndex:
+def build_profile_evidence_index(
+    raw_profile: Union[Dict[str, Any], ProfileContext],
+    *,
+    _already_normalized: bool = False,
+) -> ProfileEvidenceIndex:
     """Builds an immutable, single-source-of-truth evidence index from a candidate profile."""
+    if isinstance(raw_profile, ProfileContext):
+        return raw_profile.evidence_index
     if not isinstance(raw_profile, dict):
-        raise TypeError(f"Expected dict for profile, got {type(raw_profile)}")
+        raise TypeError(f"Expected dict or ProfileContext, got {type(raw_profile)}")
 
     # 1. Normalize profile (copy-protected and idempotent)
-    profile = normalize_candidate_profile(raw_profile)
+    if _already_normalized:
+        profile = raw_profile
+    else:
+        profile = normalize_candidate_profile(raw_profile)
 
     # 2. Extract claims via canonical iter_profile_claims
     extracted_claims = iter_profile_claims(profile)
@@ -698,10 +875,34 @@ def build_profile_evidence_index(raw_profile: Dict[str, Any]) -> ProfileEvidence
     )
 
 
+def build_profile_context(profile_or_context: Union[Dict[str, Any], ProfileContext]) -> ProfileContext:
+    """Builds or returns an immutable ProfileContext, avoiding redundant normalization."""
+    if isinstance(profile_or_context, ProfileContext):
+        return profile_or_context
+    if not isinstance(profile_or_context, dict):
+        raise TypeError(f"Expected dict or ProfileContext, got {type(profile_or_context).__name__}")
+
+    norm_profile = normalize_candidate_profile(profile_or_context)
+    evidence_index = build_profile_evidence_index(norm_profile, _already_normalized=True)
+
+    return ProfileContext(
+        raw_profile=copy.deepcopy(profile_or_context),
+        normalized_profile=norm_profile,
+        evidence_index=evidence_index,
+        claims=evidence_index.claims,
+        skills=evidence_index.skills,
+        bullets=evidence_index.bullets,
+        metric_anchors=evidence_index.metric_anchors,
+        input_quality=evidence_index.input_quality,
+    )
+
+
 __all__ = [
     "EvidenceClaim",
     "ProfileEvidenceIndex",
+    "ProfileContext",
     "build_profile_evidence_index",
+    "build_profile_context",
     "iter_profile_claims",
     "find_evidence",
     "claim_matches",

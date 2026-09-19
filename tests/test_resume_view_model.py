@@ -395,6 +395,25 @@ class TestResumeViewModel(unittest.TestCase):
         self.assertIn("张三", fitted_content)
         self.assertIn("高级后端架构师", fitted_content)
 
+    def test_from_normalized_profile_and_section_projections(self):
+        """Test from_normalized_profile factory and section_projections property."""
+        from core.profile_adapter import normalize_candidate_profile
+
+        norm = normalize_candidate_profile(self.sample_profile)
+        vm = ResumeViewModel.from_normalized_profile(norm)
+        self.assertEqual(vm.name, "张三")
+        self.assertEqual(vm.title, "高级后端架构师")
+
+        proj = vm.section_projections
+        self.assertIn("identity", proj)
+        self.assertIn("education", proj)
+        self.assertIn("experiences", proj)
+        self.assertIn("projects", proj)
+        self.assertIn("competencies", proj)
+        self.assertIn("has_photo", proj)
+        self.assertEqual(proj["identity"]["name"], "张三")
+        self.assertGreater(len(proj["experiences"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

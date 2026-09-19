@@ -11,9 +11,13 @@ import json
 import re
 from dataclasses import asdict
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-from core.profile_adapter import build_profile_evidence_index, normalize_candidate_profile
+from core.profile_adapter import (
+    ProfileContext,
+    build_profile_evidence_index,
+    normalize_candidate_profile,
+)
 from modules.jd_analyst.decoder import JDDecoder
 from modules.jd_analyst.matcher import JDMatcher
 from modules.jd_analyst.models import (
@@ -145,16 +149,19 @@ def _flatten_strings(value: Any) -> List[str]:
     return [str(value)] if value else []
 
 
-def profile_to_canonical(profile_data: Dict[str, Any]) -> CandidateProfile:
+def profile_to_canonical(profile_data: Union[Dict[str, Any], ProfileContext]) -> CandidateProfile:
     """Normalize the supported profile shapes without inventing defaults.
 
     Reuses core.profile_adapter.normalize_candidate_profile and unified evidence extraction.
     """
-    if not isinstance(profile_data, dict):
-        profile_data = {}
-
-    norm_profile = normalize_candidate_profile(profile_data)
-    index = build_profile_evidence_index(norm_profile)
+    if isinstance(profile_data, ProfileContext):
+        norm_profile = profile_data.normalized_profile
+        index = profile_data.evidence_index
+    else:
+        if not isinstance(profile_data, dict):
+            profile_data = {}
+        norm_profile = normalize_candidate_profile(profile_data)
+        index = build_profile_evidence_index(norm_profile, _already_normalized=True)
     cand = norm_profile.get("candidate", {})
 
     degree = str(cand.get("degree") or cand.get("education_level") or "").strip()
@@ -310,7 +317,7 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
     }
 
 
-def match_legacy(decoded: Any, profile_data: Dict[str, Any]) -> Dict[str, Any]:
+def match_legacy(decoded: Any, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
     canonical_jd = to_canonical(decoded)
     candidate = profile_to_canonical(profile_data)
     result = JDMatcher().match(canonical_jd, candidate)

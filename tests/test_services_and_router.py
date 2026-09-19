@@ -204,9 +204,15 @@ class TestServices(unittest.TestCase):
         claims = service.extract_claims(self.sample_profile)
         self.assertTrue(len(claims) > 0)
 
+        # 4. ProfileContext
+        ctx = service.get_context(self.sample_profile)
+        self.assertEqual(ctx.normalized_profile["candidate"]["name"], norm["candidate"]["name"])
+        self.assertIs(ctx.evidence_index, service.get_evidence_index(ctx))
+
     def test_match_service(self):
         jd_service = JDService()
         match_service = MatchService()
+        profile_service = ProfileService()
 
         decoded = jd_service.decode_jd(self.sample_jd)
         match_res = match_service.match(decoded, self.sample_profile)
@@ -216,6 +222,12 @@ class TestServices(unittest.TestCase):
         self.assertIn("verdict", match_res)
         self.assertIn("all_gaps", match_res)
         self.assertGreaterEqual(match_res["overall_match_score"], 50)
+
+        # Direct ProfileContext acceptance
+        ctx = profile_service.get_context(self.sample_profile)
+        match_res_ctx = match_service.match(decoded, ctx)
+        self.assertEqual(match_res_ctx["overall_match_score"], match_res["overall_match_score"])
+        self.assertEqual(match_res_ctx["interview_prob"], match_res["interview_prob"])
 
     def test_career_review_service(self):
         service = CareerReviewService()
@@ -316,6 +328,42 @@ class TestServices(unittest.TestCase):
             content = open(generated_path, encoding="utf-8").read()
             self.assertIn("王工", content)
             self.assertIn("大模型强化学习专家", content)
+
+    def test_lazy_services_compatibility_matrix(self):
+        """Test PEP 562 lazy loading compatibility across core.services symbols and command handlers."""
+        # 1. Test direct named imports from core.services
+        from core.services import (
+            ResumeBuilder,
+            OfferNegotiator,
+            generate_report,
+            audit_resume_quality,
+            FactVerificationGuard,
+            BaoyanAuditor,
+        )
+        self.assertIsNotNone(ResumeBuilder)
+        self.assertIsNotNone(OfferNegotiator)
+        self.assertIsNotNone(generate_report)
+        self.assertIsNotNone(audit_resume_quality)
+        self.assertIsNotNone(FactVerificationGuard)
+        self.assertIsNotNone(BaoyanAuditor)
+
+        # 2. Test module-level getattr and __all__ completeness
+        import core.services as s
+        for sym in s.__all__:
+            val = getattr(s, sym)
+            self.assertIsNotNone(val, f"Failed to resolve {sym} via core.services")
+
+        # 3. Test all presentation command handlers are intact and callable
+        from presentation.commands import (
+            cmd_jd_decode,
+            cmd_jd_match,
+            cmd_jd_report,
+            cmd_resume_build,
+            cmd_career_review,
+            cmd_selftest,
+        )
+        for cmd in (cmd_jd_decode, cmd_jd_match, cmd_jd_report, cmd_resume_build, cmd_career_review, cmd_selftest):
+            self.assertTrue(callable(cmd))
 
 
 if __name__ == "__main__":

@@ -45,29 +45,45 @@ class FactVerificationGuard:
       - UNVERIFIED_NUMERICAL_CLAIM: Number has no factual anchor in SSOT.
     """
 
-    def __init__(self, master_profile: Optional[Union[dict, str, Path]] = None):
+    def __init__(self, master_profile: Optional[Union[dict, str, Path, Any]] = None):
         """Initialize the guard with an optional master profile."""
         self.master_profile: Optional[dict] = None
         self.evidence_index: Optional[ProfileEvidenceIndex] = None
+        self.profile_context: Optional[Any] = None
         self.baseline_anchors: List[Dict[str, Any]] = []
         self.all_verified_numbers: Set[float] = set()
 
         if master_profile is not None:
             self.load_profile(master_profile)
 
-    def load_profile(self, master_profile: Union[dict, str, Path]) -> None:
+    def load_profile(self, master_profile: Union[dict, str, Path, Any]) -> None:
         """Loads and indexes the candidate's Single Source of Truth (SSOT) profile."""
-        if isinstance(master_profile, (str, Path)):
+        from core.profile_adapter import ProfileContext, build_profile_context
+
+        if isinstance(master_profile, ProfileContext):
+            self.profile_context = master_profile
+            self.master_profile = master_profile.normalized_profile
+            self.evidence_index = master_profile.evidence_index
+        elif isinstance(master_profile, ProfileEvidenceIndex):
+            self.profile_context = None
+            self.evidence_index = master_profile
+            self.master_profile = master_profile.profile
+        elif isinstance(master_profile, (str, Path)):
             path = Path(master_profile)
             if path.exists():
                 with open(path, "r", encoding="utf-8") as f:
-                    self.master_profile = json.load(f)
+                    raw_dict = json.load(f)
             else:
-                self.master_profile = json.loads(str(master_profile))
+                raw_dict = json.loads(str(master_profile))
+            self.profile_context = build_profile_context(raw_dict)
+            self.master_profile = self.profile_context.normalized_profile
+            self.evidence_index = self.profile_context.evidence_index
         elif isinstance(master_profile, dict):
-            self.master_profile = copy.deepcopy(master_profile)
+            self.profile_context = build_profile_context(master_profile)
+            self.master_profile = self.profile_context.normalized_profile
+            self.evidence_index = self.profile_context.evidence_index
         else:
-            raise TypeError(f"Expected dict, str, or Path, got {type(master_profile).__name__}")
+            raise TypeError(f"Expected dict, str, Path, or ProfileContext, got {type(master_profile).__name__}")
 
         self._index_master_profile()
 
@@ -79,8 +95,9 @@ class FactVerificationGuard:
         if not self.master_profile:
             return
 
-        # 1. Build immutable ProfileEvidenceIndex to unify normalized profile representation
-        self.evidence_index = build_profile_evidence_index(self.master_profile)
+        # 1. Build immutable ProfileEvidenceIndex if not already provided
+        if self.evidence_index is None:
+            self.evidence_index = build_profile_evidence_index(self.master_profile)
         norm_profile = self.evidence_index.profile
 
         # Candidate metadata
@@ -112,19 +129,28 @@ class FactVerificationGuard:
                     self._extract_and_index_text_metrics(text, f"narrative:{text_key}")
 
         # 3. Experience Highlights & Verified Metrics
-        for exp in norm_profile.get("experience", []):
+        exp_list = norm_profile.get("experience")
+        if exp_list is None and "internships" in norm_profile:
+            exp_list = norm_profile.get("internships")
+        if not isinstance(exp_list, list):
+            exp_list = []
 
+        for exp_idx, exp in enumerate(exp_list):
             if not isinstance(exp, dict):
                 continue
+            company = exp.get("company") or exp.get("org") or ""
+            role = exp.get("role") or ""
+            base_kw = self._extract_keywords(f"{company} {role}")
+
             for h in exp.get("highlights", []):
                 if not isinstance(h, dict):
                     continue
-                claim_id = h.get("claim_id", "EXP")
+                claim_id = h.get("claim_id", f"EXP-{exp_idx}")
                 claim_zh = h.get("claim_zh", "")
                 claim_en = h.get("claim_en", "")
                 verified_metrics = h.get("verified_metrics", {})
 
-                context_words = self._extract_keywords(f"{claim_zh} {claim_en}")
+                context_words = base_kw | self._extract_keywords(f"{claim_zh} {claim_en}")
 
                 # Index explicit verified_metrics dict
                 if isinstance(verified_metrics, dict):
@@ -136,8 +162,14 @@ class FactVerificationGuard:
                 if claim_en:
                     self._extract_and_index_text_metrics(claim_en, f"{claim_id}:claim_en", context_words)
 
+            for b_idx, b in enumerate(exp.get("bullets", [])):
+                b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
+                if b_text:
+                    b_kw = base_kw | self._extract_keywords(b_text)
+                    self._extract_and_index_text_metrics(b_text, f"experience[{exp_idx}].bullets[{b_idx}]", b_kw)
+
         # 4. Projects
-        for proj in norm_profile.get("projects", []):
+        for p_idx, proj in enumerate(norm_profile.get("projects", [])):
             if not isinstance(proj, dict):
                 continue
             proj_name = proj.get("name", "Project")
@@ -164,6 +196,11 @@ class FactVerificationGuard:
                 d_text = proj.get(desc_k, "")
                 if d_text:
                     self._extract_and_index_text_metrics(d_text, f"{proj_name}:{desc_k}", p_kw)
+
+            for b_idx, b in enumerate(proj.get("bullets", [])):
+                b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
+                if b_text:
+                    self._extract_and_index_text_metrics(b_text, f"projects[{p_idx}].bullets[{b_idx}]", p_kw | self._extract_keywords(b_text))
 
         # 5. Publications
         for pub in norm_profile.get("publications", []):
@@ -570,11 +607,7 @@ class FactVerificationGuard:
                         "metric_type": anchor.get("topic", met_type)
                     })
             else:
-                # Check if exact number exists in SSOT
-                if val in self.all_verified_numbers:
-                    continue
-
-                # No anchor and number not verified -> UNVERIFIED_NUMERICAL_CLAIM
+                # No anchored baseline found for this metric -> UNVERIFIED_NUMERICAL_CLAIM
                 bullet_unverified.append({
                     "bullet": bullet,
                     "claimed_metric": raw_str,
@@ -702,7 +735,13 @@ class FactVerificationGuard:
 
         # Model params: check if exact match or exceeding verified max
         if topic == "model_params":
-            if claimed_val in self.all_verified_numbers:
+            if abs(claimed_val - baseline_val) < 0.2:
+                return False, baseline_raw
+            matched_param = any(
+                a.get("topic") == "model_params" and abs(a.get("baseline_value", 0) - claimed_val) < 0.2
+                for a in self.baseline_anchors
+            )
+            if matched_param:
                 return False, baseline_raw
             if claimed_val > baseline_val:
                 return True, baseline_raw
@@ -734,7 +773,7 @@ class FactVerificationGuard:
                 return True, baseline_raw
 
         # Percentage reductions / gains
-        elif topic in ("latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain", "uptime"):
+        elif topic in ("latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain", "uptime", "percentage", "generic"):
             if claimed_val > baseline_val + 0.2:
                 return True, baseline_raw
 

@@ -91,10 +91,34 @@ class ResumeViewModel:
     photo_path: Optional[str] = None
     raw_profile: Optional[Dict[str, Any]] = None
 
+    @property
+    def section_projections(self) -> Dict[str, Any]:
+        """Structured dictionary of section projections for theme rendering and ATS serialization."""
+        return {
+            "identity": {
+                "name": self.name,
+                "title": self.title,
+                "phone": self.phone,
+                "email": self.email,
+                "location": self.location,
+            },
+            "education": {
+                "school": self.edu_school,
+                "degree": self.edu_degree,
+                "time": self.edu_time,
+                "grid_rows": self.education_grid_rows,
+            },
+            "experiences": self.experiences,
+            "projects": self.projects,
+            "competencies": self.competencies,
+            "publications": self.publications,
+            "has_photo": bool(self.photo_data_uri or self.reserve_photo),
+        }
+
     @classmethod
     def from_profile(
         cls,
-        profile: Dict[str, Any],
+        profile: Union[Dict[str, Any], Any],
         photo_path: Optional[Union[str, Path]] = None,
         reserve_photo: bool = True,
     ) -> ResumeViewModel:
@@ -103,7 +127,32 @@ class ResumeViewModel:
         Ensures all HTML-rendered fields are pre-sanitized against XSS and markdown bold
         formatting (**bold**) is safely converted to <strong>bold</strong>.
         """
+        if isinstance(profile, ResumeViewModel):
+            return profile
         prof = normalize_candidate_profile(profile)
+        raw_p = getattr(profile, "raw_profile", None) or (profile if isinstance(profile, dict) else None)
+        fallback_edu = profile.get("education") if isinstance(profile, dict) else None
+        return cls.from_normalized_profile(
+            prof=prof,
+            photo_path=photo_path,
+            reserve_photo=reserve_photo,
+            raw_profile=raw_p,
+            fallback_education=fallback_edu,
+        )
+
+    @classmethod
+    def from_normalized_profile(
+        cls,
+        prof: Dict[str, Any],
+        photo_path: Optional[Union[str, Path]] = None,
+        reserve_photo: bool = True,
+        raw_profile: Optional[Dict[str, Any]] = None,
+        fallback_education: Optional[Dict[str, Any]] = None,
+    ) -> ResumeViewModel:
+        """
+        Constructs a sanitized ResumeViewModel directly from an already normalized profile.
+        Bypasses duplicate schema normalization when operating in an optimized pipeline.
+        """
         cand = prof.get("candidate", {})
 
         # Basic identity
@@ -131,10 +180,10 @@ class ResumeViewModel:
         # Education Grid Rows
         raw_grid = extract_education_grid(cand)
         if not raw_grid:
-            edu = profile.get("education", {}) if isinstance(profile.get("education"), dict) else {}
+            edu = fallback_education or (raw_profile.get("education") if isinstance(raw_profile, dict) else {})
             fallback_badges = []
             for k in ["gpa", "awards", "certificates", "courses", "honors"]:
-                val = cand.get(k) or edu.get(k)
+                val = cand.get(k) or (edu.get(k) if isinstance(edu, dict) else None)
                 if val:
                     fallback_badges.append(str(val).strip())
             if fallback_badges:
@@ -284,6 +333,35 @@ class ResumeViewModel:
             photo_path=str(eff_photo_path) if eff_photo_path else None,
             raw_profile=prof,
         )
+
+
+def resolve_theme_template(
+    theme_normalized: str,
+    template_dir: Optional[Union[str, Path]] = None,
+) -> str:
+    """Resolves and loads theme HTML template from local filesystem or installed package resources."""
+    candidates = []
+    if template_dir:
+        candidates.append(Path(template_dir).resolve() / f"{theme_normalized}.html")
+    candidates.append(PROJECT_ROOT / "ApexResume" / "themes" / f"{theme_normalized}.html")
+    candidates.append(Path(__file__).resolve().parent.parent / "ApexResume" / "themes" / f"{theme_normalized}.html")
+
+    for p in candidates:
+        if p.is_file():
+            return p.read_text(encoding="utf-8")
+
+    try:
+        import importlib.resources as pkg_resources
+
+        ref = pkg_resources.files("ApexResume").joinpath("themes", f"{theme_normalized}.html")
+        if ref.is_file():
+            return ref.read_text(encoding="utf-8")
+    except Exception:
+        pass
+
+    raise FileNotFoundError(
+        f"Template not found for theme {theme_normalized} across {[str(c) for c in candidates]}"
+    )
 
 
 class HtmlThemeRenderer:
@@ -507,13 +585,7 @@ class HtmlThemeRenderer:
         """
         theme_normalized = theme_name.lower().replace("_", "-")
         if template_content is None:
-            tdir = Path(template_dir).resolve() if template_dir else (PROJECT_ROOT / "ApexResume" / "themes")
-            tmpl_file = tdir / f"{theme_normalized}.html"
-            if not tmpl_file.exists():
-                tmpl_file = PROJECT_ROOT / "ApexResume" / "themes" / f"{theme_normalized}.html"
-            if not tmpl_file.exists():
-                raise FileNotFoundError(f"Template not found for theme {theme_name} at {tmpl_file}")
-            raw_template = tmpl_file.read_text(encoding="utf-8")
+            raw_template = resolve_theme_template(theme_normalized, template_dir=template_dir)
         else:
             raw_template = template_content
 
@@ -798,3 +870,11 @@ class AtsPlainRenderer:
             "md": self.render_markdown(vm),
             "html": self.render_html(vm),
         }
+
+
+__all__ = [
+    "ResumeViewModel",
+    "HtmlThemeRenderer",
+    "AtsPlainRenderer",
+    "resolve_theme_template",
+]
