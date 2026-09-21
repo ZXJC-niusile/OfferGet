@@ -265,6 +265,154 @@ class TestFactVerificationGuard(unittest.TestCase):
         self.assertTrue(res_megatron["passed"])
         self.assertEqual(res_megatron["verdict"], "FACT_CHECK_PASSED")
 
+    def test_14_competency_cannot_authorize_specific_experience_expansion(self):
+        # Counterexample 1: Candidate only has Redis / Megatron-LM in competencies.
+        # Specific experience bullet only mentions "负责数据存储".
+        # Rewritten bullet introducing Redis or Megatron-LM must be flagged as ungrounded under experience scope.
+        profile = {
+            "candidate": {"name": "张三", "title_zh": "后端开发工程师"},
+            "competencies": {
+                "frameworks": ["Redis", "Megatron-LM", "通信算子重构"]
+            },
+            "experience": [
+                {
+                    "company": "科技公司A",
+                    "role": "后端开发",
+                    "bullets": ["负责数据存储。"]
+                }
+            ]
+        }
+        guard = FactVerificationGuard(profile)
+
+        # 1a. Bullet introducing Redis under experience scope
+        redis_bullet = "负责基于 Redis 的数据缓存与持久化。"
+        res_scope_str = guard.verify_bullet(redis_bullet, target_scope="experience[0]")
+        self.assertFalse(res_scope_str["passed"])
+        self.assertEqual(res_scope_str["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv_1 = [u["claimed_metric"] for u in res_scope_str["unverified_claims"]]
+        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv_1))
+
+        # Also test with company name scope
+        res_company = guard.verify_bullet(redis_bullet, target_scope="科技公司A")
+        self.assertFalse(res_company["passed"])
+
+        # Also test with target_excerpt scope
+        res_excerpt = guard.verify_bullet(redis_bullet, target_excerpt="负责数据存储。")
+        self.assertFalse(res_excerpt["passed"])
+
+        # 1b. Bullet introducing Megatron-LM / operator refactoring under experience scope
+        megatron_bullet = "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 20%。"
+        res_megatron = guard.verify_bullet(megatron_bullet, target_scope="experience[0]")
+        self.assertFalse(res_megatron["passed"])
+        self.assertEqual(res_megatron["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv_2 = [u["claimed_metric"] for u in res_megatron["unverified_claims"]]
+        self.assertTrue(any("Megatron-LM" in c for c in claimed_unv_2))
+
+        # 1c. Positive case: when experience explicitly mentions Redis, it passes under experience scope
+        profile_grounded = {
+            "candidate": {"name": "张三", "title_zh": "后端开发工程师"},
+            "competencies": {
+                "frameworks": ["Redis"]
+            },
+            "experience": [
+                {
+                    "company": "科技公司A",
+                    "role": "后端开发",
+                    "bullets": ["负责基于 Redis 的数据存储与缓存架构。"]
+                }
+            ]
+        }
+        guard_grounded = FactVerificationGuard(profile_grounded)
+        res_grounded = guard_grounded.verify_bullet(redis_bullet, target_scope="experience[0]")
+        self.assertTrue(res_grounded["passed"])
+        self.assertEqual(res_grounded["verdict"], "FACT_CHECK_PASSED")
+        self.assertEqual(len(res_grounded["unverified_claims"]), 0)
+
+    def test_15_project_a_tech_cannot_authorize_project_b(self):
+        # Counterexample 2: Candidate Project A has Redis, Project B only has SQLite.
+        # Project B rewrite cannot borrow Redis from Project A.
+        profile = {
+            "candidate": {"name": "李四", "title_zh": "全栈开发工程师"},
+            "projects": [
+                {
+                    "name": "Project A",
+                    "bullets": ["使用 Redis 实现高并发缓存系统。"]
+                },
+                {
+                    "name": "Project B",
+                    "bullets": ["使用 SQLite 设计并实现课程数据表的 SQL 查询接口。"]
+                }
+            ]
+        }
+        guard = FactVerificationGuard(profile)
+
+        # Rewrite for Project B introducing Redis must fail under Project B scope
+        bullet_b_redis = "基于 Redis 缓存热点数据，提高系统并发与响应能力。"
+        res_b = guard.verify_bullet(bullet_b_redis, target_scope="projects[1]")
+        self.assertFalse(res_b["passed"])
+        self.assertEqual(res_b["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv = [u["claimed_metric"] for u in res_b["unverified_claims"]]
+        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv))
+
+        # Also fails with project name scope
+        res_b_name = guard.verify_bullet(bullet_b_redis, target_scope="Project B")
+        self.assertFalse(res_b_name["passed"])
+
+        # Positive case: Project A rewrite using Redis passes under Project A scope
+        bullet_a_redis = "基于 Redis 优化高并发缓存架构。"
+        res_a = guard.verify_bullet(bullet_a_redis, target_scope="projects[0]")
+        self.assertTrue(res_a["passed"])
+        self.assertEqual(res_a["verdict"], "FACT_CHECK_PASSED")
+
+        # Positive case: Project B rewrite using SQLite passes under Project B scope
+        bullet_b_sqlite = "基于 SQLite 优化课程数据表的 SQL 查询接口与索引。"
+        res_b_sqlite = guard.verify_bullet(bullet_b_sqlite, target_scope="projects[1]")
+        self.assertTrue(res_b_sqlite["passed"])
+        self.assertEqual(res_b_sqlite["verdict"], "FACT_CHECK_PASSED")
+
+    def test_16_negated_or_planned_tech_cannot_authorize_expansion(self):
+        # Negation case: Experience text says "调研了 Redis 但未采用"
+        profile_negated = {
+            "candidate": {"name": "王五", "title_zh": "后端开发工程师"},
+            "experience": [
+                {
+                    "company": "科技公司C",
+                    "role": "后端开发",
+                    "bullets": [
+                        "负责数据层架构选型，调研了 Redis 但未采用，最终基于 SQLite 完成单机存储方案开发。"
+                    ]
+                }
+            ]
+        }
+        guard_neg = FactVerificationGuard(profile_negated)
+        bullet_redis = "负责基于 Redis 的数据缓存与持久化。"
+        res_neg = guard_neg.verify_bullet(bullet_redis, target_scope="experience[0]")
+        self.assertFalse(res_neg["passed"])
+        self.assertEqual(res_neg["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv_neg = [u["claimed_metric"] for u in res_neg["unverified_claims"]]
+        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv_neg))
+
+        # Planning case: Experience text says "计划后续引入 Megatron-LM"
+        profile_planned = {
+            "candidate": {"name": "赵六", "title_zh": "算法工程师"},
+            "experience": [
+                {
+                    "company": "科技公司D",
+                    "role": "算法工程师",
+                    "bullets": [
+                        "负责模型推理加速，计划后续引入 Megatron-LM 进行算子融合重构。"
+                    ]
+                }
+            ]
+        }
+        guard_plan = FactVerificationGuard(profile_planned)
+        bullet_megatron = "基于 Megatron-LM 重构并行训练通信算子。"
+        res_plan = guard_plan.verify_bullet(bullet_megatron, target_scope="experience[0]")
+        self.assertFalse(res_plan["passed"])
+        self.assertEqual(res_plan["verdict"], "FACT_DRIFT_DETECTED")
+        claimed_unv_plan = [u["claimed_metric"] for u in res_plan["unverified_claims"]]
+        self.assertTrue(any("Megatron-LM" in c for c in claimed_unv_plan))
+
 
 if __name__ == "__main__":
     unittest.main()

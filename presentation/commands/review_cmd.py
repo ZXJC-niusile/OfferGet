@@ -5,6 +5,8 @@ OfferGet Career Review Command Handler:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 from pathlib import Path
@@ -40,12 +42,26 @@ def cmd_career_review(args):
         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
         sys.exit(1)
 
+    jd_text = read_text(jd_path)
+    profile_data = load_json(profile_path)
+
     session_data = None
     if session_path:
         if not os.path.exists(session_path):
             emit_stderr(f"[-] Error: Session file not found: {session_path}")
             sys.exit(1)
         session_data = load_review_session(session_path)
+
+        jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
+        profile_hash = hashlib.sha256(json.dumps(profile_data, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+        sess_jd_fp = session_data.get("jd_fingerprint")
+        sess_prof_fp = session_data.get("profile_fingerprint")
+        if sess_jd_fp and sess_jd_fp != jd_hash:
+            emit_stderr(f"[-] Error: Session JD fingerprint mismatch: session={sess_jd_fp}, current={jd_hash}")
+            sys.exit(1)
+        if sess_prof_fp and sess_prof_fp != profile_hash:
+            emit_stderr(f"[-] Error: Session Profile fingerprint mismatch: session={sess_prof_fp}, current={profile_hash}")
+            sys.exit(1)
 
     answers_data = None
     if answers_path:
@@ -56,22 +72,25 @@ def cmd_career_review(args):
         if session_data:
             valid, errors = validate_session_answers(session_data, answers_data)
             if not valid:
-                emit_stderr(f"[-] Warning: Answers do not match session snapshot: {'; '.join(errors)}")
+                emit_stderr(f"[-] Error: Answers do not match session snapshot: {'; '.join(errors)}")
+                sys.exit(1)
 
-    jd_text = read_text(jd_path)
-    profile_data = load_json(profile_path)
-
-    review_result = run_career_review(
-        jd_text=jd_text,
-        profile_dict=profile_data,
-        answers_dict=answers_data,
-        build_resume=getattr(args, "build_resume", False),
-        resume_theme=getattr(args, "resume_theme", "modern-navy"),
-        resume_output_dir=getattr(args, "resume_output_dir", None),
-    )
+    try:
+        review_result = run_career_review(
+            jd_text=jd_text,
+            profile_dict=profile_data,
+            answers_dict=answers_data,
+            build_resume=getattr(args, "build_resume", False),
+            resume_theme=getattr(args, "resume_theme", "modern-navy"),
+            resume_output_dir=getattr(args, "resume_output_dir", None),
+            session_data=session_data,
+        )
+    except ValueError as e:
+        emit_stderr(f"[-] Error: {e}")
+        sys.exit(1)
 
     if save_session_path:
-        session = create_review_session(jd_text, profile_data, review_result)
+        session = create_review_session(jd_text, profile_data, review_result, base_session=session_data)
         save_review_session(session, save_session_path)
         if args.json:
             emit_stderr(f"[+] Review session saved to {save_session_path}")

@@ -1,0 +1,860 @@
+diff --git a/ApexResume/core/audit.py b/ApexResume/core/audit.py
+index b7b7e87..397b657 100644
+--- a/ApexResume/core/audit.py
++++ b/ApexResume/core/audit.py
+@@ -32,58 +32,29 @@ class Finding:
+     details: Dict[str, Any] = field(default_factory=dict)
+ 
+ 
+-ROLE_RANKS = {
+-    # Rank 0: Planning / Exploratory
+-    "计划": 0, "规划": 0, "探索": 0, "预研": 0, "当前方向": 0, "拟": 0,
+-    # Rank 1: Contributor / Participant
+-    "参与": 1, "协助": 1, "支持": 1, "共建者": 1, "配合": 1, "contributor": 1,
+-    # Rank 2: Lead / Maintainer
+-    "主导": 2, "主要负责": 2, "策略架构owner": 2, "策略owner": 2, "架构负责人": 2, "maintainer": 2, "方向负责人": 2,
+-    # Rank 3: Independent Owner
+-    "独立负责": 3, "从0到1": 3, "端到端负责": 3, "完全负责": 3, "owner": 3,
+-}
+-
+-# Verb hierarchy: 支持/协助 < 参与 < 负责 < 推动 < 主导
+-VERB_HIERARCHY = {
+-    # Level 1: 支持 / 协助
+-    "支持": 1, "协助": 1, "配合": 1, "辅助": 1,
+-    # Level 2: 参与
+-    "参与": 2, "共建": 2, "贡献": 2, "contribute": 2, "参编": 2,
+-    # Level 3: 负责
+-    "负责": 3, "主要负责": 3, "承担": 3, "落地": 3, "实现": 3, "搭建": 3, "开发": 3, "设计并实现": 3,
+-    # Level 4: 推动
+-    "推动": 4, "推进": 4, "牵引": 4, "促进": 4, "带动": 4,
+-    # Level 5: 主导
+-    "主导": 5, "统筹": 5, "引领": 5, "主持": 5, "从0到1": 5, "独立负责": 5, "owner": 5,
+-}
+-
+-STRONG_VERBS_THRESHOLD = 4  # Level 4 (推动) and Level 5 (主导) are strong verbs
+-
+-DECISION_PLANNING_KEYWORDS = [
+-    "选型", "技术路线", "架构设计", "方案决策", "规划", "制定", "技术决策",
+-    "重构方案", "标准制定", "规范制定", "rfc", "决策", "调研论证", "技术评审"
+-]
+-
+-DATA_DEPTH_LEVELS = {
+-    "D0": "描述性统计 (Descriptive: 计数、均值、汇总)",
+-    "D1": "诊断性归因 (Diagnostic: 细分下钻、漏斗、同比环比)",
+-    "D2": "探索性关联 (Exploratory: 相关性分析、特征重要度、切片对比)",
+-    "D3": "预测性建模 (Predictive/Causal: 趋势预估、因果推断、PSM、DID)",
+-    "D4": "规范性自适应 (Prescriptive: 运筹优化、强化学习闭环、动态调度)",
+-}
+-
+-RESULT_EVIDENCE_LEVELS = {
+-    "R0": "理论预估 (Theoretical: 纯假定、无外部验证)",
+-    "R1": "离线基准 (Offline Benchmark: 实验室评测、公开数据集静态分)",
+-    "R2": "灰度验证 (Gray-scale / A/B Test: 准生产、小流量实验验证)",
+-    "R3": "生产实效 (Production Impact: 全量生产稳定运行与宏观商业价值)",
+-}
+-
+-COMPLETED_VERBS_FORBIDDEN_IN_PLANNING = [
+-    "已上线", "已达成", "完成", "实现", "主导", "owner", "核心作者", "提升约", "降低约", "突破"
+-]
+-
+-SUPERLATIVES = ["全网第一", "全国第一", "全球第一", "业界第一", "唯一", "最优", "顶尖", "首个"]
++# Import SSOT QualityRuleRegistry from OfferGet
++try:
++    from core.registry import QualityRuleRegistry
++except ImportError:
++    import importlib.util
++    _offerget_root = Path(__file__).resolve().parent.parent.parent
++    _registry_path = _offerget_root / "core" / "registry.py"
++    if _registry_path.exists():
++        spec = importlib.util.spec_from_file_location("offerget_core_registry", str(_registry_path))
++        _mod = importlib.util.module_from_spec(spec)
++        spec.loader.exec_module(_mod)
++        QualityRuleRegistry = _mod.QualityRuleRegistry
++    else:
++        raise
++
++ROLE_RANKS = QualityRuleRegistry.ROLE_RANKS
++VERB_HIERARCHY = QualityRuleRegistry.VERB_HIERARCHY
++STRONG_VERBS_THRESHOLD = QualityRuleRegistry.STRONG_VERBS_THRESHOLD
++DECISION_PLANNING_KEYWORDS = QualityRuleRegistry.DECISION_PLANNING_KEYWORDS
++DATA_DEPTH_LEVELS = QualityRuleRegistry.DATA_DEPTH_LEVELS
++RESULT_EVIDENCE_LEVELS = QualityRuleRegistry.RESULT_EVIDENCE_LEVELS
++COMPLETED_VERBS_FORBIDDEN_IN_PLANNING = QualityRuleRegistry.COMPLETED_VERBS_FORBIDDEN_IN_PLANNING
++SUPERLATIVES = QualityRuleRegistry.SUPERLATIVES
+ 
+ 
+ class ResumeAuditor:
+diff --git a/core/ats_checker.py b/core/ats_checker.py
+index c0910e5..257fd08 100644
+--- a/core/ats_checker.py
++++ b/core/ats_checker.py
+@@ -11,7 +11,12 @@ import os
+ import re
+ from typing import Any, Dict, List, Optional, Set, Tuple, Union
+ 
+-from core.profile_adapter import build_profile_evidence_index
++from core.profile_adapter import (
++    ProfileContext,
++    ProfileEvidenceIndex,
++    build_profile_context,
++    build_profile_evidence_index,
++)
+ from core.lexicon import (
+     STRONG_ACTION_VERBS_EN,
+     STRONG_ACTION_VERBS_ZH,
+@@ -21,51 +26,11 @@ from core.lexicon import (
+     AI_BUZZWORDS_LEXICON,
+     VERB_HIERARCHY,
+     ROLE_RANKS,
++    STANDARD_SECTIONS,
++    FORMATTING_RISKS,
++    DEFENSE_GUIDE_TEMPLATES,
+ )
+ 
+-# Standard Section Names mapping
+-STANDARD_SECTIONS = {
+-    "Experience": [
+-        "experience", "work experience", "professional experience",
+-        "employment history", "work history", "工作经历", "工作经验", "职业经历"
+-    ],
+-    "Education": [
+-        "education", "academic background", "educational background",
+-        "education & credentials", "教育背景", "教育经历", "学历", "教育"
+-    ],
+-    "Skills": [
+-        "skills", "technical skills", "competencies", "core competencies",
+-        "skillset", "专业技能", "核心技能", "技能清单", "技能专长", "技术栈"
+-    ],
+-    "Projects": [
+-        "projects", "project experience", "key projects", "selected projects",
+-        "项目经历", "项目经验", "核心项目", "重点项目"
+-    ],
+-    "Summary": [
+-        "summary", "professional summary", "executive summary", "about me",
+-        "profile", "narrative", "个人总结", "个人评价", "个人简介", "自我评价", "职业概述", "概述"
+-    ]
+-}
+-
+-# Formatting risk patterns
+-FORMATTING_RISKS = [
+-    ("table", re.compile(r"<table\b|<tr\b|<td\b|<th\b|\|[^\n]+\|\s*\n\s*\|[-:| ]+\|\s*\n|\\begin\{tabular\}", re.IGNORECASE), "Tables in ATS resumes often cause text scrambling or parser failure"),
+-    ("multi_column", re.compile(r"column-count\s*:|display\s*:\s*(?:flex|grid)|grid-template-columns|class=[\"'][^\"']*(?:col-\d+|two-column|multi-column|sidebar)[^\"']*", re.IGNORECASE), "Multi-column layouts disrupt linear parsing reading order"),
+-    ("complex_nested_blocks", re.compile(r"<div[^>]*>\s*<div[^>]*>\s*<div[^>]*>\s*<div|<iframe\b|<canvas\b|<script\b|<object\b", re.IGNORECASE), "Complex nested HTML elements or embeds fail in legacy ATS parsers"),
+-    ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
+-]
+-
+-
+-# Default Transferable Defense Guidance
+-DEFENSE_GUIDE_TEMPLATES = {
+-    "kubernetes": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
+-    "k8s": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
+-    "triton": "Be transparent: state that custom kernels were previously written in CUDA/C++ or optimized PyTorch. Highlight strong grasp of GPU SRAM/HBM memory hierarchies and tile-level compilation principles.",
+-    "rust": "Honestly state no commercial Rust production experience. Emphasize deep mastery of C++17/20 systems programming, explicit memory safety concepts, and ability to read Rust codebases immediately.",
+-    "megatron-lm": "Clarify that 3D parallelism principles (TP/PP/DP/SP) were mastered conceptually and on DeepSpeed/FSDP; demonstrate exact communication volume equations during interview.",
+-    "default": "Transparently acknowledge the gap without defensiveness. Pivot to adjacent production architectures, emphasize deep conceptual grasp of the underlying principles, and highlight rapid 48-hour ramp-up history."
+-}
+-
+ 
+ # ---------------------------------------------------------------------------
+ # Helper Extraction Functions
+@@ -73,7 +38,8 @@ DEFENSE_GUIDE_TEMPLATES = {
+ 
+ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[str, Any]]:
+     """
+-    Extracts bullet points and metadata from a candidate profile dict or raw resume text.
++    Extracts bullet points and metadata from a candidate profile dict, ProfileContext,
++    ProfileEvidenceIndex, or raw resume text.
+     Returns: (bullets_list, meta_info)
+     """
+     bullets: List[str] = []
+@@ -81,10 +47,45 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
+         "raw_text": "",
+         "years_of_experience": 0,
+         "is_dict": False,
+-        "parsed_profile": None
++        "parsed_profile": None,
++        "evidence_index": None,
+     }
+ 
+-    # 1. Handle dict
++    # 1. Handle ProfileEvidenceIndex directly
++    if isinstance(profile_or_text, ProfileEvidenceIndex):
++        index = profile_or_text
++        cand = index.profile.get("candidate", {})
++        yoe = cand.get("years_of_experience", 0)
++        try:
++            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
++        except (ValueError, TypeError):
++            meta["years_of_experience"] = 0
++
++        meta["is_dict"] = True
++        meta["parsed_profile"] = index.profile
++        meta["evidence_index"] = index
++        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
++        bullets = list(index.bullets)
++        return bullets, meta
++
++    # 2. Handle ProfileContext directly
++    if isinstance(profile_or_text, ProfileContext):
++        index = profile_or_text.evidence_index
++        cand = index.profile.get("candidate", {})
++        yoe = cand.get("years_of_experience", 0)
++        try:
++            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
++        except (ValueError, TypeError):
++            meta["years_of_experience"] = 0
++
++        meta["is_dict"] = True
++        meta["parsed_profile"] = index.profile
++        meta["evidence_index"] = index
++        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
++        bullets = list(index.bullets)
++        return bullets, meta
++
++    # 3. Handle raw dict
+     if isinstance(profile_or_text, dict):
+         index = build_profile_evidence_index(profile_or_text)
+         cand = index.profile.get("candidate", {})
+@@ -96,11 +97,12 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
+ 
+         meta["is_dict"] = True
+         meta["parsed_profile"] = index.profile
++        meta["evidence_index"] = index
+         meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
+         bullets = list(index.bullets)
+         return bullets, meta
+ 
+-    # 2. Handle string (text, filepath, or json string)
++    # 4. Handle string (text, filepath, or json string)
+     text_content = str(profile_or_text).strip()
+ 
+     # Check if it's a file path
+@@ -576,10 +578,12 @@ class ATSAuditor:
+         active_input = meta["parsed_profile"] if meta["parsed_profile"] is not None else profile_or_text
+ 
+         # If target_tag is specified and input is a profile dict, filter first
++        # Note: Filtering produces an intentional materialized derived dict view with a fresh index
+         if target_tag and isinstance(active_input, dict):
+             active_input = filter_profile_by_visibility(active_input, target_tag)
+             bullets, meta = extract_bullets_from_input(active_input)
+ 
++        evidence_index = meta.get("evidence_index")
+         raw_text = meta["raw_text"]
+         years_exp = meta["years_of_experience"]
+ 
+@@ -625,8 +629,8 @@ class ATSAuditor:
+         else:
+             verdict = "NEEDS_REVISION"
+ 
+-        # Three-State Skill Ledger
+-        skill_ledger = generate_skill_ledger(active_input, jd_decoded_or_text)
++        # Three-State Skill Ledger (reusing evidence_index to avoid duplicate index construction)
++        skill_ledger = generate_skill_ledger(active_input, jd_decoded_or_text, evidence_index=evidence_index)
+ 
+         # Actionable recommendations
+         recommendations = []
+@@ -699,29 +703,44 @@ def extract_skills_from_jd(jd_decoded_or_text: Any) -> List[str]:
+     return sorted(list(skills))
+ 
+ 
+-def extract_candidate_skills(profile_data: Any) -> Tuple[Set[str], List[str]]:
++def extract_candidate_skills(
++    profile_data: Any,
++    evidence_index: Optional[ProfileEvidenceIndex] = None,
++) -> Tuple[Set[str], List[str]]:
+     """
+     Extracts all candidate competencies and bullet texts for matching.
++    Supports ProfileContext, ProfileEvidenceIndex, dict, or text, reusing evidence_index when provided.
+     Returns: (competencies_set, verified_bullets)
+     """
+     competencies: Set[str] = set()
+     verified_bullets: List[str] = []
+ 
+-    # If file path
+-    if isinstance(profile_data, str) and os.path.exists(profile_data):
+-        try:
+-            with open(profile_data, "r", encoding="utf-8") as f:
+-                content = f.read()
+-            if profile_data.endswith(".json") or content.strip().startswith("{"):
+-                try:
+-                    profile_data = json.loads(content)
+-                except Exception:
+-                    pass
+-        except Exception:
+-            pass
+-
+-    if isinstance(profile_data, dict):
+-        index = build_profile_evidence_index(profile_data)
++    # 1. Reuse existing evidence_index if provided
++    index: Optional[ProfileEvidenceIndex] = evidence_index
++
++    # 2. Resolve index if not provided directly
++    if index is None:
++        if isinstance(profile_data, ProfileEvidenceIndex):
++            index = profile_data
++        elif isinstance(profile_data, ProfileContext):
++            index = profile_data.evidence_index
++        elif isinstance(profile_data, dict):
++            index = build_profile_evidence_index(profile_data)
++        elif isinstance(profile_data, str) and os.path.exists(profile_data):
++            try:
++                with open(profile_data, "r", encoding="utf-8") as f:
++                    content = f.read()
++                if profile_data.endswith(".json") or content.strip().startswith("{"):
++                    try:
++                        loaded = json.loads(content)
++                        if isinstance(loaded, dict):
++                            index = build_profile_evidence_index(loaded)
++                    except Exception:
++                        pass
++            except Exception:
++                pass
++
++    if index is not None:
+         for item in index.skills:
+             competencies.add(item.strip())
+             sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
+@@ -754,7 +773,8 @@ def generate_skill_defense(skill: str) -> str:
+ def generate_skill_ledger(
+     profile_data: Any,
+     jd_decoded_or_text: Any,
+-    skills_to_evaluate: Optional[List[str]] = None
++    skills_to_evaluate: Optional[List[str]] = None,
++    evidence_index: Optional[ProfileEvidenceIndex] = None,
+ ) -> Dict[str, Any]:
+     """
+     Categorizes skills against JD requirements into:
+@@ -763,7 +783,7 @@ def generate_skill_ledger(
+     - 'unsupported_gap': Skills required by JD but absent in candidate profile.
+       CRITICAL: Strictly flag as honest gaps with interview defense advice, never fabricate or hallucinate!
+     """
+-    competencies, verified_bullets = extract_candidate_skills(profile_data)
++    competencies, verified_bullets = extract_candidate_skills(profile_data, evidence_index=evidence_index)
+ 
+     # Determine skills to evaluate
+     if skills_to_evaluate:
+diff --git a/core/baoyan_auditor.py b/core/baoyan_auditor.py
+index 33aa8ab..7567aa0 100644
+--- a/core/baoyan_auditor.py
++++ b/core/baoyan_auditor.py
+@@ -14,96 +14,24 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
+ # Constants & Specification Standards
+ # ---------------------------------------------------------------------------
+ 
+-SPEC_RANGES: Dict[str, Tuple[int, int]] = {
+-    "摘要版": (40, 60),
+-    "简历版": (80, 110),
+-    "陈述版": (150, 220),
+-}
+-
+-SPEC_ALIASES: Dict[str, str] = {
+-    "摘要版": "摘要版",
+-    "摘要": "摘要版",
+-    "summary": "摘要版",
+-    "简历版": "简历版",
+-    "简历": "简历版",
+-    "resume": "简历版",
+-    "陈述版": "陈述版",
+-    "陈述": "陈述版",
+-    "个人陈述": "陈述版",
+-    "statement": "陈述版",
+-}
+-
+-# Typography Rules
+-FORBIDDEN_DASHES: Dict[str, str] = {
+-    "——": "chinese em dash (——)",
+-    "\u2014": "em dash (—)",
+-    "\u2013": "en dash (–)",
+-    "\u2015": "horizontal bar (―)",
+-    "\u2212": "minus (−)",
+-    "\u2e3a": "two-em dash (⸺)",
+-    "\u2e3b": "three-em dash (⸻)",
+-}
+-
+-FORBIDDEN_QUOTES: Dict[str, str] = {
+-    "\u201c": "left double quote (“)",
+-    "\u201d": "right double quote (”)",
+-    "\u2018": "left single quote (‘)",
+-    "\u2019": "right single quote (’)",
+-}
+-
+-FORBIDDEN_DOUBLE_HYPHEN = "--"
+-
+-# Academic Buzzwords Forbidden (Centralized from core.lexicon SSOT)
+-from core.lexicon import FORBIDDEN_BUZZWORDS
+-
+-# Roles & Role Verb Hierarchy
+-LEAD_ROLES: Set[str] = {
+-    "项目负责人", "负责人", "队长", "主持人", "算法链负责人", "模块负责人", "课题组长", "第一完成人"
+-}
+-
+-CORE_ROLES: Set[str] = {
+-    "核心成员", "核心骨干", "核心研发"
+-}
+-
+-LEAD_OR_CORE_ROLES: Set[str] = LEAD_ROLES | CORE_ROLES
+-
+-NON_LEAD_ROLES: Set[str] = {
+-    "参赛队员", "队员", "辅助成员", "成员", "团队成员", "组员", "协作者"
+-}
+-
+-# Escalated verbs that non-lead/core members are strictly forbidden to use
+-ESCALATED_VERBS: List[str] = [
+-    "主导", "负责", "统筹", "独立完成"
+-]
+-
+-# Verbs strictly reserved for lead roles
+-LEADER_ONLY_VERBS: List[str] = [
+-    "主导", "统筹"
+-]
+-
+-# Simulation vs Real Cluster / Hardware Deployment
+-SIMULATION_TERMS: List[str] = [
+-    "gazebo", "gym", "pybullet", "toy dataset", "toy-dataset", "toy数据集", "纯仿真",
+-    "flexsim", "carla", "isaac gym", "isaac-gym", "mujoco", "airsim", "ns-3",
+-    "matlab仿真", "仿真环境", "模拟环境", "仿真平台", "仿真系统", "仿真测试", "仿真验证", "模拟路网"
+-]
+-
+-REAL_CLUSTER_TERMS: List[str] = [
+-    "万卡集群", "千卡集群", "百卡集群", "物理机", "物理机集群", "物理集群",
+-    "真实物理机", "真实集群", "实机", "实机部署", "实机测试", "实机验证",
+-    "实测", "产线实测", "产线部署", "真实产线", "实车", "实车测试", "实车部署",
+-    "硬件落地", "硬件部署", "端侧实测", "板端实测", "上车实测"
+-]
+-
+-# Expected vs Acquired Outcomes
+-EXPECTED_OUTCOME_TERMS: List[str] = [
+-    "在投", "准备投稿", "拟投稿", "预计录用", "拟发表", "待审", "待评审",
+-    "审稿中", "拟申请", "拟申报", "预期录用", "预期发表", "under review", "in submission", "submitted"
+-]
+-
+-ACQUIRED_OUTCOME_TERMS: List[str] = [
+-    "已录用", "已见刊", "已发表", "录用待刊", "已出版", "已授权", "accepted", "published"
+-]
++from core.lexicon import (
++    FORBIDDEN_BUZZWORDS,
++    BAOYAN_SPEC_RANGES as SPEC_RANGES,
++    BAOYAN_SPEC_ALIASES as SPEC_ALIASES,
++    FORBIDDEN_DASHES,
++    FORBIDDEN_QUOTES,
++    FORBIDDEN_DOUBLE_HYPHEN,
++    BAOYAN_LEAD_ROLES as LEAD_ROLES,
++    BAOYAN_CORE_ROLES as CORE_ROLES,
++    BAOYAN_LEAD_OR_CORE_ROLES as LEAD_OR_CORE_ROLES,
++    BAOYAN_NON_LEAD_ROLES as NON_LEAD_ROLES,
++    BAOYAN_ESCALATED_VERBS as ESCALATED_VERBS,
++    BAOYAN_LEADER_ONLY_VERBS as LEADER_ONLY_VERBS,
++    SIMULATION_TERMS,
++    REAL_CLUSTER_TERMS,
++    EXPECTED_OUTCOME_TERMS,
++    ACQUIRED_OUTCOME_TERMS,
++)
+ 
+ 
+ # ---------------------------------------------------------------------------
+diff --git a/core/lexicon.py b/core/lexicon.py
+index bfea801..f4d527d 100644
+--- a/core/lexicon.py
++++ b/core/lexicon.py
+@@ -63,7 +63,41 @@ FORBIDDEN_BUZZWORDS: List[str] = QualityRuleRegistry.FORBIDDEN_BUZZWORDS
+ AI_BUZZWORDS_LEXICON: List[str] = QualityRuleRegistry.AI_BUZZWORDS_LEXICON
+ 
+ # ============================================================================
+-# 7. Helper Lookup & Normalization Functions (Re-exported from QualityRuleRegistry)
++# 7. Decision, Depth, Evidence & Anti-Slop (Re-exported from QualityRuleRegistry)
++# ============================================================================
++DECISION_PLANNING_KEYWORDS: List[str] = QualityRuleRegistry.DECISION_PLANNING_KEYWORDS
++DATA_DEPTH_LEVELS: Dict[str, str] = QualityRuleRegistry.DATA_DEPTH_LEVELS
++RESULT_EVIDENCE_LEVELS: Dict[str, str] = QualityRuleRegistry.RESULT_EVIDENCE_LEVELS
++BANNED_SLOP_PATTERNS: List[Tuple[str, str]] = QualityRuleRegistry.BANNED_SLOP_PATTERNS
++
++# ============================================================================
++# 8. ATS Formats & Defense Guidance (Re-exported from QualityRuleRegistry)
++# ============================================================================
++STANDARD_SECTIONS: Dict[str, List[str]] = QualityRuleRegistry.STANDARD_SECTIONS
++FORMATTING_RISKS: List[Tuple[str, re.Pattern, str]] = QualityRuleRegistry.FORMATTING_RISKS
++DEFENSE_GUIDE_TEMPLATES: Dict[str, str] = QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES
++
++# ============================================================================
++# 9. Baoyan Academic Integrity & Typography (Re-exported from QualityRuleRegistry)
++# ============================================================================
++BAOYAN_SPEC_RANGES: Dict[str, Tuple[int, int]] = QualityRuleRegistry.BAOYAN_SPEC_RANGES
++BAOYAN_SPEC_ALIASES: Dict[str, str] = QualityRuleRegistry.BAOYAN_SPEC_ALIASES
++FORBIDDEN_DASHES: Dict[str, str] = QualityRuleRegistry.FORBIDDEN_DASHES
++FORBIDDEN_QUOTES: Dict[str, str] = QualityRuleRegistry.FORBIDDEN_QUOTES
++FORBIDDEN_DOUBLE_HYPHEN: str = QualityRuleRegistry.FORBIDDEN_DOUBLE_HYPHEN
++BAOYAN_LEAD_ROLES: Set[str] = QualityRuleRegistry.BAOYAN_LEAD_ROLES
++BAOYAN_CORE_ROLES: Set[str] = QualityRuleRegistry.BAOYAN_CORE_ROLES
++BAOYAN_LEAD_OR_CORE_ROLES: Set[str] = QualityRuleRegistry.BAOYAN_LEAD_OR_CORE_ROLES
++BAOYAN_NON_LEAD_ROLES: Set[str] = QualityRuleRegistry.BAOYAN_NON_LEAD_ROLES
++BAOYAN_ESCALATED_VERBS: List[str] = QualityRuleRegistry.BAOYAN_ESCALATED_VERBS
++BAOYAN_LEADER_ONLY_VERBS: List[str] = QualityRuleRegistry.BAOYAN_LEADER_ONLY_VERBS
++SIMULATION_TERMS: List[str] = QualityRuleRegistry.SIMULATION_TERMS
++REAL_CLUSTER_TERMS: List[str] = QualityRuleRegistry.REAL_CLUSTER_TERMS
++EXPECTED_OUTCOME_TERMS: List[str] = QualityRuleRegistry.EXPECTED_OUTCOME_TERMS
++ACQUIRED_OUTCOME_TERMS: List[str] = QualityRuleRegistry.ACQUIRED_OUTCOME_TERMS
++
++# ============================================================================
++# 10. Helper Lookup & Normalization Functions (Re-exported from QualityRuleRegistry)
+ # ============================================================================
+ detect_role_rank = QualityRuleRegistry.detect_role_rank
+ detect_verb_level = QualityRuleRegistry.detect_verb_level
+@@ -88,6 +122,28 @@ __all__ = [
+     "INFLATION_PATTERNS",
+     "FORBIDDEN_BUZZWORDS",
+     "AI_BUZZWORDS_LEXICON",
++    "DECISION_PLANNING_KEYWORDS",
++    "DATA_DEPTH_LEVELS",
++    "RESULT_EVIDENCE_LEVELS",
++    "BANNED_SLOP_PATTERNS",
++    "STANDARD_SECTIONS",
++    "FORMATTING_RISKS",
++    "DEFENSE_GUIDE_TEMPLATES",
++    "BAOYAN_SPEC_RANGES",
++    "BAOYAN_SPEC_ALIASES",
++    "FORBIDDEN_DASHES",
++    "FORBIDDEN_QUOTES",
++    "FORBIDDEN_DOUBLE_HYPHEN",
++    "BAOYAN_LEAD_ROLES",
++    "BAOYAN_CORE_ROLES",
++    "BAOYAN_LEAD_OR_CORE_ROLES",
++    "BAOYAN_NON_LEAD_ROLES",
++    "BAOYAN_ESCALATED_VERBS",
++    "BAOYAN_LEADER_ONLY_VERBS",
++    "SIMULATION_TERMS",
++    "REAL_CLUSTER_TERMS",
++    "EXPECTED_OUTCOME_TERMS",
++    "ACQUIRED_OUTCOME_TERMS",
+     "detect_role_rank",
+     "detect_verb_level",
+ ]
+diff --git a/core/registry.py b/core/registry.py
+index dd9e126..bda0568 100644
+--- a/core/registry.py
++++ b/core/registry.py
+@@ -654,6 +654,201 @@ class QualityRuleRegistry:
+         "作为一名深耕", "深耕.*领域", "不仅.*而且.*更.*"
+     ]
+ 
++    # -------------------------------------------------------------------------
++    # ApexResume Decision, Depth, and Evidence Standards
++    # -------------------------------------------------------------------------
++    DECISION_PLANNING_KEYWORDS: List[str] = [
++        "选型", "技术路线", "架构设计", "方案决策", "规划", "制定", "技术决策",
++        "重构方案", "标准制定", "规范制定", "rfc", "决策", "调研论证", "技术评审"
++    ]
++
++    DATA_DEPTH_LEVELS: Dict[str, str] = {
++        "D0": "描述性统计 (Descriptive: 计数、均值、汇总)",
++        "D1": "诊断性归因 (Diagnostic: 细分下钻、漏斗、同比环比)",
++        "D2": "探索性关联 (Exploratory: 相关性分析、特征重要度、切片对比)",
++        "D3": "预测性建模 (Predictive/Causal: 趋势预估、因果推断、PSM、DID)",
++        "D4": "规范性自适应 (Prescriptive: 运筹优化、强化学习闭环、动态调度)",
++    }
++
++    RESULT_EVIDENCE_LEVELS: Dict[str, str] = {
++        "R0": "理论预估 (Theoretical: 纯假定、无外部验证)",
++        "R1": "离线基准 (Offline Benchmark: 实验室评测、公开数据集静态分)",
++        "R2": "灰度验证 (Gray-scale / A/B Test: 准生产、小流量实验验证)",
++        "R3": "生产实效 (Production Impact: 全量生产稳定运行与宏观商业价值)",
++    }
++
++    # -------------------------------------------------------------------------
++    # Validator Anti-AI-Slop Patterns
++    # -------------------------------------------------------------------------
++    BANNED_SLOP_PATTERNS: List[Tuple[str, str]] = [
++        (r"[—\u2014\u2013]{1,2}", "Banned Dash/Em-dash syntax (破折号修饰滥用)"),
++        (r"不仅.*而且.*更.*", "Banned Rule-of-Three parallelism (排比三段论假大空)"),
++        (r"(深度赋能|全面革新|强力驱动|革命性突破|显著提高|大幅优化|卓越成效|无缝打通|全方位重塑)", "Banned hyperbolic buzzword without metric (虚高空洞动词/副词)"),
++        (r"作为一名深耕.*的", "Banned empty appositive title (空洞自封同位语)"),
++        (r"(delve into|testament to|pivotal role|game-changing transformation|intricate tapestry)", "Banned English AI cliche phrase")
++    ]
++
++    # -------------------------------------------------------------------------
++    # ATS Formats and Defense Guides
++    # -------------------------------------------------------------------------
++    STANDARD_SECTIONS: Dict[str, List[str]] = {
++        "Experience": [
++            "experience", "work experience", "professional experience",
++            "employment history", "work history", "工作经历", "工作经验", "职业经历"
++        ],
++        "Education": [
++            "education", "academic background", "educational background",
++            "education & credentials", "教育背景", "教育经历", "学历", "教育"
++        ],
++        "Skills": [
++            "skills", "technical skills", "competencies", "core competencies",
++            "skillset", "专业技能", "核心技能", "技能清单", "技能专长", "技术栈"
++        ],
++        "Projects": [
++            "projects", "project experience", "key projects", "selected projects",
++            "项目经历", "项目经验", "核心项目", "重点项目"
++        ],
++        "Summary": [
++            "summary", "professional summary", "executive summary", "about me",
++            "profile", "narrative", "个人总结", "个人评价", "个人简介", "自我评价", "职业概述", "概述"
++        ]
++    }
++
++    FORMATTING_RISKS: List[Tuple[str, re.Pattern, str]] = [
++        ("table", re.compile(r"<table\b|<tr\b|<td\b|<th\b|\|[^\n]+\|\s*\n\s*\|[-:| ]+\|\s*\n|\\begin\{tabular\}", re.IGNORECASE), "Tables in ATS resumes often cause text scrambling or parser failure"),
++        ("multi_column", re.compile(r"column-count\s*:|display\s*:\s*(?:flex|grid)|grid-template-columns|class=[\"'][^\"']*(?:col-\d+|two-column|multi-column|sidebar)[^\"']*", re.IGNORECASE), "Multi-column layouts disrupt linear parsing reading order"),
++        ("complex_nested_blocks", re.compile(r"<div[^>]*>\s*<div[^>]*>\s*<div[^>]*>\s*<div|<iframe\b|<canvas\b|<script\b|<object\b", re.IGNORECASE), "Complex nested HTML elements or embeds fail in legacy ATS parsers"),
++        ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
++    ]
++
++    DEFENSE_GUIDE_TEMPLATES: Dict[str, str] = {
++        "kubernetes": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
++        "k8s": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
++        "triton": "Be transparent: state that custom kernels were previously written in CUDA/C++ or optimized PyTorch. Highlight strong grasp of GPU SRAM/HBM memory hierarchies and tile-level compilation principles.",
++        "rust": "Honestly state no commercial Rust production experience. Emphasize deep mastery of C++17/20 systems programming, explicit memory safety concepts, and ability to read Rust codebases immediately.",
++        "megatron-lm": "Clarify that 3D parallelism principles (TP/PP/DP/SP) were mastered conceptually and on DeepSpeed/FSDP; demonstrate exact communication volume equations during interview.",
++        "default": "Transparently acknowledge the gap without defensiveness. Pivot to adjacent production architectures, emphasize deep conceptual grasp of the underlying principles, and highlight rapid 48-hour ramp-up history."
++    }
++
++    # -------------------------------------------------------------------------
++    # Baoyan Academic Integrity & Typography Standards
++    # -------------------------------------------------------------------------
++    BAOYAN_SPEC_RANGES: Dict[str, Tuple[int, int]] = {
++        "摘要版": (40, 60),
++        "简历版": (80, 110),
++        "陈述版": (150, 220),
++    }
++
++    BAOYAN_SPEC_ALIASES: Dict[str, str] = {
++        "摘要版": "摘要版",
++        "摘要": "摘要版",
++        "summary": "摘要版",
++        "简历版": "简历版",
++        "简历": "简历版",
++        "resume": "简历版",
++        "陈述版": "陈述版",
++        "陈述": "陈述版",
++        "个人陈述": "陈述版",
++        "statement": "陈述版",
++    }
++
++    FORBIDDEN_DASHES: Dict[str, str] = {
++        "——": "chinese em dash (——)",
++        "\u2014": "em dash (—)",
++        "\u2013": "en dash (–)",
++        "\u2015": "horizontal bar (―)",
++        "\u2212": "minus (−)",
++        "\u2e3a": "two-em dash (⸺)",
++        "\u2e3b": "three-em dash (⸻)",
++    }
++
++    FORBIDDEN_QUOTES: Dict[str, str] = {
++        "\u201c": "left double quote (“)",
++        "\u201d": "right double quote (”)",
++        "\u2018": "left single quote (‘)",
++        "\u2019": "right single quote (’)",
++    }
++
++    FORBIDDEN_DOUBLE_HYPHEN: str = "--"
++
++    BAOYAN_LEAD_ROLES: Set[str] = {
++        "项目负责人", "负责人", "队长", "主持人", "算法链负责人", "模块负责人", "课题组长", "第一完成人"
++    }
++
++    BAOYAN_CORE_ROLES: Set[str] = {
++        "核心成员", "核心骨干", "核心研发"
++    }
++
++    BAOYAN_LEAD_OR_CORE_ROLES: Set[str] = BAOYAN_LEAD_ROLES | BAOYAN_CORE_ROLES
++
++    BAOYAN_NON_LEAD_ROLES: Set[str] = {
++        "参赛队员", "队员", "辅助成员", "成员", "团队成员", "组员", "协作者"
++    }
++
++    BAOYAN_ESCALATED_VERBS: List[str] = [
++        "主导", "负责", "统筹", "独立完成"
++    ]
++
++    BAOYAN_LEADER_ONLY_VERBS: List[str] = [
++        "主导", "统筹"
++    ]
++
++    SIMULATION_TERMS: List[str] = [
++        "gazebo", "gym", "pybullet", "toy dataset", "toy-dataset", "toy数据集", "纯仿真",
++        "flexsim", "carla", "isaac gym", "isaac-gym", "mujoco", "airsim", "ns-3",
++        "matlab仿真", "仿真环境", "模拟环境", "仿真平台", "仿真系统", "仿真测试", "仿真验证", "模拟路网"
++    ]
++
++    REAL_CLUSTER_TERMS: List[str] = [
++        "万卡集群", "千卡集群", "百卡集群", "物理机", "物理机集群", "物理集群",
++        "真实物理机", "真实集群", "实机", "实机部署", "实机测试", "实机验证",
++        "实测", "产线实测", "产线部署", "真实产线", "实车", "实车测试", "实车部署",
++        "硬件落地", "硬件部署", "端侧实测", "板端实测", "上车实测"
++    ]
++
++    EXPECTED_OUTCOME_TERMS: List[str] = [
++        "在投", "准备投稿", "拟投稿", "预计录用", "拟发表", "待审", "待评审",
++        "审稿中", "拟申请", "拟申报", "预期录用", "预期发表", "under review", "in submission", "submitted"
++    ]
++
++    ACQUIRED_OUTCOME_TERMS: List[str] = [
++        "已录用", "已见刊", "已发表", "录用待刊", "已出版", "已授权", "accepted", "published"
++    ]
++
++    # Safe Read-Only Getters
++    @classmethod
++    def get_data_depth_levels(cls) -> Dict[str, str]:
++        return dict(cls.DATA_DEPTH_LEVELS)
++
++    @classmethod
++    def get_result_evidence_levels(cls) -> Dict[str, str]:
++        return dict(cls.RESULT_EVIDENCE_LEVELS)
++
++    @classmethod
++    def get_decision_planning_keywords(cls) -> List[str]:
++        return list(cls.DECISION_PLANNING_KEYWORDS)
++
++    @classmethod
++    def get_banned_slop_patterns(cls) -> List[Tuple[str, str]]:
++        return list(cls.BANNED_SLOP_PATTERNS)
++
++    @classmethod
++    def get_standard_sections(cls) -> Dict[str, List[str]]:
++        return {k: list(v) for k, v in cls.STANDARD_SECTIONS.items()}
++
++    @classmethod
++    def get_formatting_risks(cls) -> List[Tuple[str, re.Pattern, str]]:
++        return list(cls.FORMATTING_RISKS)
++
++    @classmethod
++    def get_defense_guide_templates(cls) -> Dict[str, str]:
++        return dict(cls.DEFENSE_GUIDE_TEMPLATES)
++
++    @classmethod
++    def get_baoyan_spec_ranges(cls) -> Dict[str, Tuple[int, int]]:
++        return dict(cls.BAOYAN_SPEC_RANGES)
++
++
+     @staticmethod
+     def detect_role_rank(text: str) -> Tuple[Optional[int], Optional[str]]:
+         """
+diff --git a/core/validator.py b/core/validator.py
+index fe0ce64..eaa0575 100644
+--- a/core/validator.py
++++ b/core/validator.py
+@@ -8,13 +8,9 @@ import re
+ from typing import Dict, Any, List
+ 
+ 
+-BANNED_SLOP_PATTERNS = [
+-    (r"[—\u2014\u2013]{1,2}", "Banned Dash/Em-dash syntax (破折号修饰滥用)"),
+-    (r"不仅.*而且.*更.*", "Banned Rule-of-Three parallelism (排比三段论假大空)"),
+-    (r"(深度赋能|全面革新|强力驱动|革命性突破|显著提高|大幅优化|卓越成效|无缝打通|全方位重塑)", "Banned hyperbolic buzzword without metric (虚高空洞动词/副词)"),
+-    (r"作为一名深耕.*的", "Banned empty appositive title (空洞自封同位语)"),
+-    (r"(delve into|testament to|pivotal role|game-changing transformation|intricate tapestry)", "Banned English AI cliche phrase")
+-]
++from core.registry import QualityRuleRegistry
++
++BANNED_SLOP_PATTERNS = QualityRuleRegistry.BANNED_SLOP_PATTERNS
+ 
+ 
+ def validate_bilingual_html(html_or_path: str) -> Dict[str, Any]:
+diff --git a/tests/test_registry.py b/tests/test_registry.py
+index 5fdfbf7..82a6e18 100644
+--- a/tests/test_registry.py
++++ b/tests/test_registry.py
+@@ -281,7 +281,38 @@ class TestQualityRuleRegistry(unittest.TestCase):
+ 
+         self.assertTrue(QualityRuleRegistry.is_forbidden_buzzword("首创"))
+         self.assertTrue(QualityRuleRegistry.is_forbidden_buzzword("世界一流"))
+-        self.assertFalse(QualityRuleRegistry.is_forbidden_buzzword("高并发架构"))
++    def test_05_unified_constants_and_accessors(self):
++        """Verify newly unified constants, accessors, and type safety."""
++        # ApexResume standards
++        depths = QualityRuleRegistry.get_data_depth_levels()
++        self.assertIn("D0", depths)
++        self.assertIn("D4", depths)
++        results = QualityRuleRegistry.get_result_evidence_levels()
++        self.assertIn("R0", results)
++        self.assertIn("R3", results)
++        decisions = QualityRuleRegistry.get_decision_planning_keywords()
++        self.assertIn("架构设计", decisions)
++        self.assertIn("选型", decisions)
++
++        # Validator patterns
++        slop = QualityRuleRegistry.get_banned_slop_patterns()
++        self.assertGreater(len(slop), 0)
++
++        # ATS sections and risks
++        sections = QualityRuleRegistry.get_standard_sections()
++        self.assertIn("Experience", sections)
++        self.assertIn("Skills", sections)
++        risks = QualityRuleRegistry.get_formatting_risks()
++        risk_names = [r[0] for r in risks]
++        self.assertIn("table", risk_names)
++        self.assertIn("multi_column", risk_names)
++
++        # Baoyan standards
++        ranges = QualityRuleRegistry.get_baoyan_spec_ranges()
++        self.assertEqual(ranges["摘要版"], (40, 60))
++        self.assertIn("——", QualityRuleRegistry.FORBIDDEN_DASHES)
++        self.assertIn("万卡集群", QualityRuleRegistry.REAL_CLUSTER_TERMS)
++        self.assertIn("gazebo", QualityRuleRegistry.SIMULATION_TERMS)
+ 
+ 
+ class TestConsumerModuleIntegration(unittest.TestCase):
+@@ -318,6 +349,16 @@ class TestConsumerModuleIntegration(unittest.TestCase):
+         self.assertIs(lexicon.NON_METRIC_TECH_PATTERNS, MetricPatternRegistry.NON_METRIC_TECH_PATTERNS)
+         self.assertIs(lexicon.INFLATION_PATTERNS, QualityRuleRegistry.INFLATION_PATTERNS)
+         self.assertIs(lexicon.FORBIDDEN_BUZZWORDS, QualityRuleRegistry.FORBIDDEN_BUZZWORDS)
++        self.assertIs(lexicon.DECISION_PLANNING_KEYWORDS, QualityRuleRegistry.DECISION_PLANNING_KEYWORDS)
++        self.assertIs(lexicon.DATA_DEPTH_LEVELS, QualityRuleRegistry.DATA_DEPTH_LEVELS)
++        self.assertIs(lexicon.RESULT_EVIDENCE_LEVELS, QualityRuleRegistry.RESULT_EVIDENCE_LEVELS)
++        self.assertIs(lexicon.BANNED_SLOP_PATTERNS, QualityRuleRegistry.BANNED_SLOP_PATTERNS)
++        self.assertIs(lexicon.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
++        self.assertIs(lexicon.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
++        self.assertIs(lexicon.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
++        self.assertIs(lexicon.BAOYAN_SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)
++        self.assertIs(lexicon.SIMULATION_TERMS, QualityRuleRegistry.SIMULATION_TERMS)
++        self.assertIs(lexicon.REAL_CLUSTER_TERMS, QualityRuleRegistry.REAL_CLUSTER_TERMS)
+         self.assertIs(lexicon.detect_role_rank, QualityRuleRegistry.detect_role_rank)
+         self.assertIs(lexicon.detect_verb_level, QualityRuleRegistry.detect_verb_level)
+ 
+@@ -341,6 +382,41 @@ class TestConsumerModuleIntegration(unittest.TestCase):
+         self.assertEqual(metrics[0]["value"], 3800.0)
+         self.assertEqual(metrics[0]["type"], "currency")
+ 
++    def test_05_apex_audit_and_validator_coverage_check(self):
++        """Verify full SSOT identity and parity across QualityRuleRegistry, ApexResume, Validator, ATS, and Baoyan."""
++        import ApexResume.core.audit as apex_audit
++        import core.validator as validator
++        import core.ats_checker as ats_checker
++        import core.baoyan_auditor as baoyan_auditor
++
++        # 1. ApexResume SSOT identity check
++        self.assertIs(apex_audit.ROLE_RANKS, QualityRuleRegistry.ROLE_RANKS)
++        self.assertIs(apex_audit.VERB_HIERARCHY, QualityRuleRegistry.VERB_HIERARCHY)
++        self.assertEqual(apex_audit.STRONG_VERBS_THRESHOLD, QualityRuleRegistry.STRONG_VERBS_THRESHOLD)
++        self.assertIs(apex_audit.DECISION_PLANNING_KEYWORDS, QualityRuleRegistry.DECISION_PLANNING_KEYWORDS)
++        self.assertIs(apex_audit.DATA_DEPTH_LEVELS, QualityRuleRegistry.DATA_DEPTH_LEVELS)
++        self.assertIs(apex_audit.RESULT_EVIDENCE_LEVELS, QualityRuleRegistry.RESULT_EVIDENCE_LEVELS)
++        self.assertIs(apex_audit.COMPLETED_VERBS_FORBIDDEN_IN_PLANNING, QualityRuleRegistry.COMPLETED_VERBS_FORBIDDEN_IN_PLANNING)
++        self.assertIs(apex_audit.SUPERLATIVES, QualityRuleRegistry.SUPERLATIVES)
++
++        # 2. Validator SSOT identity check
++        self.assertIs(validator.BANNED_SLOP_PATTERNS, QualityRuleRegistry.BANNED_SLOP_PATTERNS)
++
++        # 3. ATS Checker SSOT identity check
++        self.assertIs(ats_checker.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
++        self.assertIs(ats_checker.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
++        self.assertIs(ats_checker.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
++
++        # 4. Baoyan Auditor SSOT identity check
++        self.assertIs(baoyan_auditor.SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)
++        self.assertIs(baoyan_auditor.SPEC_ALIASES, QualityRuleRegistry.BAOYAN_SPEC_ALIASES)
++        self.assertIs(baoyan_auditor.FORBIDDEN_DASHES, QualityRuleRegistry.FORBIDDEN_DASHES)
++        self.assertIs(baoyan_auditor.FORBIDDEN_QUOTES, QualityRuleRegistry.FORBIDDEN_QUOTES)
++        self.assertIs(baoyan_auditor.SIMULATION_TERMS, QualityRuleRegistry.SIMULATION_TERMS)
++        self.assertIs(baoyan_auditor.REAL_CLUSTER_TERMS, QualityRuleRegistry.REAL_CLUSTER_TERMS)
++        self.assertIs(baoyan_auditor.EXPECTED_OUTCOME_TERMS, QualityRuleRegistry.EXPECTED_OUTCOME_TERMS)
++        self.assertIs(baoyan_auditor.ACQUIRED_OUTCOME_TERMS, QualityRuleRegistry.ACQUIRED_OUTCOME_TERMS)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

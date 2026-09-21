@@ -90,6 +90,18 @@ class ResumeBuilder:
         "ats-plain",
         "academic-latex",
         "academic-typst",
+        "ats-docx",
+    ]
+    PDF_THEMES = [
+        "modern-navy",
+        "silicon-clean",
+        "classic-tech",
+        "ats-plain",
+        "academic-latex",
+        "academic-typst",
+    ]
+    DOCX_THEMES = [
+        "ats-docx",
     ]
 
     def __init__(
@@ -392,8 +404,28 @@ class ResumeBuilder:
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
             )
+        elif theme_normalized in ("ats-docx", "docx"):
+            return self.build_ats_docx(
+                output_dir,
+                anonymize=anonymize,
+            )
         else:
             raise ValueError(f"Unknown resume theme '{theme}'. Choices: {self.THEMES}")
+
+    def build_ats_docx(
+        self,
+        output_dir: Union[str, Path],
+        anonymize: Optional[str] = None,
+    ) -> Dict[str, Path]:
+        """Builds ATS-friendly single-column Word (.docx) resume."""
+        from core.ats_docx_renderer import AtsDocxRenderer
+        out_dir = Path(output_dir).resolve()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        prof = self._resolve_profile(anonymize)
+        vm = self._get_view_model(profile=prof)
+        docx_path = out_dir / "resume_ats.docx"
+        AtsDocxRenderer().render(vm, docx_path)
+        return {"docx": docx_path}
 
     def build_all(
         self,
@@ -402,10 +434,12 @@ class ResumeBuilder:
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
         anonymize: Optional[str] = None,
+        include_docx: bool = False,
     ) -> Dict[str, Dict[str, Path]]:
-        """Builds all 6 resume variants."""
+        """Builds all 6 standard resume variants (or all 7 if include_docx=True)."""
+        themes = self.THEMES if include_docx else self.PDF_THEMES
         results = {}
-        for t in self.THEMES:
+        for t in themes:
             results[t] = self.build_theme(
                 t,
                 output_dir,

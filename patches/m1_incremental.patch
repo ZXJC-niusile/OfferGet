@@ -1,0 +1,491 @@
+diff --git a/core/ats_checker.py b/core/ats_checker.py
+index c0910e5..ca4b22a 100644
+--- a/core/ats_checker.py
++++ b/core/ats_checker.py
+@@ -11,7 +11,12 @@ import os
+ import re
+ from typing import Any, Dict, List, Optional, Set, Tuple, Union
+ 
+-from core.profile_adapter import build_profile_evidence_index
++from core.profile_adapter import (
++    ProfileContext,
++    ProfileEvidenceIndex,
++    build_profile_context,
++    build_profile_evidence_index,
++)
+ from core.lexicon import (
+     STRONG_ACTION_VERBS_EN,
+     STRONG_ACTION_VERBS_ZH,
+@@ -73,7 +78,8 @@ DEFENSE_GUIDE_TEMPLATES = {
+ 
+ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[str, Any]]:
+     """
+-    Extracts bullet points and metadata from a candidate profile dict or raw resume text.
++    Extracts bullet points and metadata from a candidate profile dict, ProfileContext,
++    ProfileEvidenceIndex, or raw resume text.
+     Returns: (bullets_list, meta_info)
+     """
+     bullets: List[str] = []
+@@ -81,10 +87,45 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
+         "raw_text": "",
+         "years_of_experience": 0,
+         "is_dict": False,
+-        "parsed_profile": None
++        "parsed_profile": None,
++        "evidence_index": None,
+     }
+ 
+-    # 1. Handle dict
++    # 1. Handle ProfileEvidenceIndex directly
++    if isinstance(profile_or_text, ProfileEvidenceIndex):
++        index = profile_or_text
++        cand = index.profile.get("candidate", {})
++        yoe = cand.get("years_of_experience", 0)
++        try:
++            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
++        except (ValueError, TypeError):
++            meta["years_of_experience"] = 0
++
++        meta["is_dict"] = True
++        meta["parsed_profile"] = index.profile
++        meta["evidence_index"] = index
++        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
++        bullets = list(index.bullets)
++        return bullets, meta
++
++    # 2. Handle ProfileContext directly
++    if isinstance(profile_or_text, ProfileContext):
++        index = profile_or_text.evidence_index
++        cand = index.profile.get("candidate", {})
++        yoe = cand.get("years_of_experience", 0)
++        try:
++            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
++        except (ValueError, TypeError):
++            meta["years_of_experience"] = 0
++
++        meta["is_dict"] = True
++        meta["parsed_profile"] = index.profile
++        meta["evidence_index"] = index
++        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
++        bullets = list(index.bullets)
++        return bullets, meta
++
++    # 3. Handle raw dict
+     if isinstance(profile_or_text, dict):
+         index = build_profile_evidence_index(profile_or_text)
+         cand = index.profile.get("candidate", {})
+@@ -96,11 +137,12 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
+ 
+         meta["is_dict"] = True
+         meta["parsed_profile"] = index.profile
++        meta["evidence_index"] = index
+         meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
+         bullets = list(index.bullets)
+         return bullets, meta
+ 
+-    # 2. Handle string (text, filepath, or json string)
++    # 4. Handle string (text, filepath, or json string)
+     text_content = str(profile_or_text).strip()
+ 
+     # Check if it's a file path
+@@ -576,10 +618,12 @@ class ATSAuditor:
+         active_input = meta["parsed_profile"] if meta["parsed_profile"] is not None else profile_or_text
+ 
+         # If target_tag is specified and input is a profile dict, filter first
++        # Note: Filtering produces an intentional materialized derived dict view with a fresh index
+         if target_tag and isinstance(active_input, dict):
+             active_input = filter_profile_by_visibility(active_input, target_tag)
+             bullets, meta = extract_bullets_from_input(active_input)
+ 
++        evidence_index = meta.get("evidence_index")
+         raw_text = meta["raw_text"]
+         years_exp = meta["years_of_experience"]
+ 
+@@ -625,8 +669,8 @@ class ATSAuditor:
+         else:
+             verdict = "NEEDS_REVISION"
+ 
+-        # Three-State Skill Ledger
+-        skill_ledger = generate_skill_ledger(active_input, jd_decoded_or_text)
++        # Three-State Skill Ledger (reusing evidence_index to avoid duplicate index construction)
++        skill_ledger = generate_skill_ledger(active_input, jd_decoded_or_text, evidence_index=evidence_index)
+ 
+         # Actionable recommendations
+         recommendations = []
+@@ -699,29 +743,44 @@ def extract_skills_from_jd(jd_decoded_or_text: Any) -> List[str]:
+     return sorted(list(skills))
+ 
+ 
+-def extract_candidate_skills(profile_data: Any) -> Tuple[Set[str], List[str]]:
++def extract_candidate_skills(
++    profile_data: Any,
++    evidence_index: Optional[ProfileEvidenceIndex] = None,
++) -> Tuple[Set[str], List[str]]:
+     """
+     Extracts all candidate competencies and bullet texts for matching.
++    Supports ProfileContext, ProfileEvidenceIndex, dict, or text, reusing evidence_index when provided.
+     Returns: (competencies_set, verified_bullets)
+     """
+     competencies: Set[str] = set()
+     verified_bullets: List[str] = []
+ 
+-    # If file path
+-    if isinstance(profile_data, str) and os.path.exists(profile_data):
+-        try:
+-            with open(profile_data, "r", encoding="utf-8") as f:
+-                content = f.read()
+-            if profile_data.endswith(".json") or content.strip().startswith("{"):
+-                try:
+-                    profile_data = json.loads(content)
+-                except Exception:
+-                    pass
+-        except Exception:
+-            pass
+-
+-    if isinstance(profile_data, dict):
+-        index = build_profile_evidence_index(profile_data)
++    # 1. Reuse existing evidence_index if provided
++    index: Optional[ProfileEvidenceIndex] = evidence_index
++
++    # 2. Resolve index if not provided directly
++    if index is None:
++        if isinstance(profile_data, ProfileEvidenceIndex):
++            index = profile_data
++        elif isinstance(profile_data, ProfileContext):
++            index = profile_data.evidence_index
++        elif isinstance(profile_data, dict):
++            index = build_profile_evidence_index(profile_data)
++        elif isinstance(profile_data, str) and os.path.exists(profile_data):
++            try:
++                with open(profile_data, "r", encoding="utf-8") as f:
++                    content = f.read()
++                if profile_data.endswith(".json") or content.strip().startswith("{"):
++                    try:
++                        loaded = json.loads(content)
++                        if isinstance(loaded, dict):
++                            index = build_profile_evidence_index(loaded)
++                    except Exception:
++                        pass
++            except Exception:
++                pass
++
++    if index is not None:
+         for item in index.skills:
+             competencies.add(item.strip())
+             sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
+@@ -754,7 +813,8 @@ def generate_skill_defense(skill: str) -> str:
+ def generate_skill_ledger(
+     profile_data: Any,
+     jd_decoded_or_text: Any,
+-    skills_to_evaluate: Optional[List[str]] = None
++    skills_to_evaluate: Optional[List[str]] = None,
++    evidence_index: Optional[ProfileEvidenceIndex] = None,
+ ) -> Dict[str, Any]:
+     """
+     Categorizes skills against JD requirements into:
+@@ -763,7 +823,7 @@ def generate_skill_ledger(
+     - 'unsupported_gap': Skills required by JD but absent in candidate profile.
+       CRITICAL: Strictly flag as honest gaps with interview defense advice, never fabricate or hallucinate!
+     """
+-    competencies, verified_bullets = extract_candidate_skills(profile_data)
++    competencies, verified_bullets = extract_candidate_skills(profile_data, evidence_index=evidence_index)
+ 
+     # Determine skills to evaluate
+     if skills_to_evaluate:
+diff --git a/core/services.py b/core/services.py
+index 88113a8..85a6935 100644
+--- a/core/services.py
++++ b/core/services.py
+@@ -69,7 +69,7 @@ class JDService:
+ class ProfileService:
+     """Domain service for candidate profile normalization, evidence indexing, and claims."""
+ 
+-    def normalize(self, profile_data: Dict[str, Any]) -> Dict[str, Any]:
++    def normalize(self, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
+         """Normalizes candidate profile into standard SSOT schema."""
+         return normalize_candidate_profile(profile_data)
+ 
+@@ -77,12 +77,20 @@ class ProfileService:
+         """Constructs or returns a unified, immutable ProfileContext from candidate profile without cross-call caching."""
+         return build_profile_context(profile_data)
+ 
+-    def get_evidence_index(self, profile_data: Dict[str, Any]) -> ProfileEvidenceIndex:
+-        """Extracts deterministic, auditable evidence index from candidate profile."""
++    def get_evidence_index(self, profile_data: Union[Dict[str, Any], ProfileContext, ProfileEvidenceIndex]) -> ProfileEvidenceIndex:
++        """Extracts deterministic, auditable evidence index from candidate profile or returns existing index."""
++        if isinstance(profile_data, ProfileEvidenceIndex):
++            return profile_data
++        if isinstance(profile_data, ProfileContext):
++            return profile_data.evidence_index
+         return build_profile_evidence_index(profile_data)
+ 
+-    def extract_claims(self, profile_data: Dict[str, Any]) -> List[EvidenceClaim]:
+-        """Extracts traceable evidence claims from profile."""
++    def extract_claims(self, profile_data: Union[Dict[str, Any], ProfileContext, ProfileEvidenceIndex]) -> List[EvidenceClaim]:
++        """Extracts traceable evidence claims from profile or returns claims from existing context/index."""
++        if isinstance(profile_data, ProfileEvidenceIndex):
++            return list(profile_data.claims)
++        if isinstance(profile_data, ProfileContext):
++            return list(profile_data.claims)
+         normalized = self.normalize(profile_data)
+         return iter_profile_claims(normalized)
+ 
+diff --git a/tests/test_ats_checker.py b/tests/test_ats_checker.py
+index 68dc98e..93ecdb8 100644
+--- a/tests/test_ats_checker.py
++++ b/tests/test_ats_checker.py
+@@ -439,6 +439,56 @@ CloudMonitor: Real-time telemetry monitoring platform.
+         self.assertEqual(result["verdict"], "READY_TO_SEND")
+         self.assertGreaterEqual(result["overall_score"], 75.0)
+ 
++    # =======================================================================
++    # 9. ProfileContext & ProfileEvidenceIndex Integration (M1-A)
++    # =======================================================================
++
++    def test_audit_profile_context_parity_and_zero_redundant_index(self):
++        from unittest.mock import patch
++        from core.profile_adapter import build_profile_context, build_profile_evidence_index, ProfileContext
++
++        # 1. Build ProfileContext
++        ctx = build_profile_context(self.profile_data)
++        self.assertIsInstance(ctx, ProfileContext)
++
++        # 2. Audit raw dict vs ProfileContext
++        with patch("core.ats_checker.build_profile_evidence_index", wraps=build_profile_evidence_index) as mock_build_raw:
++            res_dict = self.auditor.audit(self.profile_data, self.decoded_jd)
++            # Raw dict should call build_profile_evidence_index exactly 1 time (in extract_bullets_from_input)
++            self.assertEqual(mock_build_raw.call_count, 1)
++
++        with patch("core.ats_checker.build_profile_evidence_index", wraps=build_profile_evidence_index) as mock_build_ctx:
++            res_ctx = self.auditor.audit(ctx, self.decoded_jd)
++            # Existing ProfileContext must NOT call build_profile_evidence_index at all (0 times)
++            self.assertEqual(mock_build_ctx.call_count, 0)
++
++        # 3. Parity assertions: overall_score, verdict, dimensions, skill_ledger counts
++        self.assertEqual(res_dict["overall_score"], res_ctx["overall_score"])
++        self.assertEqual(res_dict["verdict"], res_ctx["verdict"])
++        self.assertEqual(res_dict["dimensions"]["impact"]["score"], res_ctx["dimensions"]["impact"]["score"])
++        self.assertEqual(res_dict["dimensions"]["ats_readiness"]["score"], res_ctx["dimensions"]["ats_readiness"]["score"])
++        self.assertEqual(res_dict["dimensions"]["clarity_anti_ai"]["score"], res_ctx["dimensions"]["clarity_anti_ai"]["score"])
++        self.assertEqual(res_dict["dimensions"]["format_alignment"]["score"], res_ctx["dimensions"]["format_alignment"]["score"])
++        self.assertEqual(len(res_dict["skill_ledger"]["present"]), len(res_ctx["skill_ledger"]["present"]))
++        self.assertEqual(len(res_dict["skill_ledger"]["missing"]), len(res_ctx["skill_ledger"]["missing"]))
++        self.assertEqual(len(res_dict["skill_ledger"]["unsupported_gap"]), len(res_ctx["skill_ledger"]["unsupported_gap"]))
++
++        # 4. Assert ProfileContext was not converted to string representation
++        bullets, meta = extract_bullets_from_input(ctx)
++        self.assertFalse(meta["raw_text"].startswith("ProfileContext("))
++        self.assertTrue(meta["is_dict"])
++        self.assertIsNotNone(meta["evidence_index"])
++
++    def test_audit_profile_evidence_index_directly(self):
++        from unittest.mock import patch
++        from core.profile_adapter import build_profile_evidence_index
++
++        index = build_profile_evidence_index(self.profile_data)
++        with patch("core.ats_checker.build_profile_evidence_index", wraps=build_profile_evidence_index) as mock_build:
++            res_idx = self.auditor.audit(index, self.decoded_jd)
++            self.assertEqual(mock_build.call_count, 0)
++        self.assertEqual(res_idx["verdict"], "READY_TO_SEND")
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests/test_jd_compat.py b/tests/test_jd_compat.py
+index e3bf42e..87d54c5 100644
+--- a/tests/test_jd_compat.py
++++ b/tests/test_jd_compat.py
+@@ -5,6 +5,7 @@ Unit test suite for core.jd_compat:
+ - Legacy compatibility APIs (decode_legacy, match_legacy, to_canonical)
+ """
+ 
++import copy
+ import json
+ import unittest
+ from pathlib import Path
+@@ -105,6 +106,121 @@ class TestJDCompat(unittest.TestCase):
+         canonical_jd = to_canonical(decoded)
+         self.assertEqual(canonical_jd.job_title, decoded["metadata"]["role"])
+ 
++    def test_06_decoded_jd_compat_contract(self):
++        """Test DecodedJDCompat carries canonical object and remains JSON-serializable dict."""
++        from core.jd_compat import DecodedJDCompat
++        from modules.jd_analyst.models import DecodedJD
++
++        decoded = decode_legacy(self.jd_text)
++        self.assertIsInstance(decoded, DecodedJDCompat)
++        self.assertIsInstance(decoded, dict)
++        self.assertIsInstance(decoded.canonical, DecodedJD)
++
++        # Must be cleanly serializable with standard json
++        dumped = json.dumps(decoded, ensure_ascii=False)
++        self.assertTrue(len(dumped) > 0)
++        reloaded = json.loads(dumped)
++        self.assertEqual(reloaded["metadata"]["role"], decoded["metadata"]["role"])
++
++    def test_07_to_canonical_all_types(self):
++        """Test to_canonical handles DecodedJDCompat, DecodedJD, plain dict, and rejects invalid types."""
++        from modules.jd_analyst.models import DecodedJD
++        from core.jd_compat import DecodedJDCompat
++
++        # 1. From DecodedJDCompat
++        compat = decode_legacy(self.jd_text)
++        res1 = to_canonical(compat)
++        self.assertIs(res1, compat.canonical)
++
++        # 2. From DecodedJD directly
++        direct_jd = compat.canonical
++        res2 = to_canonical(direct_jd)
++        self.assertIs(res2, direct_jd)
++
++        # 3. From plain dict (e.g. legacy json dict)
++        plain_dict = dict(compat)
++        self.assertNotIsInstance(plain_dict, DecodedJDCompat)
++        res3 = to_canonical(plain_dict)
++        self.assertIsInstance(res3, DecodedJD)
++        self.assertEqual(res3.job_title, compat["metadata"]["role"])
++
++        # 4. Rejection of invalid types
++        with self.assertRaises(TypeError):
++            to_canonical(12345)
++        with self.assertRaises(TypeError):
++            to_canonical(None)
++
++    def test_08_empty_jd_handling(self):
++        """Test decode_legacy handles empty string gracefully without raising exceptions."""
++        empty_decoded = decode_legacy("")
++        self.assertIsInstance(empty_decoded, dict)
++        self.assertEqual(empty_decoded["metadata"]["role"], "未指定职位")
++        self.assertEqual(empty_decoded["metadata"]["company"], "未知团队")
++        canonical_empty = to_canonical(empty_decoded)
++        self.assertEqual(canonical_empty.job_title, "未指定职位")
++
++    def test_09_match_legacy_units_and_json_contract(self):
++        """Test match_legacy scores, probabilities, and JSON contract."""
++        decoded = decode_legacy(self.jd_text)
++        match_res = match_legacy(decoded, self.profile_data)
++
++        # Integer score in [0, 100]
++        score = match_res["overall_match_score"]
++        self.assertIsInstance(score, int)
++        self.assertGreaterEqual(score, 0)
++        self.assertLessEqual(score, 100)
++
++        # Integer interview_prob in [0, 100]
++        prob = match_res["interview_prob"]
++        self.assertIsInstance(prob, int)
++        self.assertGreaterEqual(prob, 0)
++        self.assertLessEqual(prob, 100)
++
++        # Probability range is list of two numbers
++        prob_range = match_res["interview_probability_range"]
++        self.assertIsInstance(prob_range, list)
++        self.assertEqual(len(prob_range), 2)
++        self.assertLessEqual(prob_range[0], prob_range[1])
++
++        # JSON serializable
++        dumped = json.dumps(match_res, ensure_ascii=False)
++        self.assertTrue(len(dumped) > 0)
++
++    def test_10_report_generator_adapt_parity(self):
++        """Record parity and behavior between to_canonical and report_generator._adapt_decoded_jd."""
++        from core.report_generator import _adapt_decoded_jd
++
++        decoded = decode_legacy(self.jd_text)
++        c1 = to_canonical(decoded)
++        c2 = _adapt_decoded_jd(decoded)
++
++        # Both return the exact canonical object when DecodedJDCompat is passed
++        self.assertIs(c1, decoded.canonical)
++        self.assertIs(c2, decoded.canonical)
++
++        # Both produce consistent job_title and company when plain dict is passed
++        plain_dict = dict(decoded)
++        p1 = to_canonical(plain_dict)
++        p2 = _adapt_decoded_jd(plain_dict)
++        self.assertEqual(p1.job_title, p2.job_title)
++        self.assertIn(p1.job_title, ["大模型算法专家", decoded["metadata"]["role"]])
++        self.assertTrue(len(p1.core_skills) > 0)
++        self.assertTrue(len(p2.core_skills) > 0)
++
++        # Field-level comparison when raw_text is absent (pure legacy dict rehydration)
++        stripped_dict = copy.deepcopy(plain_dict)
++        stripped_dict.pop("raw_text", None)
++        stripped_dict.pop("clean_text", None)
++
++        s1 = to_canonical(stripped_dict)
++        s2 = _adapt_decoded_jd(stripped_dict)
++        self.assertEqual(s1.job_title, s2.job_title)
++        # Verify both reconstruct hard thresholds and core skills from requirements
++        self.assertEqual(len(s1.hard_thresholds), len(s2.hard_thresholds))
++        s1_skill_names = {s.name for s in s1.core_skills}
++        s2_skill_names = {s.name for s in s2.core_skills}
++        self.assertEqual(s1_skill_names, s2_skill_names)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests/test_registry.py b/tests/test_registry.py
+index 5fdfbf7..26b4fbe 100644
+--- a/tests/test_registry.py
++++ b/tests/test_registry.py
+@@ -341,6 +341,38 @@ class TestConsumerModuleIntegration(unittest.TestCase):
+         self.assertEqual(metrics[0]["value"], 3800.0)
+         self.assertEqual(metrics[0]["type"], "currency")
+ 
++    def test_05_apex_audit_and_validator_coverage_check(self):
++        """Verify one-way coverage and compatibility between QualityRuleRegistry, ApexResume audit, and Validator.
++        
++        Note: This is a one-way coverage/compatibility check, NOT full bidirectional behavior parity.
++        BANNED_SLOP_PATTERNS in validator.py and AI_BUZZWORDS_LEXICON have distinct semantic schemas;
++        full rule unification is deferred to subsequent milestones.
++        """
++        import ApexResume.core.audit as apex_audit
++        import core.validator as validator
++
++        # 1. ApexResume ROLE_RANKS coverage in QualityRuleRegistry
++        for role_key, role_rank in apex_audit.ROLE_RANKS.items():
++            self.assertIn(role_key, QualityRuleRegistry.ROLE_RANKS)
++            self.assertEqual(role_rank, QualityRuleRegistry.ROLE_RANKS[role_key])
++
++        # 2. ApexResume VERB_HIERARCHY coverage in QualityRuleRegistry
++        for verb_key, verb_level in apex_audit.VERB_HIERARCHY.items():
++            self.assertIn(verb_key, QualityRuleRegistry.VERB_HIERARCHY)
++            self.assertEqual(verb_level, QualityRuleRegistry.VERB_HIERARCHY[verb_key])
++
++        # 3. ApexResume STRONG_VERBS_THRESHOLD compatibility
++        self.assertEqual(apex_audit.STRONG_VERBS_THRESHOLD, QualityRuleRegistry.STRONG_VERBS_THRESHOLD)
++
++        # 4. Validator BANNED_SLOP_PATTERNS coverage in QualityRuleRegistry.AI_BUZZWORDS_LEXICON
++        for pattern_str, reason in validator.BANNED_SLOP_PATTERNS:
++            if "delve into" in pattern_str:
++                self.assertIn("delve into", QualityRuleRegistry.AI_BUZZWORDS_LEXICON)
++                self.assertIn("pivotal role", QualityRuleRegistry.AI_BUZZWORDS_LEXICON)
++            if "深度赋能" in pattern_str:
++                self.assertIn("深度赋能", QualityRuleRegistry.AI_BUZZWORDS_LEXICON)
++                self.assertIn("全面革新", QualityRuleRegistry.AI_BUZZWORDS_LEXICON)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests/test_services_and_router.py b/tests/test_services_and_router.py
+index 9bc8c6d..928b1cf 100644
+--- a/tests/test_services_and_router.py
++++ b/tests/test_services_and_router.py
+@@ -204,10 +204,15 @@ class TestServices(unittest.TestCase):
+         claims = service.extract_claims(self.sample_profile)
+         self.assertTrue(len(claims) > 0)
+ 
+-        # 4. ProfileContext
++        # 4. ProfileContext & ProfileEvidenceIndex
+         ctx = service.get_context(self.sample_profile)
+         self.assertEqual(ctx.normalized_profile["candidate"]["name"], norm["candidate"]["name"])
+         self.assertIs(ctx.evidence_index, service.get_evidence_index(ctx))
++        self.assertIs(ctx.evidence_index, service.get_evidence_index(ctx.evidence_index))
++        claims_from_ctx = service.extract_claims(ctx)
++        self.assertEqual(len(claims_from_ctx), len(claims))
++        claims_from_idx = service.extract_claims(ctx.evidence_index)
++        self.assertEqual(len(claims_from_idx), len(claims))
+ 
+     def test_match_service(self):
+         jd_service = JDService()

@@ -706,6 +706,129 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertEqual(proc2.returncode, 0, f"CLI error: {proc2.stderr}")
             self.assertTrue(session_out2.exists())
 
+    def test_24_session_multi_round_preserves_history(self):
+        """Test that submitting Q1 in round 1 and Q2 in round 2 retains both answers and feedbacks."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Round 1: answer Q1
+            ans1 = {"answers": [{"question_id": 1, "answer": "负责集群训练通信优化，从 40% 提升至 52%，测算口径为 H800 峰值。"}]}
+            res1 = run_career_review(self.jd_text, self.profile_data, answers_dict=ans1)
+            sess1 = create_review_session(self.jd_text, self.profile_data, res1)
+            sess_path1 = Path(tmpdir) / "sess1.json"
+            save_review_session(sess1, sess_path1)
+
+            # Round 2: load sess1, answer Q2
+            loaded_sess1 = load_review_session(sess_path1)
+            ans2 = {"answers": [{"question_id": 2, "answer": "64B Dense 预训练 Baseline MFU 为 38%，负责 Megatron-LM Sequence Parallel，提升至 52%，测算口径为 H800 理论峰值。"}]}
+            res2 = run_career_review(self.jd_text, self.profile_data, answers_dict=ans2, session_data=loaded_sess1)
+            sess2 = create_review_session(self.jd_text, self.profile_data, res2, base_session=loaded_sess1)
+
+            # Assertions
+            # 1. Questions snapshot must be identical
+            self.assertEqual(sess2["questions_snapshot"], sess1["questions_snapshot"])
+            # 2. Both Q1 and Q2 answers must be present
+            ans_map = {a["question_id"]: a["answer"] for a in sess2.get("answers", [])}
+            self.assertIn(1, ans_map)
+            self.assertIn(2, ans_map)
+            # 3. Both Q1 and Q2 feedback must be evaluated
+            fb_map = {f["question_id"]: f for f in sess2.get("answer_feedback", [])}
+            self.assertEqual(fb_map[1]["status"], "evaluated")
+            self.assertEqual(fb_map[2]["status"], "evaluated")
+            # 4. Progress metrics
+            self.assertTrue(sess2.get("minimum_loop_completed", False))
+            self.assertGreaterEqual(sess2.get("evaluated_questions_count", 0), 2)
+
+    def test_25_session_cli_validation_and_fingerprint_rejection(self):
+        """CLI must exit non-zero and not overwrite session when answers are invalid or fingerprints mismatch."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sess_out = Path(tmpdir) / "session.json"
+            cmd_init = [
+                sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
+                str(self.jd_path), "--profile", str(self.profile_path),
+                "--save-session", str(sess_out), "--json"
+            ]
+            subprocess.run(cmd_init, capture_output=True, check=True, cwd=str(PROJECT_ROOT))
+
+            # Case A: invalid question_id (e.g. 999) must fail with non-zero exit code
+            bad_ans_file = Path(tmpdir) / "bad_ans.json"
+            with open(bad_ans_file, "w", encoding="utf-8") as f:
+                json.dump({"answers": [{"question_id": 999, "answer": "invalid question answer"}]}, f)
+            cmd_bad_ans = [
+                sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
+                str(self.jd_path), "--profile", str(self.profile_path),
+                "--session", str(sess_out), "--answers", str(bad_ans_file), "--json"
+            ]
+            proc_bad = subprocess.run(cmd_bad_ans, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
+            self.assertNotEqual(proc_bad.returncode, 0, "CLI must reject unknown question_id with non-zero exit code")
+            self.assertIn("question_id_999_not_in_session_snapshot", proc_bad.stderr)
+
+            # Case B: mismatched JD with old session must fail
+            other_jd_file = Path(tmpdir) / "other_jd.txt"
+            other_jd_file.write_text("【岗位】新媒体运营专员\n职责：内容创作与用户运营", encoding="utf-8")
+            cmd_mismatch = [
+                sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
+                str(other_jd_file), "--profile", str(self.profile_path),
+                "--session", str(sess_out), "--json"
+            ]
+            proc_mismatch = subprocess.run(cmd_mismatch, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
+            self.assertNotEqual(proc_mismatch.returncode, 0, "CLI must reject mismatched JD fingerprint with non-zero exit code")
+
+    def test_26_targeted_questions_role_adaptation_and_no_name_as_project(self):
+        """Test Q1 adapts to non-engineering roles and Q2 does not quote candidate name/degree as project."""
+        from modules.jd_analyst.decoder import JDDecoder
+        from modules.jd_analyst.matcher import JDMatcher
+        from modules.jd_analyst.predictor import JDPredictor
+        from core.profile_adapter import build_profile_context
+        from core.job_flow import select_targeted_interview_questions
+
+        # Scenario A: Operations role should not ask about architecture/high-concurrency/QPS
+        ops_jd = "【岗位名称】新媒体运营专员\n【岗位职责】1. 负责微信公众号与小红书内容策划、撰写与排版；2. 负责粉丝社群日常运营与裂变增长。"
+        ops_profile = {
+            "candidate": {"name": "王小花", "degree": "本科", "institution": "中国传媒大学"},
+            "experience": [
+                {"title": "新媒体运营实习生", "company": "某互联网公司", "bullets": ["负责公众号推文策划，月均阅读量提升 30%。"]}
+            ]
+        }
+        dec = JDDecoder().decode(ops_jd)
+        ctx = build_profile_context(ops_profile)
+        p_canon = ctx.get_canonical_profile()
+        matcher_res = JDMatcher().match(dec, p_canon)
+        pred = JDPredictor()
+        qs = select_targeted_interview_questions(dec, p_canon, list(ctx.claims), matcher_res, pred)
+
+        q1 = qs[0]
+        self.assertNotIn("架构设计", q1["question_zh"], "Operations role Q1 should not mention architecture design")
+        self.assertNotIn("高并发", q1["question_zh"], "Operations role Q1 should not mention high concurrency")
+
+        # Scenario B: Profile with only candidate info (no experience/project) must NOT use name/degree in Q2
+        empty_exp_profile = {
+            "candidate": {"name": "张无忌", "degree": "硕士", "institution": "明教大学"}
+        }
+        ctx_empty = build_profile_context(empty_exp_profile)
+        p_empty = ctx_empty.get_canonical_profile()
+        m_empty = JDMatcher().match(dec, p_empty)
+        qs_empty = select_targeted_interview_questions(dec, p_empty, list(ctx_empty.claims), m_empty, pred)
+
+        q2 = qs_empty[1]
+        self.assertNotIn("张无忌", q2["question_zh"], "Q2 must not quote candidate name as project anchor")
+        self.assertNotIn("硕士", q2["question_zh"], "Q2 must not quote candidate degree as project anchor")
+        self.assertNotIn("明教大学", q2["question_zh"], "Q2 must not quote candidate institution as project anchor")
+
+        # Scenario C: Short real experience (15 chars) should be anchored, not ignored
+        short_exp_profile = {
+            "candidate": {"name": "赵敏"},
+            "experience": [
+                {"title": "助理", "bullets": ["搭建SQLite测试库与索引优化。"]}
+            ]
+        }
+        ctx_short = build_profile_context(short_exp_profile)
+        p_short = ctx_short.get_canonical_profile()
+        m_short = JDMatcher().match(dec, p_short)
+        qs_short = select_targeted_interview_questions(dec, p_short, list(ctx_short.claims), m_short, pred)
+        q2_short = qs_short[1]
+        self.assertIn("SQLite", q2_short["question_zh"], "Short real experience should be anchored in Q2")
+
 
 if __name__ == "__main__":
     unittest.main()

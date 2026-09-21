@@ -439,6 +439,56 @@ CloudMonitor: Real-time telemetry monitoring platform.
         self.assertEqual(result["verdict"], "READY_TO_SEND")
         self.assertGreaterEqual(result["overall_score"], 75.0)
 
+    # =======================================================================
+    # 9. ProfileContext & ProfileEvidenceIndex Integration (M1-A)
+    # =======================================================================
+
+    def test_audit_profile_context_parity_and_zero_redundant_index(self):
+        from unittest.mock import patch
+        from core.profile_adapter import build_profile_context, build_profile_evidence_index, ProfileContext
+
+        # 1. Build ProfileContext
+        ctx = build_profile_context(self.profile_data)
+        self.assertIsInstance(ctx, ProfileContext)
+
+        # 2. Audit raw dict vs ProfileContext
+        with patch("core.ats_checker.build_profile_evidence_index", wraps=build_profile_evidence_index) as mock_build_raw:
+            res_dict = self.auditor.audit(self.profile_data, self.decoded_jd)
+            # Raw dict should call build_profile_evidence_index exactly 1 time (in extract_bullets_from_input)
+            self.assertEqual(mock_build_raw.call_count, 1)
+
+        with patch("core.ats_checker.build_profile_evidence_index", wraps=build_profile_evidence_index) as mock_build_ctx:
+            res_ctx = self.auditor.audit(ctx, self.decoded_jd)
+            # Existing ProfileContext must NOT call build_profile_evidence_index at all (0 times)
+            self.assertEqual(mock_build_ctx.call_count, 0)
+
+        # 3. Parity assertions: overall_score, verdict, dimensions, skill_ledger counts
+        self.assertEqual(res_dict["overall_score"], res_ctx["overall_score"])
+        self.assertEqual(res_dict["verdict"], res_ctx["verdict"])
+        self.assertEqual(res_dict["dimensions"]["impact"]["score"], res_ctx["dimensions"]["impact"]["score"])
+        self.assertEqual(res_dict["dimensions"]["ats_readiness"]["score"], res_ctx["dimensions"]["ats_readiness"]["score"])
+        self.assertEqual(res_dict["dimensions"]["clarity_anti_ai"]["score"], res_ctx["dimensions"]["clarity_anti_ai"]["score"])
+        self.assertEqual(res_dict["dimensions"]["format_alignment"]["score"], res_ctx["dimensions"]["format_alignment"]["score"])
+        self.assertEqual(len(res_dict["skill_ledger"]["present"]), len(res_ctx["skill_ledger"]["present"]))
+        self.assertEqual(len(res_dict["skill_ledger"]["missing"]), len(res_ctx["skill_ledger"]["missing"]))
+        self.assertEqual(len(res_dict["skill_ledger"]["unsupported_gap"]), len(res_ctx["skill_ledger"]["unsupported_gap"]))
+
+        # 4. Assert ProfileContext was not converted to string representation
+        bullets, meta = extract_bullets_from_input(ctx)
+        self.assertFalse(meta["raw_text"].startswith("ProfileContext("))
+        self.assertTrue(meta["is_dict"])
+        self.assertIsNotNone(meta["evidence_index"])
+
+    def test_audit_profile_evidence_index_directly(self):
+        from unittest.mock import patch
+        from core.profile_adapter import build_profile_evidence_index
+
+        index = build_profile_evidence_index(self.profile_data)
+        with patch("core.ats_checker.build_profile_evidence_index", wraps=build_profile_evidence_index) as mock_build:
+            res_idx = self.auditor.audit(index, self.decoded_jd)
+            self.assertEqual(mock_build.call_count, 0)
+        self.assertEqual(res_idx["verdict"], "READY_TO_SEND")
+
 
 if __name__ == "__main__":
     unittest.main()

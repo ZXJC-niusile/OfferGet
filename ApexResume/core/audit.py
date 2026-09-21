@@ -32,58 +32,29 @@ class Finding:
     details: Dict[str, Any] = field(default_factory=dict)
 
 
-ROLE_RANKS = {
-    # Rank 0: Planning / Exploratory
-    "计划": 0, "规划": 0, "探索": 0, "预研": 0, "当前方向": 0, "拟": 0,
-    # Rank 1: Contributor / Participant
-    "参与": 1, "协助": 1, "支持": 1, "共建者": 1, "配合": 1, "contributor": 1,
-    # Rank 2: Lead / Maintainer
-    "主导": 2, "主要负责": 2, "策略架构owner": 2, "策略owner": 2, "架构负责人": 2, "maintainer": 2, "方向负责人": 2,
-    # Rank 3: Independent Owner
-    "独立负责": 3, "从0到1": 3, "端到端负责": 3, "完全负责": 3, "owner": 3,
-}
+# Import SSOT QualityRuleRegistry from OfferGet
+try:
+    from core.registry import QualityRuleRegistry
+except ImportError:
+    import importlib.util
+    _offerget_root = Path(__file__).resolve().parent.parent.parent
+    _registry_path = _offerget_root / "core" / "registry.py"
+    if _registry_path.exists():
+        spec = importlib.util.spec_from_file_location("offerget_core_registry", str(_registry_path))
+        _mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_mod)
+        QualityRuleRegistry = _mod.QualityRuleRegistry
+    else:
+        raise
 
-# Verb hierarchy: 支持/协助 < 参与 < 负责 < 推动 < 主导
-VERB_HIERARCHY = {
-    # Level 1: 支持 / 协助
-    "支持": 1, "协助": 1, "配合": 1, "辅助": 1,
-    # Level 2: 参与
-    "参与": 2, "共建": 2, "贡献": 2, "contribute": 2, "参编": 2,
-    # Level 3: 负责
-    "负责": 3, "主要负责": 3, "承担": 3, "落地": 3, "实现": 3, "搭建": 3, "开发": 3, "设计并实现": 3,
-    # Level 4: 推动
-    "推动": 4, "推进": 4, "牵引": 4, "促进": 4, "带动": 4,
-    # Level 5: 主导
-    "主导": 5, "统筹": 5, "引领": 5, "主持": 5, "从0到1": 5, "独立负责": 5, "owner": 5,
-}
-
-STRONG_VERBS_THRESHOLD = 4  # Level 4 (推动) and Level 5 (主导) are strong verbs
-
-DECISION_PLANNING_KEYWORDS = [
-    "选型", "技术路线", "架构设计", "方案决策", "规划", "制定", "技术决策",
-    "重构方案", "标准制定", "规范制定", "rfc", "决策", "调研论证", "技术评审"
-]
-
-DATA_DEPTH_LEVELS = {
-    "D0": "描述性统计 (Descriptive: 计数、均值、汇总)",
-    "D1": "诊断性归因 (Diagnostic: 细分下钻、漏斗、同比环比)",
-    "D2": "探索性关联 (Exploratory: 相关性分析、特征重要度、切片对比)",
-    "D3": "预测性建模 (Predictive/Causal: 趋势预估、因果推断、PSM、DID)",
-    "D4": "规范性自适应 (Prescriptive: 运筹优化、强化学习闭环、动态调度)",
-}
-
-RESULT_EVIDENCE_LEVELS = {
-    "R0": "理论预估 (Theoretical: 纯假定、无外部验证)",
-    "R1": "离线基准 (Offline Benchmark: 实验室评测、公开数据集静态分)",
-    "R2": "灰度验证 (Gray-scale / A/B Test: 准生产、小流量实验验证)",
-    "R3": "生产实效 (Production Impact: 全量生产稳定运行与宏观商业价值)",
-}
-
-COMPLETED_VERBS_FORBIDDEN_IN_PLANNING = [
-    "已上线", "已达成", "完成", "实现", "主导", "owner", "核心作者", "提升约", "降低约", "突破"
-]
-
-SUPERLATIVES = ["全网第一", "全国第一", "全球第一", "业界第一", "唯一", "最优", "顶尖", "首个"]
+ROLE_RANKS = QualityRuleRegistry.ROLE_RANKS
+VERB_HIERARCHY = QualityRuleRegistry.VERB_HIERARCHY
+STRONG_VERBS_THRESHOLD = QualityRuleRegistry.STRONG_VERBS_THRESHOLD
+DECISION_PLANNING_KEYWORDS = QualityRuleRegistry.DECISION_PLANNING_KEYWORDS
+DATA_DEPTH_LEVELS = QualityRuleRegistry.DATA_DEPTH_LEVELS
+RESULT_EVIDENCE_LEVELS = QualityRuleRegistry.RESULT_EVIDENCE_LEVELS
+COMPLETED_VERBS_FORBIDDEN_IN_PLANNING = QualityRuleRegistry.COMPLETED_VERBS_FORBIDDEN_IN_PLANNING
+SUPERLATIVES = QualityRuleRegistry.SUPERLATIVES
 
 
 class ResumeAuditor:

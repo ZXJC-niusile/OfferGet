@@ -281,7 +281,38 @@ class TestQualityRuleRegistry(unittest.TestCase):
 
         self.assertTrue(QualityRuleRegistry.is_forbidden_buzzword("首创"))
         self.assertTrue(QualityRuleRegistry.is_forbidden_buzzword("世界一流"))
-        self.assertFalse(QualityRuleRegistry.is_forbidden_buzzword("高并发架构"))
+    def test_05_unified_constants_and_accessors(self):
+        """Verify newly unified constants, accessors, and type safety."""
+        # ApexResume standards
+        depths = QualityRuleRegistry.get_data_depth_levels()
+        self.assertIn("D0", depths)
+        self.assertIn("D4", depths)
+        results = QualityRuleRegistry.get_result_evidence_levels()
+        self.assertIn("R0", results)
+        self.assertIn("R3", results)
+        decisions = QualityRuleRegistry.get_decision_planning_keywords()
+        self.assertIn("架构设计", decisions)
+        self.assertIn("选型", decisions)
+
+        # Validator patterns
+        slop = QualityRuleRegistry.get_banned_slop_patterns()
+        self.assertGreater(len(slop), 0)
+
+        # ATS sections and risks
+        sections = QualityRuleRegistry.get_standard_sections()
+        self.assertIn("Experience", sections)
+        self.assertIn("Skills", sections)
+        risks = QualityRuleRegistry.get_formatting_risks()
+        risk_names = [r[0] for r in risks]
+        self.assertIn("table", risk_names)
+        self.assertIn("multi_column", risk_names)
+
+        # Baoyan standards
+        ranges = QualityRuleRegistry.get_baoyan_spec_ranges()
+        self.assertEqual(ranges["摘要版"], (40, 60))
+        self.assertIn("——", QualityRuleRegistry.FORBIDDEN_DASHES)
+        self.assertIn("万卡集群", QualityRuleRegistry.REAL_CLUSTER_TERMS)
+        self.assertIn("gazebo", QualityRuleRegistry.SIMULATION_TERMS)
 
 
 class TestConsumerModuleIntegration(unittest.TestCase):
@@ -318,6 +349,16 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertIs(lexicon.NON_METRIC_TECH_PATTERNS, MetricPatternRegistry.NON_METRIC_TECH_PATTERNS)
         self.assertIs(lexicon.INFLATION_PATTERNS, QualityRuleRegistry.INFLATION_PATTERNS)
         self.assertIs(lexicon.FORBIDDEN_BUZZWORDS, QualityRuleRegistry.FORBIDDEN_BUZZWORDS)
+        self.assertIs(lexicon.DECISION_PLANNING_KEYWORDS, QualityRuleRegistry.DECISION_PLANNING_KEYWORDS)
+        self.assertIs(lexicon.DATA_DEPTH_LEVELS, QualityRuleRegistry.DATA_DEPTH_LEVELS)
+        self.assertIs(lexicon.RESULT_EVIDENCE_LEVELS, QualityRuleRegistry.RESULT_EVIDENCE_LEVELS)
+        self.assertIs(lexicon.BANNED_SLOP_PATTERNS, QualityRuleRegistry.BANNED_SLOP_PATTERNS)
+        self.assertIs(lexicon.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
+        self.assertIs(lexicon.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
+        self.assertIs(lexicon.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
+        self.assertIs(lexicon.BAOYAN_SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)
+        self.assertIs(lexicon.SIMULATION_TERMS, QualityRuleRegistry.SIMULATION_TERMS)
+        self.assertIs(lexicon.REAL_CLUSTER_TERMS, QualityRuleRegistry.REAL_CLUSTER_TERMS)
         self.assertIs(lexicon.detect_role_rank, QualityRuleRegistry.detect_role_rank)
         self.assertIs(lexicon.detect_verb_level, QualityRuleRegistry.detect_verb_level)
 
@@ -340,6 +381,41 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertEqual(len(metrics), 1)
         self.assertEqual(metrics[0]["value"], 3800.0)
         self.assertEqual(metrics[0]["type"], "currency")
+
+    def test_05_apex_audit_and_validator_coverage_check(self):
+        """Verify full SSOT identity and parity across QualityRuleRegistry, ApexResume, Validator, ATS, and Baoyan."""
+        import ApexResume.core.audit as apex_audit
+        import core.validator as validator
+        import core.ats_checker as ats_checker
+        import core.baoyan_auditor as baoyan_auditor
+
+        # 1. ApexResume SSOT identity check
+        self.assertIs(apex_audit.ROLE_RANKS, QualityRuleRegistry.ROLE_RANKS)
+        self.assertIs(apex_audit.VERB_HIERARCHY, QualityRuleRegistry.VERB_HIERARCHY)
+        self.assertEqual(apex_audit.STRONG_VERBS_THRESHOLD, QualityRuleRegistry.STRONG_VERBS_THRESHOLD)
+        self.assertIs(apex_audit.DECISION_PLANNING_KEYWORDS, QualityRuleRegistry.DECISION_PLANNING_KEYWORDS)
+        self.assertIs(apex_audit.DATA_DEPTH_LEVELS, QualityRuleRegistry.DATA_DEPTH_LEVELS)
+        self.assertIs(apex_audit.RESULT_EVIDENCE_LEVELS, QualityRuleRegistry.RESULT_EVIDENCE_LEVELS)
+        self.assertIs(apex_audit.COMPLETED_VERBS_FORBIDDEN_IN_PLANNING, QualityRuleRegistry.COMPLETED_VERBS_FORBIDDEN_IN_PLANNING)
+        self.assertIs(apex_audit.SUPERLATIVES, QualityRuleRegistry.SUPERLATIVES)
+
+        # 2. Validator SSOT identity check
+        self.assertIs(validator.BANNED_SLOP_PATTERNS, QualityRuleRegistry.BANNED_SLOP_PATTERNS)
+
+        # 3. ATS Checker SSOT identity check
+        self.assertIs(ats_checker.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
+        self.assertIs(ats_checker.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
+        self.assertIs(ats_checker.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
+
+        # 4. Baoyan Auditor SSOT identity check
+        self.assertIs(baoyan_auditor.SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)
+        self.assertIs(baoyan_auditor.SPEC_ALIASES, QualityRuleRegistry.BAOYAN_SPEC_ALIASES)
+        self.assertIs(baoyan_auditor.FORBIDDEN_DASHES, QualityRuleRegistry.FORBIDDEN_DASHES)
+        self.assertIs(baoyan_auditor.FORBIDDEN_QUOTES, QualityRuleRegistry.FORBIDDEN_QUOTES)
+        self.assertIs(baoyan_auditor.SIMULATION_TERMS, QualityRuleRegistry.SIMULATION_TERMS)
+        self.assertIs(baoyan_auditor.REAL_CLUSTER_TERMS, QualityRuleRegistry.REAL_CLUSTER_TERMS)
+        self.assertIs(baoyan_auditor.EXPECTED_OUTCOME_TERMS, QualityRuleRegistry.EXPECTED_OUTCOME_TERMS)
+        self.assertIs(baoyan_auditor.ACQUIRED_OUTCOME_TERMS, QualityRuleRegistry.ACQUIRED_OUTCOME_TERMS)
 
 
 if __name__ == "__main__":

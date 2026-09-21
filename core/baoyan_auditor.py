@@ -14,96 +14,24 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 # Constants & Specification Standards
 # ---------------------------------------------------------------------------
 
-SPEC_RANGES: Dict[str, Tuple[int, int]] = {
-    "摘要版": (40, 60),
-    "简历版": (80, 110),
-    "陈述版": (150, 220),
-}
-
-SPEC_ALIASES: Dict[str, str] = {
-    "摘要版": "摘要版",
-    "摘要": "摘要版",
-    "summary": "摘要版",
-    "简历版": "简历版",
-    "简历": "简历版",
-    "resume": "简历版",
-    "陈述版": "陈述版",
-    "陈述": "陈述版",
-    "个人陈述": "陈述版",
-    "statement": "陈述版",
-}
-
-# Typography Rules
-FORBIDDEN_DASHES: Dict[str, str] = {
-    "——": "chinese em dash (——)",
-    "\u2014": "em dash (—)",
-    "\u2013": "en dash (–)",
-    "\u2015": "horizontal bar (―)",
-    "\u2212": "minus (−)",
-    "\u2e3a": "two-em dash (⸺)",
-    "\u2e3b": "three-em dash (⸻)",
-}
-
-FORBIDDEN_QUOTES: Dict[str, str] = {
-    "\u201c": "left double quote (“)",
-    "\u201d": "right double quote (”)",
-    "\u2018": "left single quote (‘)",
-    "\u2019": "right single quote (’)",
-}
-
-FORBIDDEN_DOUBLE_HYPHEN = "--"
-
-# Academic Buzzwords Forbidden (Centralized from core.lexicon SSOT)
-from core.lexicon import FORBIDDEN_BUZZWORDS
-
-# Roles & Role Verb Hierarchy
-LEAD_ROLES: Set[str] = {
-    "项目负责人", "负责人", "队长", "主持人", "算法链负责人", "模块负责人", "课题组长", "第一完成人"
-}
-
-CORE_ROLES: Set[str] = {
-    "核心成员", "核心骨干", "核心研发"
-}
-
-LEAD_OR_CORE_ROLES: Set[str] = LEAD_ROLES | CORE_ROLES
-
-NON_LEAD_ROLES: Set[str] = {
-    "参赛队员", "队员", "辅助成员", "成员", "团队成员", "组员", "协作者"
-}
-
-# Escalated verbs that non-lead/core members are strictly forbidden to use
-ESCALATED_VERBS: List[str] = [
-    "主导", "负责", "统筹", "独立完成"
-]
-
-# Verbs strictly reserved for lead roles
-LEADER_ONLY_VERBS: List[str] = [
-    "主导", "统筹"
-]
-
-# Simulation vs Real Cluster / Hardware Deployment
-SIMULATION_TERMS: List[str] = [
-    "gazebo", "gym", "pybullet", "toy dataset", "toy-dataset", "toy数据集", "纯仿真",
-    "flexsim", "carla", "isaac gym", "isaac-gym", "mujoco", "airsim", "ns-3",
-    "matlab仿真", "仿真环境", "模拟环境", "仿真平台", "仿真系统", "仿真测试", "仿真验证", "模拟路网"
-]
-
-REAL_CLUSTER_TERMS: List[str] = [
-    "万卡集群", "千卡集群", "百卡集群", "物理机", "物理机集群", "物理集群",
-    "真实物理机", "真实集群", "实机", "实机部署", "实机测试", "实机验证",
-    "实测", "产线实测", "产线部署", "真实产线", "实车", "实车测试", "实车部署",
-    "硬件落地", "硬件部署", "端侧实测", "板端实测", "上车实测"
-]
-
-# Expected vs Acquired Outcomes
-EXPECTED_OUTCOME_TERMS: List[str] = [
-    "在投", "准备投稿", "拟投稿", "预计录用", "拟发表", "待审", "待评审",
-    "审稿中", "拟申请", "拟申报", "预期录用", "预期发表", "under review", "in submission", "submitted"
-]
-
-ACQUIRED_OUTCOME_TERMS: List[str] = [
-    "已录用", "已见刊", "已发表", "录用待刊", "已出版", "已授权", "accepted", "published"
-]
+from core.lexicon import (
+    FORBIDDEN_BUZZWORDS,
+    BAOYAN_SPEC_RANGES as SPEC_RANGES,
+    BAOYAN_SPEC_ALIASES as SPEC_ALIASES,
+    FORBIDDEN_DASHES,
+    FORBIDDEN_QUOTES,
+    FORBIDDEN_DOUBLE_HYPHEN,
+    BAOYAN_LEAD_ROLES as LEAD_ROLES,
+    BAOYAN_CORE_ROLES as CORE_ROLES,
+    BAOYAN_LEAD_OR_CORE_ROLES as LEAD_OR_CORE_ROLES,
+    BAOYAN_NON_LEAD_ROLES as NON_LEAD_ROLES,
+    BAOYAN_ESCALATED_VERBS as ESCALATED_VERBS,
+    BAOYAN_LEADER_ONLY_VERBS as LEADER_ONLY_VERBS,
+    SIMULATION_TERMS,
+    REAL_CLUSTER_TERMS,
+    EXPECTED_OUTCOME_TERMS,
+    ACQUIRED_OUTCOME_TERMS,
+)
 
 
 # ---------------------------------------------------------------------------

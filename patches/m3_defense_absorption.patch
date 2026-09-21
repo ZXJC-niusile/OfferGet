@@ -1,0 +1,1626 @@
+diff --git a/core/defense/__init__.py b/core/defense/__init__.py
+new file mode 100644
+index 0000000..c23d37b
+--- /dev/null
++++ b/core/defense/__init__.py
+@@ -0,0 +1,42 @@
++"""
++OfferGet Defense Package.
++Absorbed and formalized from defense-beating-simulator (MIT).
++Provides defense rubrics, 9 weakness dimensions, 2-4 layer follow-up chains,
++100-point answer scoring, and 5-step safe answer reframing.
++"""
++
++from core.defense.chain import (
++    DefenseQuestion,
++    DefenseQuestionChain,
++    DefenseRole,
++    FollowUpChain,
++    QuestionChainType,
++)
++from core.defense.evaluator import (
++    NEGATION_MARKERS,
++    OVERCLAIMING_PATTERNS,
++    DefenseEvaluator,
++)
++from core.defense.rubrics import (
++    AnswerScoreResult,
++    AnswerScoringRubric,
++    DefenseWeaknessDimension,
++    EvidenceStatus,
++    RiskBasis,
++)
++
++__all__ = [
++    "AnswerScoreResult",
++    "AnswerScoringRubric",
++    "DefenseEvaluator",
++    "DefenseQuestion",
++    "DefenseQuestionChain",
++    "DefenseRole",
++    "DefenseWeaknessDimension",
++    "EvidenceStatus",
++    "FollowUpChain",
++    "NEGATION_MARKERS",
++    "OVERCLAIMING_PATTERNS",
++    "QuestionChainType",
++    "RiskBasis",
++]
+diff --git a/core/defense/chain.py b/core/defense/chain.py
+new file mode 100644
+index 0000000..ccffed8
+--- /dev/null
++++ b/core/defense/chain.py
+@@ -0,0 +1,164 @@
++"""
++OfferGet Defense Question Chain Generator.
++Absorbed and expanded from defense-beating-simulator (MIT).
++Provides universal 2-4 layer follow-up chains across 5 critical dimensions
++and role-adapted phrasing (interviewer, mentor, instructor, judge).
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++from enum import Enum
++from typing import Any, Dict, List, Optional
++
++from core.defense.rubrics import DefenseWeaknessDimension
++
++
++class QuestionChainType(str, Enum):
++    DATA_AUTHENTICITY = "data_authenticity"        # 数据真实性与来源链路
++    PERSONAL_CONTRIBUTION = "personal_contribution" # 个人贡献与职责边界
++    PROJECT_BOUNDARY = "project_boundary"          # 项目定位与系统边界
++    RESULT_RELIABILITY = "result_reliability"      # 结果可靠性与指标口径
++    INNOVATION = "innovation"                      # 创新点与差异化定位
++
++
++class DefenseRole(str, Enum):
++    TECH_INTERVIEWER = "tech_interviewer"      # 技术面试官: 关注数据流、工程实现与异常处理
++    COURSE_INSTRUCTOR = "course_instructor"    # 课程老师: 关注计算依据与任务书对应
++    BAOYAN_MENTOR = "baoyan_mentor"            # 保研导师: 关注学术潜质与真实贡献
++    COMPETITION_JUDGE = "competition_judge"    # 竞赛评委: 关注对比优势与壁垒
++    MATERIAL_REVIEWER = "material_reviewer"    # 答辩审查者: 关注材料依据与闭环
++
++
++@dataclass
++class DefenseQuestion:
++    """A single defense question in a follow-up chain."""
++    layer: int  # 1 to 4
++    chain_type: QuestionChainType
++    question_text: str
++    target_dimension: DefenseWeaknessDimension
++    intent: str
++    danger_level: str = "medium"  # low, medium, high
++
++
++@dataclass
++class FollowUpChain:
++    """A 2-4 layer progression of defense questions."""
++    chain_type: QuestionChainType
++    title: str
++    questions: List[DefenseQuestion] = field(default_factory=list)
++    role: DefenseRole = DefenseRole.TECH_INTERVIEWER
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "chain_type": self.chain_type.value,
++            "title": self.title,
++            "role": self.role.value,
++            "questions": [
++                {
++                    "layer": q.layer,
++                    "question": q.question_text,
++                    "dimension": q.target_dimension.value,
++                    "intent": q.intent,
++                    "danger_level": q.danger_level,
++                }
++                for q in self.questions
++            ],
++        }
++
++
++class DefenseQuestionChain:
++    """
++    Constructs role-aware follow-up chains from claims, materials, and identified weakness dimensions.
++    """
++
++    ROLE_PREFIXES = {
++        DefenseRole.TECH_INTERVIEWER: "【技术面试官】",
++        DefenseRole.COURSE_INSTRUCTOR: "【任课教师】",
++        DefenseRole.BAOYAN_MENTOR: "【保研面试导师】",
++        DefenseRole.COMPETITION_JUDGE: "【评委专家】",
++        DefenseRole.MATERIAL_REVIEWER: "【材料合规审查者】",
++    }
++
++    @classmethod
++    def generate_chain(
++        cls,
++        chain_type: QuestionChainType,
++        context_text: str = "",
++        role: DefenseRole = DefenseRole.TECH_INTERVIEWER,
++        num_layers: int = 3,
++    ) -> FollowUpChain:
++        """
++        Generates a 2-4 layer question chain for the specified dimension.
++        """
++        layers = min(max(2, num_layers), 4)
++
++        if chain_type == QuestionChainType.DATA_AUTHENTICITY:
++            title = "数据真实性与验证口径追问链"
++            raw_qs = [
++                (1, "该数据是实测、公开数据集、模拟生成、还是课程假设？材料哪一处说明了数据来源？", DefenseWeaknessDimension.DATA_PROVENANCE, "澄清数据来源属性与可查证依据", "high"),
++                (2, "如果不是全量真实业务数据，哪些实验结论只能视为原型验证或趋势展示？", DefenseWeaknessDimension.RESULTS_PRESENTATION, "确认结论适用边界，防止过度断言", "medium"),
++                (3, "若将现有模块切换到生产级复杂场景，需要重新计算哪些关键参数？底层能否直接平滑接入？", DefenseWeaknessDimension.TECHNICAL_DEPTH, "考察工程实现灵活性与真实架构深度", "high"),
++                (4, "面对数据脏乱、缺失或网络抖动等异常，现有算法是如何进行防御性降级的？", DefenseWeaknessDimension.DEFENSE_SAFETY, "压测极限容灾与边界处理", "high"),
++            ]
++        elif chain_type == QuestionChainType.PERSONAL_CONTRIBUTION:
++            title = "个人贡献与职责边界追问链"
++            raw_qs = [
++                (1, "在这段经历/项目中，你本人独立完成的核心产物是什么？与团队其他人是如何切分工界面的？", DefenseWeaknessDimension.PERSONAL_CONTRIBUTION, "明确本人实际交付物，剥离团队与开源背景", "high"),
++                (2, "所涉及的核心算法、模型或框架中，哪些是完全自主研发，哪些是基于成熟开源方案进行二次集成？", DefenseWeaknessDimension.TECHNICAL_DEPTH, "区分开源复用与个人原创贡献", "high"),
++                (3, "如果现场要求你对关键业务逻辑或配置做一处改动，你能够独立修改哪一层代码？", DefenseWeaknessDimension.REPRODUCIBILITY, "验证候选人代码级掌控力", "medium"),
++                (4, "如果完全剥离团队基础平台与外部辅助工具，你独立贡献的技术壁垒体现在哪里？", DefenseWeaknessDimension.DEFENSE_SAFETY, "终极压力测试个人不可替代性", "high"),
++            ]
++        elif chain_type == QuestionChainType.PROJECT_BOUNDARY:
++            title = "项目定位与系统边界追问链"
++            raw_qs = [
++                (1, "你所说的“平台/系统/架构重构”，底层是有真实的服务集群与动态计算，还是以原型展示为主？", DefenseWeaknessDimension.PROJECT_POSITIONING, "挤压宏观用词水分，核准真实系统形态", "high"),
++                (2, "整个链路中，哪些计算属于离线预计算或静态规则，哪些属于运行时的实时调度？", DefenseWeaknessDimension.TECHNICAL_DEPTH, "探查实时性与技术深度的真实边界", "medium"),
++                (3, "当前版本如果面对 10 倍并发或海量数据吞吐，哪个环节会最先成为瓶颈？", DefenseWeaknessDimension.DEFENSE_SAFETY, "压测系统瓶颈认知与架构大局观", "high"),
++                (4, "要将当前项目演进为高可用生产系统，下一步最关键必须重构哪一部分？", DefenseWeaknessDimension.PROJECT_POSITIONING, "考察技术演进路径规划能力", "medium"),
++            ]
++        elif chain_type == QuestionChainType.RESULT_RELIABILITY:
++            title = "结果可靠性与指标评估追问链"
++            raw_qs = [
++                (1, "简历中所陈述的核心收益指标（如耗时降低、准确率提升），其计算公式与基线（Baseline）是什么？", DefenseWeaknessDimension.DATA_PROVENANCE, "核准指标计算口径与基准对比", "high"),
++                (2, "评估结果是否包含严格的对比实验、消融实验（Ablation Study）或第三方基准测试？", DefenseWeaknessDimension.RESULTS_PRESENTATION, "检验实验设计的科学性与自洽度", "high"),
++                (3, "展示的提升效果是否存在特定工况或样本倾斜？在长尾偶发场景下的表现如何？", DefenseWeaknessDimension.RISK_PHRASING, "探寻局部最优陷阱与泛化短板", "medium"),
++                (4, "面对评委对指标合理性的深度质疑，材料中最无可辩驳的一手证据是什么？", DefenseWeaknessDimension.DEFENSE_SAFETY, "寻找最坚实的事实锚点", "high"),
++            ]
++        else:  # INNOVATION
++            title = "技术创新与差异化价值追问链"
++            raw_qs = [
++                (1, "你所声称的创新点，主要体现在算法模型、工程集成、应用场景还是工作流优化？", DefenseWeaknessDimension.INNOVATION_FRAMING, "引导合理定位创新类型，避免好高骛远", "medium"),
++                (2, "与常规开源 Baseline 或业内成熟通用方案相比，你的核心差异化机制体现在哪里？", DefenseWeaknessDimension.TECHNICAL_DEPTH, "考察方案独特性与技术权衡逻辑", "high"),
++                (3, "如果评委认为这仅仅是已有工具的组合拼装，你将如何阐述该工程落地的独特价值与复杂度？", DefenseWeaknessDimension.DEFENSE_SAFETY, "演练创新受挫时的稳妥防守策略", "high"),
++                (4, "这项工作沉淀出了哪些可复用的代码库、工具脚本或工程设计经验？", DefenseWeaknessDimension.REPRODUCIBILITY, "考察成果沉淀与外溢价值", "medium"),
++            ]
++
++        questions: List[DefenseQuestion] = []
++        for l_idx in range(layers):
++            layer, q_text, dim, intent, danger = raw_qs[l_idx]
++            if context_text:
++                q_text = f"针对材料中的“{context_text[:30]}”：{q_text}"
++            questions.append(
++                DefenseQuestion(
++                    layer=layer,
++                    chain_type=chain_type,
++                    question_text=q_text,
++                    target_dimension=dim,
++                    intent=intent,
++                    danger_level=danger,
++                )
++            )
++
++        return FollowUpChain(
++            chain_type=chain_type,
++            title=title,
++            questions=questions,
++            role=role,
++        )
++
++    @classmethod
++    def get_role_phrasing(cls, question_text: str, role: DefenseRole) -> str:
++        """Prefaces question with role-specific tone marker."""
++        prefix = cls.ROLE_PREFIXES.get(role, "")
++        return f"{prefix} {question_text}".strip()
+diff --git a/core/defense/evaluator.py b/core/defense/evaluator.py
+new file mode 100644
+index 0000000..b9b727e
+--- /dev/null
++++ b/core/defense/evaluator.py
+@@ -0,0 +1,251 @@
++"""
++OfferGet Defense Answer Evaluator and Safe Answer Framer.
++Absorbed and formalized from defense-beating-simulator (MIT).
++Evaluates candidate answers against the 100-point rubric and generates
++conservative 5-step safe answers.
++"""
++
++from __future__ import annotations
++
++import re
++from typing import Any, Dict, List, Optional, Set, Tuple
++
++from core.defense.rubrics import (
++    AnswerScoreResult,
++    AnswerScoringRubric,
++    DefenseWeaknessDimension,
++)
++
++
++OVERCLAIMING_PATTERNS = [
++    "完全实现了",
++    "真实部署了",
++    "效果大幅领先",
++    "最优控制",
++    "高精度预测",
++    "全部由我完成",
++    "完美解决",
++    "毫无瑕疵",
++    "彻底消除",
++    "绝对领先",
++    "100%自主研发",
++]
++
++NEGATION_MARKERS = ("不", "未", "没有", "不能", "不要", "尚未", "避免", "并非", "不得", "不代表")
++
++BOUNDARY_ACKNOWLEDGMENT_MARKERS = (
++    "当前版本主要",
++    "主要实现",
++    "局限在于",
++    "目前尚未",
++    "基于典型",
++    "面向课程",
++    "原型阶段",
++    "主要用于",
++    "后续可以接入",
++    "后续改进",
++    "暂未覆盖",
++    "没有做到",
++    "不足之处",
++)
++
++PERSONAL_CONTRIBUTION_MARKERS = (
++    "我主要负责",
++    "本人独立",
++    "我负责",
++    "我的工作主要",
++    "团队其他成员",
++    "基于开源",
++    "二次开发",
++    "本人重点实现了",
++)
++
++
++class DefenseEvaluator:
++    """
++    Evaluates candidate responses using the 100-point defense rubric.
++    """
++
++    @classmethod
++    def evaluate(
++        cls,
++        question: str,
++        answer: str,
++        context_facts: Optional[str] = None,
++    ) -> AnswerScoreResult:
++        """
++        Evaluates a defense answer against the 100-point rubric.
++        """
++        ans_clean = answer.strip()
++        q_clean = question.strip()
++
++        scores: Dict[str, float] = {}
++        deductions: Dict[str, str] = {}
++        main_problems: List[str] = []
++        suggestions: List[str] = []
++
++        # 1. 正面回答问题 (20 pts)
++        direct_score = 20.0
++        if len(ans_clean) < 10:
++            direct_score = 5.0
++            deductions["direct_response"] = "作答字数过短，未实质性回应提问。"
++            main_problems.append("回答过于简略，缺乏实质内容。")
++        elif not cls._check_relevance(q_clean, ans_clean):
++            direct_score = 8.0
++            deductions["direct_response"] = "回答未紧扣提问的核心考点，存在顾左右而言他倾向。"
++            main_problems.append("答非所问或脱离题目核心。")
++        scores["direct_response"] = direct_score
++
++        # 2. 有技术或材料细节 (20 pts)
++        tech_score = 20.0
++        tech_count = cls._count_concrete_details(ans_clean)
++        if len(ans_clean) < 10 or tech_count == 0:
++            tech_score = 0.0 if len(ans_clean) < 10 else 6.0
++            deductions["technical_details"] = "缺乏具体的算法、数据、参数或组件细节，表述泛泛。"
++            main_problems.append("技术细节空洞，只有高层定性描述。")
++            suggestions.append("补充具体的机制逻辑、调优参数或实际代码落地点。")
++        elif tech_count < 2:
++            tech_score = 14.0
++            deductions["technical_details"] = "细节支撑偏弱，建议增加参数或机制说明。"
++            suggestions.append("补充更多具体的工程细节或指标口径。")
++        scores["technical_details"] = tech_score
++
++        # 3. 承认项目边界 (15 pts)
++        boundary_score = 15.0
++        has_boundary = any(m in ans_clean for m in BOUNDARY_ACKNOWLEDGMENT_MARKERS)
++        if len(ans_clean) < 10 or not has_boundary:
++            boundary_score = 0.0 if len(ans_clean) < 10 else 7.0
++            deductions["acknowledges_boundary"] = "未主动声明当前版本的适用工况、假设条件或局限性。"
++            main_problems.append("未承认项目边界，容易引发评委连续追问。")
++            suggestions.append("主动说明当前做到了什么、没做到什么以及适用边界。")
++        scores["acknowledges_boundary"] = boundary_score
++
++        # 4. 突出个人贡献 (15 pts)
++        contrib_score = 15.0
++        has_contrib = any(m in ans_clean for m in PERSONAL_CONTRIBUTION_MARKERS)
++        if len(ans_clean) < 10 or not has_contrib:
++            contrib_score = 0.0 if len(ans_clean) < 10 else 8.0
++            deductions["highlights_personal_contribution"] = "未明确本人工作与团队协作、开源复用或既有模板的划分边界。"
++            suggestions.append("使用“我主要负责...，团队其他成员负责...”清晰切分贡献。")
++        scores["highlights_personal_contribution"] = contrib_score
++
++        # 5. 避免夸大 (15 pts)
++        overclaim_score = 15.0
++        detected_overclaims = cls._detect_unqualified_overclaims(ans_clean)
++        if detected_overclaims:
++            overclaim_score = max(0.0, 15.0 - len(detected_overclaims) * 7.5)
++            deductions["avoids_overclaiming"] = f"使用了绝对化或无保留的高调措辞：{', '.join(detected_overclaims)}。"
++            main_problems.append(f"存在夸大或过度断言：{', '.join(detected_overclaims)}。")
++            suggestions.append("将绝对化表述替换为客观稳妥的阶段性结论。")
++        scores["avoids_overclaiming"] = overclaim_score
++
++        # 6. 表达清晰 (15 pts)
++        clarity_score = 15.0
++        if len(ans_clean) < 10:
++            clarity_score = 5.0
++            deductions["clarity"] = "作答字数过少，无法呈现清晰论证。"
++        elif len(ans_clean) > 400:
++            clarity_score = 10.0
++            deductions["clarity"] = "单轮答辩作答偏冗长，核心要点不够突出。"
++            suggestions.append("控制作答篇幅在 150-250 字以内，条理分明。")
++        scores["clarity"] = clarity_score
++
++        total = sum(scores.values())
++
++        # Generate 5-step safe answer
++        safe_ans = cls.generate_safe_answer(question, ans_clean)
++
++        return AnswerScoreResult(
++            total_score=total,
++            dimension_scores=scores,
++            deductions=deductions,
++            main_problems=main_problems,
++            suggestions=suggestions,
++            safe_answer=safe_ans,
++        )
++
++    @classmethod
++    def _detect_unqualified_overclaims(cls, text: str) -> List[str]:
++        """
++        Detects unqualified overclaiming assertions unless preceded by negation.
++        """
++        overclaims: List[str] = []
++        for phrase in OVERCLAIMING_PATTERNS:
++            idx = 0
++            while True:
++                pos = text.find(phrase, idx)
++                if pos == -1:
++                    break
++                prefix = text[max(0, pos - 12) : pos]
++                if not any(neg in prefix for neg in NEGATION_MARKERS):
++                    overclaims.append(phrase)
++                    break
++                idx = pos + len(phrase)
++        return overclaims
++
++    @classmethod
++    def _check_relevance(cls, question: str, answer: str) -> bool:
++        """Checks relevance between question and answer via keyword and 2-gram overlap."""
++        if not question.strip() or not answer.strip():
++            return False
++
++        # 1. English/Alphanumeric words
++        q_en = {w.lower() for w in re.findall(r"[a-zA-Z0-9_+-]{2,}", question)}
++        a_en = {w.lower() for w in re.findall(r"[a-zA-Z0-9_+-]{2,}", answer)}
++        if q_en and (q_en & a_en):
++            return True
++
++        # 2. Chinese 2-grams (excluding stop characters)
++        stopwords = {
++            "请问", "请说", "说明", "如何", "怎么", "什么", "以及", "通过", "进行",
++            "哪些", "是否", "这是", "对于", "关于", "你的", "你们", "请详", "详细", "介绍"
++        }
++        zh_chars = re.sub(r"[^\u4e00-\u9fa5]", "", question)
++        q_bigrams = set()
++        for i in range(len(zh_chars) - 1):
++            bg = zh_chars[i : i + 2]
++            if bg not in stopwords:
++                q_bigrams.add(bg)
++
++        if not q_bigrams:
++            return True
++
++        return any(bg in answer for bg in q_bigrams)
++
++
++    @classmethod
++    def _count_concrete_details(cls, text: str) -> int:
++        """Counts presence of concrete numbers, units, framework names, or mechanisms."""
++        count = 0
++        # Check numbers
++        if re.search(r"\d+(?:\.\d+)?\s*(?:%|ms|s|卡|台|qps|tps|mb|gb|tb|万|亿)?", text, re.I):
++            count += 1
++        # Check technical/framework terms
++        from core.fact_guard import KNOWN_METHOD_TERMS, KNOWN_TECH_TERMS
++        text_l = text.lower()
++        if any(t in text_l for t in list(KNOWN_TECH_TERMS)[:50]) or any(m in text_l for m in list(KNOWN_METHOD_TERMS)[:30]):
++            count += 1
++        return count
++
++    @classmethod
++    def generate_safe_answer(cls, question: str, raw_answer: str) -> str:
++        """
++        Generates conservative 5-step reference answer based on raw answer:
++          1. 正面回应问题
++          2. 当前版本实际做到了什么
++          3. 承认当前没有做到什么
++          4. 解释为什么这样处理（环境/原型/资源限制）
++          5. 给出后续改进方向（先改哪一步）
++        """
++        # Clean out obvious overclaiming phrases
++        cleaned = raw_answer
++        for oc in OVERCLAIMING_PATTERNS:
++            cleaned = cleaned.replace(oc, "重点优化了")
++
++        step1 = "正面回应：在当前阶段，该模块主要定位在原型验证与核心链路打通。"
++        step2 = f"实际实现：当前版本主要实现了核心数据流与调度逻辑，确保了基准功能的稳定运行。"
++        step3 = "边界与局限：由于测试环境与时间所限，目前尚未接入全量生产级真实数据，极端并发与偶发异常处理仍在完善中。"
++        step4 = "原因说明：基于当前的迭代周期与原型验证需求，我们优先保证了核心机制的可解释性与正确性。"
++        step5 = "改进规划：后续改进中，第一步我们将接入更严格的真实压测数据，补充边界异常降级策略。"
++
++        return f"{step1}\n{step2}\n{step3}\n{step4}\n{step5}"
+diff --git a/core/defense/rubrics.py b/core/defense/rubrics.py
+new file mode 100644
+index 0000000..787dfcd
+--- /dev/null
++++ b/core/defense/rubrics.py
+@@ -0,0 +1,100 @@
++"""
++OfferGet Defense Rubrics and Weakness Dimensions.
++Absorbed and formalized from defense-beating-simulator (MIT).
++Provides evidence status labels, risk basis labels, 9 weakness dimensions,
++and a 100-point answer scoring rubric.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++from enum import Enum
++from typing import Any, Dict, List, Optional, Set
++
++
++class EvidenceStatus(str, Enum):
++    """
++    Evidence status for claims in project materials.
++    Do not mix evidence status with risk origin.
++    """
++    MATERIAL_SUPPORTED = "Material-supported"  # 材料中有直接、可查证依据或明确限定了范围/局限
++    MATERIAL_IMPLIED = "Material-implied"      # 材料有所暗示但未明确说明，需澄清
++    MATERIAL_MISSING = "Material-missing"      # 提出主张但无任何依据佐证
++
++
++class RiskBasis(str, Enum):
++    """
++    Origin basis for identified risks.
++    """
++    MATERIAL_DERIVED = "Material-derived"                      # 风险直接来自材料矛盾、遗漏或表述夸大
++    RISK_INFERRED = "Risk-inferred"                            # 风险来自答辩经验与攻防推断
++    COMBINED = "Material-derived + Risk-inferred"              # 兼具材料依据与经验推断
++
++
++class DefenseWeaknessDimension(str, Enum):
++    """
++    9 weakness dimensions to check in every project defense review.
++    """
++    PROJECT_POSITIONING = "项目定位"    # 是否说清楚项目定位，是否存在“仿真/优化/实时/部署”说法过大
++    TECHNICAL_DEPTH = "技术深度"        # 是否有算法、模型、计算逻辑、工程依据，还是仅展示与集成
++    DATA_PROVENANCE = "数据支撑"        # 数据来源、构造逻辑、可信边界、可替换真实数据的路径
++    RESULTS_PRESENTATION = "结果展示"   # 是否有图表、截图、指标、对比、误差、失败案例
++    PERSONAL_CONTRIBUTION = "个人贡献"  # 是否能区分本人工作、团队工作、开源复用、AI辅助
++    INNOVATION_FRAMING = "创新表达"     # 哪些是真创新，哪些是工程集成或展示方式优化
++    REPRODUCIBILITY = "可复现性"        # README、运行命令、依赖、示例数据、Demo、许可证
++    RISK_PHRASING = "风险表述"          # 是否有夸大、模糊、偷换概念、不严谨表述
++    DEFENSE_SAFETY = "答辩安全性"       # 哪些问题最容易引出致命连续追问
++
++
++@dataclass
++class AnswerScoreResult:
++    """
++    Result of 100-point defense answer scoring rubric.
++    """
++    total_score: float
++    dimension_scores: Dict[str, float] = field(default_factory=dict)
++    deductions: Dict[str, str] = field(default_factory=dict)
++    main_problems: List[str] = field(default_factory=list)
++    suggestions: List[str] = field(default_factory=list)
++    safe_answer: str = ""
++
++    def to_dict(self) -> Dict[str, Any]:
++        return {
++            "total_score": round(self.total_score, 1),
++            "dimension_scores": dict(self.dimension_scores),
++            "deductions": dict(self.deductions),
++            "main_problems": list(self.main_problems),
++            "suggestions": list(self.suggestions),
++            "safe_answer": self.safe_answer,
++        }
++
++
++class AnswerScoringRubric:
++    """
++    100-point rubric for evaluating defense answers.
++    Dimensions:
++      1. 正面回答问题 (20 pts)
++      2. 有技术或材料细节 (20 pts)
++      3. 承认项目边界 (15 pts)
++      4. 突出个人贡献 (15 pts)
++      5. 避免夸大 (15 pts)
++      6. 表达清晰 (15 pts)
++    """
++
++    MAX_SCORES = {
++        "direct_response": 20.0,
++        "technical_details": 20.0,
++        "acknowledges_boundary": 15.0,
++        "highlights_personal_contribution": 15.0,
++        "avoids_overclaiming": 15.0,
++        "clarity": 15.0,
++    }
++
++    DIMENSION_NAMES = {
++        "direct_response": "正面回答问题",
++        "technical_details": "有技术或材料细节",
++        "acknowledges_boundary": "承认项目边界",
++        "highlights_personal_contribution": "突出个人贡献",
++        "avoids_overclaiming": "避免夸大",
++        "clarity": "表达清晰",
++    }
+diff --git a/core/interview_debrief.py b/core/interview_debrief.py
+index 515c5f3..a2fbece 100644
+--- a/core/interview_debrief.py
++++ b/core/interview_debrief.py
+@@ -47,6 +47,7 @@ class DebriefQuestionItem:
+     follow_up_questions: List[str] = field(default_factory=list)
+     can_revise: bool = True
+     verification_status: str = "unverified"
++    defense_score: Optional[Dict[str, Any]] = None
+ 
+     def __post_init__(self):
+         if not self.can_revise:
+@@ -77,11 +78,83 @@ class InterviewDebriefEngine:
+     Analyzes interview questions/answers and generates actionable feedback loops.
+     """
+ 
++    @staticmethod
++    def _is_tech_in_negative_context(text: str, tech_term: str) -> bool:
++        """
++        Checks whether all occurrences of a technology term in the text appear in
++        negative/boundary contexts (e.g., '没用过 Redis', '未主导过 Redis', '对 Redis 不太了解').
++        Returns True if the term is ONLY mentioned negatively (or not found),
++        Returns False if there is at least one affirmative usage of the term (e.g. '用 Redis 实现').
++        """
++        if not text or not tech_term:
++            return False
++
++        if re.search(r"[\u4e00-\u9fa5]", tech_term):
++            term_pattern = re.compile(re.escape(tech_term), re.IGNORECASE)
++        else:
++            term_pattern = re.compile(r"(?<![a-z0-9_])" + re.escape(tech_term) + r"(?![a-z0-9_])", re.IGNORECASE)
++
++        matches = list(term_pattern.finditer(text))
++        if not matches:
++            return True
++
++        delims = r"[，。；！？,.;!?\n]"
++        for m in matches:
++            start, end = m.start(), m.end()
++            prev_text = text[:start]
++            next_text = text[end:]
++
++            last_delim = -1
++            for dm in re.finditer(delims, prev_text):
++                last_delim = dm.end()
++            clause_start = last_delim if last_delim != -1 else 0
++
++            next_m = re.search(delims, next_text)
++            clause_end = end + next_m.start() if next_m else len(text)
++
++            clause = text[clause_start:clause_end]
++            term_start_in_clause = start - clause_start
++            term_end_in_clause = end - clause_start
++
++            pre_term = clause[:term_start_in_clause].strip()
++            post_term = clause[term_end_in_clause:].strip()
++
++            pre_neg_pattern = re.compile(
++                r"(?:没(?:有)?(?:实际)?(?:怎么)?|未(?:曾)?(?:实际)?|不(?:太)?|从未|并未|无|缺少|缺乏)\s*"
++                r"(?:在[^，。；;\n]{1,15}?(?:中|环境|里))?\s*"
++                r"(?:用过|使用|接触(?:过)?|做过|主导(?:过)?|了解|涉及|涉猎|熟悉|学过|掌握|落地|配置|搭建|开发|维护)?\s*"
++                r"(?:比如|例如|像)?\s*$",
++                re.IGNORECASE,
++            )
++            post_neg_pattern = re.compile(
++                r"^(?:这块|方面|相关|技术|本身)?\s*(?:在[^，。；;\n]{1,15}?(?:中|环境|里))?\s*(?:我)?\s*(?:之前|平时|暂时)?\s*"
++                r"(?:没做过|未做过|没用过|未使用|没有用过|不了解|不太了解|不太熟悉|不熟悉|接触较少|没有实际做过|未涉猎|未主导过|未涉及|没有经验)",
++                re.IGNORECASE,
++            )
++            en_neg_pattern = re.compile(
++                r"\b(?:never|not|haven't|hasn't|hadn't|didn't|don't|without|no)\s+"
++                r"(?:used?|have\s+used|experienced?|familiar\s+with|worked\s+with)?\s*$",
++                re.IGNORECASE,
++            )
++
++            is_neg = bool(
++                pre_neg_pattern.search(pre_term)
++                or post_neg_pattern.search(post_term)
++                or en_neg_pattern.search(pre_term)
++                or ("对" in pre_term and any(nk in post_term for nk in ("不了解", "不太了解", "不熟悉", "不太熟悉")))
++            )
++
++            if not is_neg:
++                return False
++
++        return True
++
+     def _create_conservative_revision(
+         self,
+         answer: str,
+         drifts: List[Dict[str, Any]],
+         unverified: List[Dict[str, Any]],
++        fact_guard: Optional[Any] = None,
+     ) -> str:
+         """Removes or qualifies ungrounded numbers from candidate answer while preserving supported statements."""
+         revised = answer
+@@ -93,14 +166,19 @@ class InterviewDebriefEngine:
+             claimed = u.get("claimed_metric", "")
+             if claimed:
+                 pattern = re.compile(
+-                    rf"((?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?)\s*{re.escape(str(claimed))}%?",
++                    rf"(?:(?:从而|进而|导致|使得|进而导致|从而使得|带来|进而带来)\s*)*"
++                    rf"((?:[^\s，。；;\n]{{0,10}}?\s*)?)"
++                    rf"(?:大幅|显著|极大)?\s*(?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?\s*"
++                    rf"{re.escape(str(claimed))}%?",
+                     re.IGNORECASE,
+                 )
+                 def _replace_unverified(match):
+-                    verb_part = match.group(1).strip() if match.group(1) else ""
+-                    qualifier = "（具体幅度因缺乏基线压测数据不作主观量化）"
+-                    if verb_part:
+-                        return f"{verb_part}{qualifier}"
++                    noun = match.group(1).strip() if match.group(1) else ""
++                    qualifier = "（具体幅度因未提供基线数据不作主观量化）"
++                    if noun in {"我", "我们", "团队", "本人", "大家"}:
++                        noun = f"{noun}相关指标"
++                    if noun:
++                        return f"{noun}{qualifier}"
+                     return qualifier
+                 revised = pattern.sub(_replace_unverified, revised)
+         for d in drifts:
+@@ -109,6 +187,18 @@ class InterviewDebriefEngine:
+             if claimed and verified:
+                 pattern = re.compile(re.escape(str(claimed)), re.IGNORECASE)
+                 revised = pattern.sub(f"{verified}（已核验基线）", revised)
++
++        # R4-03: Moderate unsupported lead actions (unless verified in profile)
++        profile_has_lead = False
++        if fact_guard is not None:
++            profile_has_lead = "主导" in getattr(fact_guard, "profile_all_text", "")
++        if not profile_has_lead:
++            revised = re.sub(r"由我主导", "由我负责", revised)
++            revised = re.sub(r"我主导了", "我负责了", revised)
++            revised = re.sub(r"我主导", "我负责", revised)
++            revised = re.sub(r"(?<!未)(?<!没)主导了", "负责了", revised)
++            revised = re.sub(r"(?<!未)(?<!没)主导", "负责", revised)
++
+         return revised
+ 
+     def analyze_question(
+@@ -163,7 +253,13 @@ class InterviewDebriefEngine:
+             follow_up_questions.append("该方案在哪些场景会失效？你经历过什么失败并如何修正？")
+ 
+         # Check boundary indicators (ISSUE-05: distinguish pure boundary from multi-claim with metrics)
+-        boundary_markers = ("没做过", "不了解", "不会", "未涉猎", "未主导过", "没有实际做过", "接触较少", "不太了解", "没有这方面经验", "未涉及")
++        boundary_markers = (
++            "没做过", "未做过", "没用过", "未使用", "没有用过", "没有做过",
++            "未接触", "没接触过", "从未用过", "从未接触", "未曾使用", "并未用过",
++            "不了解", "不太了解", "并不了解", "不熟悉", "不太熟悉",
++            "不会", "未涉猎", "未主导过", "未主导", "没有实际做过", "接触较少",
++            "没怎么用过", "没有这方面经验", "未涉及", "未深入", "没有深入",
++        )
+         is_boundary = any(m in answer for m in boundary_markers)
+         is_pure_boundary = is_boundary and not has_metrics
+ 
+@@ -277,19 +373,33 @@ class InterviewDebriefEngine:
+         # Fact Guard verification (ISSUE-05: do not skip when boundary statement exists alongside other claims)
+         if fact_guard is not None and answer.strip():
+             guard_result = fact_guard.verify_facts(answer)
+-            if not guard_result.get("passed", False):
+-                drifts = guard_result.get("drifts", [])
+-                unverified = guard_result.get("unverified_claims", [])
++            drifts = guard_result.get("drifts", [])
++            raw_unverified = guard_result.get("unverified_claims", [])
++
++            # R4-02: Filter out tech_method claims in negative / boundary contexts
++            unverified: List[Dict[str, Any]] = []
++            for u in raw_unverified:
++                if u.get("claim_type") == "tech_method":
++                    term = u.get("claimed_metric", "") or u.get("claimed_fact", "")
++                    if self._is_tech_in_negative_context(answer, term):
++                        continue
++                unverified.append(u)
++
++            has_fact_issues = bool(drifts) or bool(unverified)
++            if has_fact_issues:
+                 diagnosis = QuestionDiagnosis.METRIC_DRIFT
+                 drift_notes = []
+                 for d in drifts:
+                     drift_notes.append(f"声称 {d.get('claimed_metric')}，但底稿基线为 {d.get('verified_baseline')}")
+                 for u in unverified:
+-                    drift_notes.append(f"声称指标 {u.get('claimed_metric')} 缺少底稿依据")
+-                analysis = f"回答中的数字或指标未通过事实核验（{'; '.join(drift_notes)}），易被判定为指标虚标或口径不实。"
+-                coaching = "所有指标必须严格基于底稿真实基线、单位和统计周期；若缺乏严密压测或监控数据，应客观陈述方案本身，不建议主观推定具体提升幅度。"
+-                takeaway = "先核对事实底稿，再回答数字问题。"
+-                refined = self._create_conservative_revision(answer, drifts, unverified)
++                    if u.get("claim_type") == "tech_method":
++                        drift_notes.append(f"声称技术/方法 {u.get('claimed_metric')} 缺少底稿依据")
++                    else:
++                        drift_notes.append(f"声称指标 {u.get('claimed_metric')} 缺少底稿依据")
++                analysis = f"回答中的技术栈或指标未通过事实核验（{'; '.join(drift_notes)}），易被判定为经历存疑或口径不实。"
++                coaching = "回答涉及的技术与指标必须严格基于底稿真实基线与经历；未在底稿中核验的技术栈不建议主观声称具备实际落地经验；若未在底稿中提供严密基线或监控数据，应客观陈述方案本身，不建议主观推定具体提升幅度。"
++                takeaway = "先核对事实底稿，再回答数字与技术经历问题。"
++                refined = self._create_conservative_revision(answer, drifts, unverified, fact_guard=fact_guard)
+                 can_revise = True
+             else:
+                 if not is_pure_boundary and is_relevant:
+@@ -299,24 +409,48 @@ class InterviewDebriefEngine:
+         if fact_guard is not None and refined and refined.strip():
+             rev_guard = fact_guard.verify_facts(refined)
+             if not rev_guard.get("passed", False):
+-                # Tech-method-only failures (e.g., "Redis" in "没做过 Redis") should not
+-                # block the revision — these terms are from the original answer context.
+                 rev_drifts = rev_guard.get("drifts", [])
+-                rev_unverified = rev_guard.get("unverified_claims", [])
++                raw_rev_unverified = rev_guard.get("unverified_claims", [])
++
++                rev_unverified: List[Dict[str, Any]] = []
++                for u in raw_rev_unverified:
++                    if u.get("claim_type") == "tech_method":
++                        term = u.get("claimed_metric", "") or u.get("claimed_fact", "")
++                        if self._is_tech_in_negative_context(refined, term):
++                            continue
++                    rev_unverified.append(u)
++
+                 has_numeric_issues = bool(rev_drifts) or any(
+                     u.get("claim_type") != "tech_method" for u in rev_unverified
+                 )
++                has_affirmative_tech = any(
++                    u.get("claim_type") == "tech_method" for u in rev_unverified
++                )
++
+                 if has_numeric_issues:
+                     refined = ""
+                     can_revise = False
+                     verification_status = "revision_failed_fact_check"
++                elif has_affirmative_tech:
++                    # R4-02: Affirmative unverified tech must NOT be exempted or marked as verified
++                    verification_status = "tech_unverified"
+                 else:
+-                    verification_status = "verified_with_tech_context"
++                    # Only negative tech context remained, which is benign
++                    verification_status = "verified"
+             else:
+                 verification_status = "verified"
+ 
+         # ISSUE-04: refined_answer and revised_answer must be empty if cannot revise, never use coaching_advice
+         final_revised = refined if can_revise else ""
++
++        # M3: Evaluate against 100-point defense rubric
++        from core.defense.evaluator import DefenseEvaluator
++        defense_eval = DefenseEvaluator.evaluate(question, answer)
++        defense_score_dict = defense_eval.to_dict()
++        for p in defense_eval.main_problems:
++            if p not in missing_elements:
++                missing_elements.append(p)
++
+         return DebriefQuestionItem(
+             question=question,
+             candidate_answer=answer,
+@@ -332,6 +466,7 @@ class InterviewDebriefEngine:
+             follow_up_questions=list(dict.fromkeys(follow_up_questions)),
+             can_revise=can_revise,
+             verification_status=verification_status,
++            defense_score=defense_score_dict,
+         )
+ 
+     def generate_session_debrief(
+diff --git a/core/job_flow.py b/core/job_flow.py
+index 70f992a..53e4207 100644
+--- a/core/job_flow.py
++++ b/core/job_flow.py
+@@ -16,7 +16,9 @@ import copy
+ import hashlib
+ import json
+ from pathlib import Path
++import os
+ import re
++import tempfile
+ from dataclasses import dataclass, field, asdict
+ from typing import Any, Dict, List, Optional, Tuple, Union
+ 
+@@ -696,18 +698,41 @@ def select_targeted_interview_questions(
+                 best_score = score
+                 q1_obj = aq
+ 
+-    if q1_obj is not None and best_score > 0:
++    combined_jd_text = f"{getattr(decoded_jd, 'job_title', '')} {getattr(decoded_jd, 'clean_text', '')} {core_resp_text}".lower()
++    is_non_tech = any(k in combined_jd_text for k in [
++        "运营", "市场", "产品经理", "ui/ux", "设计", "新媒体", "文案", "编辑",
++        "社群", "增长", "商务", "销售", "hr", "人事", "招聘", "财务", "法务"
++    ]) and not any(k in combined_jd_text for k in [
++        "算法", "架构", "研发", "开发", "工程", "后端", "前端", "测试", "运维", "infra", "sre", "llm"
++    ])
++
++    if q1_obj is not None and best_score > 0 and not is_non_tech:
+         q1_zh = q1_obj.question_cn
+         q1_en = q1_obj.question_en
+         q1_signal = q1_obj.jd_signal
+         q1_intent = q1_obj.interviewer_intent
+         q1_prep = q1_obj.prep_keypoints
++        q1_category = "架构与系统设计"
++        q1_category_type = "ARCHITECTURE"
++        q1_expected = ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"]
++    elif is_non_tech:
++        q1_zh = f"针对岗位核心职责【{core_resp_text}】，请结合具体业务场景，阐述你的核心策略、关键落地动作、跨部门协同过程以及量化业务成效？"
++        q1_en = f"Regarding the core responsibility '{core_resp_text}', elaborate on your core strategy, execution actions, cross-functional collaboration, and quantified business outcomes."
++        q1_signal = core_resp_text
++        q1_intent = "考察候选人对岗位核心职责的理解深度、策略落地能力与量化业务成果闭环。"
++        q1_prep = "1. 明确业务场景与核心目标；2. 阐明个人主导的关键动作与策略推演；3. 给出跨部门协同机制与量化业务收益。"
++        q1_category = "业务职责与落地实践"
++        q1_category_type = "BUSINESS_CORE"
++        q1_expected = ["业务场景与目标定位", "关键动作与策略推演", "协同与执行把控", "核心指标Baseline与业务增长收益"]
+     else:
+         q1_zh = f"针对岗位核心职责【{core_resp_text}】，请结合具体业务场景，阐述你的端到端技术方案与架构设计，如何权衡关键选型及应对高并发/高可用挑战？"
+         q1_en = f"Regarding the core responsibility '{core_resp_text}', elaborate on your end-to-end architecture design, key technical trade-offs, and how you tackle concurrency and stability challenges."
+         q1_signal = core_resp_text
+         q1_intent = "考察候选人对岗位核心技术职责的系统级掌控度、技术选型权衡及工程落地深度。"
+         q1_prep = "1. 分层陈述整体架构与核心交互；2. 阐述关键技术选型与Trade-off；3. 给出高并发/稳定性保障措施与量化效果口径。"
++        q1_category = "架构与系统设计"
++        q1_category_type = "ARCHITECTURE"
++        q1_expected = ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"]
+ 
+     formatted_questions.append({
+         "question_id": 1,
+@@ -715,13 +740,13 @@ def select_targeted_interview_questions(
+         "dimension_name_cn": "核心岗位能力与技术架构深度考查",
+         "requirement_id": req_id_q1,
+         "requirement_name": core_resp_text,
+-        "category": "架构与系统设计",
+-        "category_type": "ARCHITECTURE",
++        "category": q1_category,
++        "category_type": q1_category_type,
+         "question_zh": q1_zh,
+         "question_en": q1_en,
+         "jd_signal": q1_signal,
+         "interviewer_intent": q1_intent,
+-        "expected_elements": ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"],
++        "expected_elements": q1_expected,
+         "prep_keypoints": q1_prep,
+         "evidence_refs": q1_evidence_refs,
+         "evidence_claim_ids": q1_evidence_ids,
+@@ -734,13 +759,14 @@ def select_targeted_interview_questions(
+     substantive_claims = [
+         c for c in claims
+         if c.kind in ("experience", "project", "highlight", "bullet")
+-        and len(c.text.strip()) >= 20
+-        and not any(meta in c.source_path for meta in ("candidate.", "years_of_experience", "institution", "degree"))
++        and len(c.text.strip()) >= 10
++        and not any(meta in c.source_path.lower() for meta in ("candidate.", "years_of_experience", "institution", "degree", "name", "phone", "email", "gender"))
++        and not any(meta in c.claim_id.lower() for meta in ("candidate.", "degree", "institution", "name"))
+     ]
+     distinct_claims: List[EvidenceClaim] = []
+     seen_claim_ids: Set[str] = set()
+     for c in substantive_claims:
+-        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5]", c.text):
++        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5a-zA-Z]", c.text):
+             distinct_claims.append(c)
+             seen_claim_ids.add(c.claim_id)
+     for c in substantive_claims:
+@@ -759,8 +785,6 @@ def select_targeted_interview_questions(
+         anchor_claim = candidate_q2_claims[0]
+     elif distinct_claims:
+         anchor_claim = distinct_claims[0]
+-    elif claims:
+-        anchor_claim = claims[0]
+     else:
+         anchor_claim = None
+ 
+@@ -774,7 +798,7 @@ def select_targeted_interview_questions(
+         q2_prep = "按背景、目标、个人独立动作、替代方案取舍、baseline与数据来源、团队协作边界与反省复盘结构化作答。"
+         q2_evidence_refs = [claim_ref(anchor_claim)]
+         q2_evidence_ids = [anchor_claim.claim_id]
+-        q2_req_id = anchor_claim.claim_id
++        q2_req_id = f"project_deep_dive_{anchor_claim.claim_id}"
+         q2_req_name = short_c
+     else:
+         q2_zh = "请选择你过往最具代表性的一个技术攻坚项目，深入阐述你独立负责的核心模块、遇到的最大技术瓶颈、选型对比、最终量化指标及复盘反思。"
+@@ -889,6 +913,7 @@ def run_career_review(
+     resume_theme: str = "modern-navy",
+     resume_output_dir: Optional[Union[str, Path]] = None,
+     reserve_photo: bool = True,
++    session_data: Optional[Dict[str, Any]] = None,
+ ) -> Dict[str, Any]:
+     decoder = JDDecoder()
+     decoded_jd = decoder.decode(jd_text)
+@@ -902,13 +927,27 @@ def run_career_review(
+ 
+     predictor = JDPredictor()
+     probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days)
+-    formatted_questions = select_targeted_interview_questions(
+-        decoded_jd=decoded_jd,
+-        cand_profile=cand_profile,
+-        claims=claims,
+-        matcher_result=matcher_result,
+-        predictor=predictor,
+-    )
++
++    jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
++    raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
++    profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
++
++    if session_data:
++        sess_jd_fp = session_data.get("jd_fingerprint")
++        sess_prof_fp = session_data.get("profile_fingerprint")
++        if sess_jd_fp and sess_jd_fp != jd_hash:
++            raise ValueError(f"Session JD fingerprint mismatch: expected {sess_jd_fp}, got {jd_hash}")
++        if sess_prof_fp and sess_prof_fp != profile_hash:
++            raise ValueError(f"Session Profile fingerprint mismatch: expected {sess_prof_fp}, got {profile_hash}")
++        formatted_questions = session_data.get("questions_snapshot", [])
++    else:
++        formatted_questions = select_targeted_interview_questions(
++            decoded_jd=decoded_jd,
++            cand_profile=cand_profile,
++            claims=claims,
++            matcher_result=matcher_result,
++            predictor=predictor,
++        )
+ 
+     fact_guard = FactVerificationGuard(profile_ctx)
+     resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard)
+@@ -916,11 +955,21 @@ def run_career_review(
+     debrief_engine = InterviewDebriefEngine()
+     feedback_items: List[Dict[str, Any]] = []
+     invalid_answers: List[Dict[str, Any]] = []
+-    provided_answers: List[Any] = []
+ 
++    # Map of previous feedback and answers from session_data
++    previous_feedback_map: Dict[int, Dict[str, Any]] = {}
++    previous_answers_map: Dict[int, str] = {}
++    if session_data:
++        for f in session_data.get("answer_feedback", []):
++            if isinstance(f, dict) and "question_id" in f:
++                previous_feedback_map[f["question_id"]] = f
++        for a in session_data.get("answers", []):
++            if isinstance(a, dict) and "question_id" in a:
++                previous_answers_map[a["question_id"]] = a.get("answer", "")
++
++    new_answers_by_id: Dict[int, str] = {}
+     if answers_dict and isinstance(answers_dict, dict) and answers_dict.get("answers"):
+         provided_answers = answers_dict.get("answers", [])
+-        ans_by_id: Dict[int, str] = {}
+         valid_ids = {q["question_id"] for q in formatted_questions}
+         if not isinstance(provided_answers, list):
+             invalid_answers.append({"reason": "answers_not_list"})
+@@ -933,7 +982,7 @@ def run_career_review(
+                 except (TypeError, ValueError):
+                     invalid_answers.append({"question_id": qid, "reason": "invalid_question_id"})
+                     continue
+-                if normalized_qid in ans_by_id:
++                if normalized_qid in new_answers_by_id:
+                     invalid_answers.append({"question_id": normalized_qid, "reason": "duplicate_question_id"})
+                     continue
+                 if normalized_qid not in valid_ids:
+@@ -948,19 +997,26 @@ def run_career_review(
+                 if len(txt) > 8000:
+                     invalid_answers.append({"question_id": normalized_qid, "reason": "answer_too_long", "max_length": 8000})
+                     continue
+-                ans_by_id[normalized_qid] = txt
++                new_answers_by_id[normalized_qid] = txt
+             elif isinstance(item, str):
+-                next_id = len(ans_by_id) + 1
++                next_id = len(new_answers_by_id) + 1
+                 if len(item) > 8000:
+                     invalid_answers.append({"question_id": next_id, "reason": "answer_too_long", "max_length": 8000})
+                 elif next_id in valid_ids:
+-                    ans_by_id[next_id] = item
++                    new_answers_by_id[next_id] = item
+             else:
+                 invalid_answers.append({"reason": "answer_item_invalid"})
+ 
+-        for q in formatted_questions:
+-            qid = q["question_id"]
+-            user_ans = ans_by_id.get(qid, "")
++    # Combine answers: new answers override previous answers for that question_id
++    combined_answers_map: Dict[int, str] = dict(previous_answers_map)
++    combined_answers_map.update(new_answers_by_id)
++
++    # Now evaluate each question
++    for q in formatted_questions:
++        qid = q["question_id"]
++        # If freshly answered in this round: evaluate
++        if qid in new_answers_by_id:
++            user_ans = new_answers_by_id[qid]
+             if user_ans.strip():
+                 debrief = debrief_engine.analyze_question(
+                     q["question_zh"],
+@@ -994,70 +1050,88 @@ def run_career_review(
+                     "candidate_answer": "",
+                     "status": "awaiting_answer",
+                     "diagnosis": "not_submitted",
+-                    "analysis": "未提供回答。请针对该问题提交您的作答以获得针对性攻防诊断。",
+-                    "coaching_advice": q["prep_keypoints"],
++                    "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
++                    "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
+                     "revised_answer": "",
+-                    "refined_answer": q["prep_keypoints"],
++                    "refined_answer": "",
+                     "can_revise": False,
+                     "verification_status": "unverified",
+-                    "key_takeaway": "参考题目的考查意图与备考要点构思 STAR 框架回答。",
++                    "key_takeaway": "请先提交针对该题的回答。",
++                    "evidence_refs": q.get("evidence_refs", []),
+                     "missing_elements": [],
+                     "follow_up_questions": [],
+                 })
+-    else:
+-        for q in formatted_questions:
++        # Else if previously evaluated in session_data: retain previous feedback!
++        elif qid in previous_feedback_map:
++            feedback_items.append(previous_feedback_map[qid])
++        # Else: awaiting answer
++        else:
+             feedback_items.append({
+-                "question_id": q["question_id"],
++                "question_id": qid,
+                 "question_zh": q["question_zh"],
+                 "target_dimension": q.get("target_dimension", ""),
+                 "candidate_answer": "",
+                 "status": "awaiting_answer",
+                 "diagnosis": "not_submitted",
+-                "analysis": "候选人尚未提交该题的一轮回答。请提交回答以触发基于指标与证据的诊断。",
+-                "coaching_advice": q["prep_keypoints"],
++                "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
++                "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
+                 "revised_answer": "",
+-                "refined_answer": q["prep_keypoints"],
++                "refined_answer": "",
+                 "can_revise": False,
+                 "verification_status": "unverified",
+-                "key_takeaway": "明确指标口径、数据来源和个人贡献边界。",
++                "key_takeaway": "请先提交针对该题的回答。",
++                "evidence_refs": q.get("evidence_refs", []),
+                 "missing_elements": [],
+                 "follow_up_questions": [],
+             })
+ 
+-    polish_focus = {
+-        "focus_area": "interview_defense",
+-        "description": "针对真实证据、指标口径与个人贡献边界的防守训练",
+-        "defense_checkpoints": [
+-            "确保所有量化指标自带 baseline、结果、单位和数据来源，避免被追问时判定为 metric_drift",
+-            "在被问及未涉猎领域时诚实划定边界并提出可迁移能力，避免白板硬猜触发 fatal_gap",
+-            "对主导、搭建、优化等强动词准备个人动作、替代方案、失败复盘和团队边界"
+-        ],
+-        "total_claims_indexed": len(claims),
+-        "verified_metrics_protected": bool(fact_guard.master_profile),
+-        "fact_guard_verdict": "available" if fact_guard.master_profile else "profile_missing",
+-        "invalid_answers": invalid_answers,
+-    }
++    # Prepare combined answers list for result
++    combined_answers_list = [
++        {"question_id": qid, "answer": ans}
++        for qid, ans in sorted(combined_answers_map.items())
++    ]
+ 
++    tailored_profile = generate_tailored_profile_from_review(
++        {"resume_advice": resume_advices, "match_summary": matcher_result},
++        profile_ctx,
++        fact_guard=fact_guard,
++    )
++
++    # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
+     result = {
+         "schema_version": "career-review.v1",
+         "jd_breakdown": {
+-            "job_title": getattr(decoded_jd, "job_title", ""),
+-            "company_or_dept": getattr(decoded_jd, "company_or_dept", ""),
+-            "target_level": getattr(decoded_jd, "target_level", ""),
+-            "compensation_band": getattr(decoded_jd, "compensation_band", ""),
+-            "location": getattr(decoded_jd, "location", ""),
+-            "tech_domains": getattr(decoded_jd, "tech_domains", []),
+-            "hard_thresholds": [asdict(t) for t in getattr(decoded_jd, "hard_thresholds", [])],
+-            "core_responsibilities": [asdict(r) for r in getattr(decoded_jd, "core_responsibilities", [])],
+-            "core_skills": [asdict(s) for s in getattr(decoded_jd, "core_skills", [])],
+-            "implicit_signals": [asdict(sig) for sig in getattr(decoded_jd, "implicit_signals", [])],
+-            "business_pain_points": [asdict(p) for p in getattr(decoded_jd, "business_pain_points", [])],
+-            "filtered_boilerplates": [asdict(b) if hasattr(b, "__dataclass_fields__") else str(b) for b in getattr(decoded_jd, "filtered_boilerplates", [])],
+-            "source_note": "岗位拆解仅使用提供的 JD 原文；隐性信号和业务解释属于启发式推断。",
++            "job_title": decoded_jd.job_title,
++            "company_or_dept": decoded_jd.company_or_dept,
++            "core_skills": [s.name for s in decoded_jd.core_skills],
++            "hard_thresholds": [
++                {
++                    "category": t.category,
++                    "requirement": t.requirement,
++                    "is_mandatory": t.is_mandatory,
++                }
++                for t in decoded_jd.hard_thresholds
++            ],
++            "implicit_signals": [
++                {
++                    "original_text": sig.original_text,
++                    "translated_meaning": sig.translated_meaning,
++                    "underlying_risk": sig.underlying_risk,
++                }
++                for sig in decoded_jd.implicit_signals
++            ],
++            "business_pain_points": [
++                {
++                    "aspect": p.aspect,
++                    "description": p.description,
++                    "evaluation_metric": p.evaluation_metric,
++                }
++                for p in decoded_jd.business_pain_points
++            ],
+         },
+         "match_summary": {
+-            "final_match_score": matcher_result.final_match_score,
+             "raw_match_score": matcher_result.raw_match_score,
++            "final_match_score": matcher_result.final_match_score,
+             "must_have_score": matcher_result.must_have_score,
+             "nice_to_have_score": matcher_result.nice_to_have_score,
+             "hidden_signal_fit": matcher_result.hidden_signal_fit,
+@@ -1066,36 +1140,52 @@ def run_career_review(
+             "breakthrough_advice": matcher_result.breakthrough_advice,
+             "prediction": asdict(probability_forecast),
+             "prediction_note": "基于规则和当前材料的启发式区间，不代表真实录用概率。",
++            "gap_matrix": [
++                {
++                    "requirement_name": g.requirement_name,
++                    "category": g.category,
++                    "importance": g.importance,
++                    "state": g.state.value if hasattr(g.state, "value") else str(g.state),
++                    "actionable_advice": g.actionable_advice,
++                    "candidate_evidence": g.candidate_evidence,
++                    "gap_explanation": g.gap_explanation,
++                }
++                for g in matcher_result.gap_matrix
++            ],
+         },
+         "resume_advice": resume_advices,
+         "interview_questions": formatted_questions,
+         "question_generation": {
+-            "status": "complete" if len(formatted_questions) >= 3 else "insufficient_jd_signals",
+-            "requested_count": 3,
+-            "generated_count": len(formatted_questions),
+-            "method": "deterministic JD/gap ranking over the compatibility question bank",
++            "strategy": "3_dimension_targeted_defense",
++            "dimensions": [
++                {"dimension": "core_responsibility", "name": "核心岗位能力与技术架构深度考查", "question_id": 1},
++                {"dimension": "project_deep_dive", "name": "候选人真实项目经历与关键成果深入追问", "question_id": 2},
++                {"dimension": "gap_boundary", "name": "技术缺口/证据不足边界与真实性防守考查", "question_id": 3},
++            ],
++            "total_questions": len(formatted_questions),
+         },
+-        "answers": provided_answers,
++        "answers": combined_answers_list,
+         "answer_feedback": feedback_items,
+         "input_quality": {
+-            "route": "complete_review" if jd_text.strip() and claims else "insufficient_input",
+-            "jd_available": bool(jd_text.strip()),
+-            "profile_evidence_available": bool(claims),
++            "answers": combined_answers_list,
+             "invalid_answers": invalid_answers,
+-            "evidence_claim_count": len(claims),
+-            "profile_fact_policy": "missing facts remain unknown",
++            "evaluated_count": len([f for f in feedback_items if f.get("status") == "evaluated"]),
++            "pending_count": len([f for f in feedback_items if f.get("status") == "awaiting_answer"]),
+         },
+-        "polish_focus": polish_focus,
++        "polish_focus": {
++            "focus_area": "interview_defense",
++            "defense_checkpoints": [
++                f"Q{q['question_id']}: {q.get('jd_signal', '')} ({q.get('category', q.get('dimension_name_cn', ''))})"
++                for q in formatted_questions
++            ],
++        },
++        "tailored_profile": tailored_profile,
++        "resume_patches": [
++            adv["patch"] for adv in resume_advices if adv.get("patch")
++        ],
+     }
+ 
+-    tailored_profile = generate_tailored_profile_from_review(
+-        {"resume_advice": resume_advices, "match_summary": matcher_result},
+-        profile_ctx,
+-        fact_guard=fact_guard,
+-    )
+-    result["tailored_profile"] = tailored_profile
+-    result["resume_patches"] = tailored_profile.get("_audit", {}).get("applied_patches", [])
+-
++    # Optional resume generation using tailored_profile
+     if build_resume:
+         from core.resume_builder import ResumeBuilder
+ 
+@@ -1137,51 +1227,75 @@ def create_review_session(
+     jd_text: str,
+     profile_dict: Union[Dict[str, Any], ProfileContext],
+     review_result: Dict[str, Any],
++    base_session: Optional[Dict[str, Any]] = None,
+ ) -> Dict[str, Any]:
+     """Creates a verifiable lightweight JSON session snapshot."""
+     jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
+     raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
+     profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+-    session_id = f"SESSION-{jd_hash}-{profile_hash}"
+-
+-    questions_snapshot = []
+-    for q in review_result.get("interview_questions", []):
+-        questions_snapshot.append({
+-            "question_id": q.get("question_id"),
+-            "target_dimension": q.get("target_dimension", ""),
+-            "dimension_name_cn": q.get("dimension_name_cn", ""),
+-            "requirement_id": q.get("requirement_id", ""),
+-            "requirement_name": q.get("requirement_name", ""),
+-            "question_zh": q.get("question_zh", ""),
+-            "jd_signal": q.get("jd_signal", ""),
+-            "interviewer_intent": q.get("interviewer_intent", ""),
+-            "expected_elements": q.get("expected_elements", []),
+-        })
++    session_id = base_session.get("session_id") if (base_session and base_session.get("session_id")) else f"SESSION-{jd_hash}-{profile_hash}"
++
++    if base_session and base_session.get("questions_snapshot"):
++        questions_snapshot = base_session["questions_snapshot"]
++    else:
++        questions_snapshot = []
++        for q in review_result.get("interview_questions", []):
++            questions_snapshot.append({
++                "question_id": q.get("question_id"),
++                "target_dimension": q.get("target_dimension", ""),
++                "dimension_name_cn": q.get("dimension_name_cn", ""),
++                "category": q.get("category", ""),
++                "category_type": q.get("category_type", ""),
++                "requirement_id": q.get("requirement_id", ""),
++                "requirement_name": q.get("requirement_name", ""),
++                "question_zh": q.get("question_zh", ""),
++                "jd_signal": q.get("jd_signal", ""),
++                "interviewer_intent": q.get("interviewer_intent", ""),
++                "expected_elements": q.get("expected_elements", []),
++            })
+ 
+     session_answers = review_result.get("answers", [])
+     if not session_answers and isinstance(review_result.get("input_quality"), dict):
+         session_answers = review_result["input_quality"].get("answers", [])
+ 
++    feedbacks = review_result.get("answer_feedback", [])
++    evaluated_count = len([f for f in feedbacks if f.get("status") == "evaluated" and f.get("diagnosis") != "not_submitted"])
++    total_q = len(questions_snapshot)
++    status = "completed" if (total_q > 0 and evaluated_count >= total_q) else "awaiting_answer"
++
+     return {
+         "session_id": session_id,
+         "schema_version": "career-review-session.v1",
+         "jd_fingerprint": jd_hash,
+         "profile_fingerprint": profile_hash,
+-        "status": "awaiting_answer" if any(f.get("status") == "awaiting_answer" for f in review_result.get("answer_feedback", [])) else "completed",
++        "status": status,
++        "generated_questions_count": total_q,
++        "answered_questions_count": len(session_answers),
++        "evaluated_questions_count": evaluated_count,
++        "minimum_loop_completed": evaluated_count >= 1,
++        "all_questions_completed": total_q > 0 and evaluated_count >= total_q,
+         "questions_snapshot": questions_snapshot,
+         "answers": session_answers,
+-        "answer_feedback": review_result.get("answer_feedback", []),
++        "answer_feedback": feedbacks,
+     }
+ 
+ 
+ def save_review_session(session: Dict[str, Any], output_path: Union[str, Path]) -> None:
+-    """Atomically save review session JSON to disk."""
+-    out = Path(output_path)
++    """Atomically save review session JSON to disk using a unique temporary file."""
++    out = Path(output_path).resolve()
+     out.parent.mkdir(parents=True, exist_ok=True)
+-    temp_path = out.with_suffix(".tmp")
+-    with open(temp_path, "w", encoding="utf-8") as f:
+-        json.dump(session, f, ensure_ascii=False, indent=2)
+-    temp_path.replace(out)
++    temp_fd, temp_path_str = tempfile.mkstemp(prefix="sess_", suffix=".tmp", dir=str(out.parent))
++    try:
++        with open(temp_fd, "w", encoding="utf-8") as f:
++            json.dump(session, f, ensure_ascii=False, indent=2)
++        os.replace(temp_path_str, str(out))
++    except Exception:
++        if os.path.exists(temp_path_str):
++            try:
++                os.remove(temp_path_str)
++            except OSError:
++                pass
++        raise
+ 
+ 
+ def load_review_session(session_path: Union[str, Path]) -> Dict[str, Any]:
+@@ -1216,3 +1330,29 @@ def validate_session_answers(
+             errors.append("invalid_answer_entry_format")
+     return len(errors) == 0, errors
+ 
++
++def generate_defense_followup_chain(
++    context_text: str = "",
++    chain_type: str = "project_boundary",
++    role: str = "tech_interviewer",
++    num_layers: int = 3,
++) -> Dict[str, Any]:
++    """
++    Generates a 2-4 layer defense follow-up question chain.
++    Absorbed from defense-beating-simulator (M3).
++    """
++    from core.defense.chain import DefenseQuestionChain, DefenseRole, QuestionChainType
++
++    try:
++        ct = QuestionChainType(chain_type)
++    except ValueError:
++        ct = QuestionChainType.PROJECT_BOUNDARY
++
++    try:
++        r = DefenseRole(role)
++    except ValueError:
++        r = DefenseRole.TECH_INTERVIEWER
++
++    chain = DefenseQuestionChain.generate_chain(ct, context_text=context_text, role=r, num_layers=num_layers)
++    return chain.to_dict()
++
+diff --git a/tests/test_defense_chain.py b/tests/test_defense_chain.py
+new file mode 100644
+index 0000000..9272cb9
+--- /dev/null
++++ b/tests/test_defense_chain.py
+@@ -0,0 +1,70 @@
++"""
++Tests for OfferGet Defense Question Chains.
++Verifies 2-4 layer follow-up chains across 5 dimensions and role-adapted phrasing.
++"""
++
++import pytest
++
++from core.defense.chain import (
++    DefenseQuestionChain,
++    DefenseRole,
++    FollowUpChain,
++    QuestionChainType,
++)
++from core.job_flow import generate_defense_followup_chain
++
++
++class TestDefenseQuestionChain:
++    def test_all_five_chain_types(self):
++        for ct in QuestionChainType:
++            chain = DefenseQuestionChain.generate_chain(ct, num_layers=3)
++            assert isinstance(chain, FollowUpChain)
++            assert chain.chain_type == ct
++            assert len(chain.questions) == 3
++            assert chain.questions[0].layer == 1
++            assert chain.questions[1].layer == 2
++            assert chain.questions[2].layer == 3
++
++    def test_layer_bounds_enforced(self):
++        # Min 2 layers
++        chain_min = DefenseQuestionChain.generate_chain(QuestionChainType.DATA_AUTHENTICITY, num_layers=1)
++        assert len(chain_min.questions) == 2
++
++        # Max 4 layers
++        chain_max = DefenseQuestionChain.generate_chain(QuestionChainType.DATA_AUTHENTICITY, num_layers=10)
++        assert len(chain_max.questions) == 4
++
++    def test_context_text_injection(self):
++        ctx = "基于 Ray 优化分布式调度"
++        chain = DefenseQuestionChain.generate_chain(QuestionChainType.PROJECT_BOUNDARY, context_text=ctx, num_layers=2)
++        assert ctx in chain.questions[0].question_text
++
++    def test_role_phrasing(self):
++        q_raw = "数据来源是实测还是公开数据集？"
++        for role in DefenseRole:
++            phrased = DefenseQuestionChain.get_role_phrasing(q_raw, role)
++            assert q_raw in phrased
++            assert "【" in phrased and "】" in phrased
++
++    def test_followup_chain_to_dict(self):
++        chain = DefenseQuestionChain.generate_chain(QuestionChainType.INNOVATION, num_layers=3)
++        d = chain.to_dict()
++        assert d["chain_type"] == "innovation"
++        assert len(d["questions"]) == 3
++        assert d["questions"][0]["layer"] == 1
++        assert "dimension" in d["questions"][0]
++        assert "intent" in d["questions"][0]
++
++
++class TestJobFlowIntegration:
++    def test_generate_defense_followup_chain_helper(self):
++        res = generate_defense_followup_chain(
++            context_text="Megatron-LM 并行优化",
++            chain_type="personal_contribution",
++            role="tech_interviewer",
++            num_layers=3,
++        )
++        assert isinstance(res, dict)
++        assert res["chain_type"] == "personal_contribution"
++        assert len(res["questions"]) == 3
++        assert "Megatron-LM" in res["questions"][0]["question"]
+diff --git a/tests/test_defense_evaluator.py b/tests/test_defense_evaluator.py
+new file mode 100644
+index 0000000..07f08cb
+--- /dev/null
++++ b/tests/test_defense_evaluator.py
+@@ -0,0 +1,78 @@
++"""
++Tests for OfferGet Defense Answer Evaluator and Debrief Integration.
++Verifies 100-point answer rubric scoring, overclaiming defenses,
++5-step safe answer reframing, and interview debrief integration.
++"""
++
++import pytest
++
++from core.defense.evaluator import DefenseEvaluator
++from core.interview_debrief import InterviewDebriefEngine
++
++
++class TestDefenseEvaluator:
++    def test_evasive_short_answer_low_score(self):
++        q = "请详细介绍你在集群训练中如何处理慢卡隔离？"
++        a = "没怎么做。"
++        res = DefenseEvaluator.evaluate(q, a)
++        assert res.total_score < 60.0
++        assert "direct_response" in res.deductions
++        assert len(res.main_problems) > 0
++
++    def test_overclaiming_without_negation_penalized(self):
++        q = "你在该项目中起到了什么作用？"
++        a = "该系统全部由我完成，完全实现了最优控制，效果大幅领先业内现有竞品。"
++        res = DefenseEvaluator.evaluate(q, a)
++        assert "avoids_overclaiming" in res.deductions
++        assert res.dimension_scores["avoids_overclaiming"] < 15.0
++        assert any("全部由我完成" in p for p in res.main_problems)
++
++    def test_overclaiming_with_negation_not_penalized(self):
++        q = "你在该项目中起到了什么作用？"
++        a = "我负责了核心调度逻辑开发。本项目目前并未完全实现所有极限场景的自动化处理，目前主要用于典型工况的原型验证。"
++        res = DefenseEvaluator.evaluate(q, a)
++        assert "avoids_overclaiming" not in res.deductions
++        assert res.dimension_scores["avoids_overclaiming"] == 15.0
++        assert res.dimension_scores["acknowledges_boundary"] == 15.0
++
++    def test_well_defended_answer_high_score(self):
++        q = "请说明你的通信算子优化方案、测试基线及当前局限？"
++        a = (
++            "针对通信算子优化问题：我主要负责基于 NCCL 原语的通信重构工作。在 1024 卡集群上，"
++            "我们对比了原版 Baseline，通信开销降低了 20%，MFU 提升至 52%。"
++            "当前版本主要面向密集大模型训练场景，局限在于对偶发网络抖动的自适应重传机制仍在持续优化中，"
++            "团队其他成员负责监控看板与日志分析。"
++        )
++        res = DefenseEvaluator.evaluate(q, a)
++        assert res.total_score >= 85.0
++        assert res.dimension_scores["direct_response"] == 20.0
++        assert res.dimension_scores["technical_details"] == 20.0
++        assert res.dimension_scores["acknowledges_boundary"] == 15.0
++        assert res.dimension_scores["highlights_personal_contribution"] == 15.0
++        assert res.dimension_scores["avoids_overclaiming"] == 15.0
++
++    def test_safe_answer_generation_5_steps(self):
++        q = "你的系统真的达到工业级高可用了吗？"
++        raw = "我们完全实现了高可用，绝对领先。"
++        safe = DefenseEvaluator.generate_safe_answer(q, raw)
++        lines = [l for l in safe.splitlines() if l.strip()]
++        assert len(lines) == 5
++        assert "正面回应" in lines[0]
++        assert "实际实现" in lines[1]
++        assert "边界与局限" in lines[2]
++        assert "原因说明" in lines[3]
++        assert "改进规划" in lines[4]
++
++
++class TestInterviewDebriefIntegration:
++    def test_analyze_question_attaches_defense_score(self):
++        engine = InterviewDebriefEngine()
++        q = "请问你在分布式训练调度中如何做慢节点剔除？"
++        a = "我负责设计了心跳探针机制，在 1024 卡集群上检测慢节点，当前版本主要基于固定阈值过滤，局限在于动态阈值仍在调优。"
++        item = engine.analyze_question(q, a)
++
++        assert item.defense_score is not None
++        assert isinstance(item.defense_score, dict)
++        assert "total_score" in item.defense_score
++        assert "dimension_scores" in item.defense_score
++        assert item.defense_score["total_score"] >= 80.0
+diff --git a/tests/test_defense_rubrics.py b/tests/test_defense_rubrics.py
+new file mode 100644
+index 0000000..6fac9cc
+--- /dev/null
++++ b/tests/test_defense_rubrics.py
+@@ -0,0 +1,74 @@
++"""
++Tests for OfferGet Defense Rubrics and Weakness Dimensions.
++Verifies enum definitions, 9 weakness dimensions, and 100-point rubric data structures.
++"""
++
++import pytest
++
++from core.defense.rubrics import (
++    AnswerScoreResult,
++    AnswerScoringRubric,
++    DefenseWeaknessDimension,
++    EvidenceStatus,
++    RiskBasis,
++)
++
++
++def test_evidence_status_and_risk_basis_enums():
++    assert EvidenceStatus.MATERIAL_SUPPORTED.value == "Material-supported"
++    assert EvidenceStatus.MATERIAL_IMPLIED.value == "Material-implied"
++    assert EvidenceStatus.MATERIAL_MISSING.value == "Material-missing"
++
++    assert RiskBasis.MATERIAL_DERIVED.value == "Material-derived"
++    assert RiskBasis.RISK_INFERRED.value == "Risk-inferred"
++    assert RiskBasis.COMBINED.value == "Material-derived + Risk-inferred"
++
++
++def test_defense_weakness_dimensions_count():
++    dims = list(DefenseWeaknessDimension)
++    assert len(dims) == 9
++    dim_values = {d.value for d in dims}
++    assert "项目定位" in dim_values
++    assert "技术深度" in dim_values
++    assert "数据支撑" in dim_values
++    assert "结果展示" in dim_values
++    assert "个人贡献" in dim_values
++    assert "创新表达" in dim_values
++    assert "可复现性" in dim_values
++    assert "风险表述" in dim_values
++    assert "答辩安全性" in dim_values
++
++
++def test_answer_scoring_rubric_max_points():
++    total = sum(AnswerScoringRubric.MAX_SCORES.values())
++    assert total == 100.0
++    assert len(AnswerScoringRubric.MAX_SCORES) == 6
++    assert AnswerScoringRubric.MAX_SCORES["direct_response"] == 20.0
++    assert AnswerScoringRubric.MAX_SCORES["technical_details"] == 20.0
++    assert AnswerScoringRubric.MAX_SCORES["acknowledges_boundary"] == 15.0
++    assert AnswerScoringRubric.MAX_SCORES["highlights_personal_contribution"] == 15.0
++    assert AnswerScoringRubric.MAX_SCORES["avoids_overclaiming"] == 15.0
++    assert AnswerScoringRubric.MAX_SCORES["clarity"] == 15.0
++
++
++def test_answer_score_result_serialization():
++    res = AnswerScoreResult(
++        total_score=85.5,
++        dimension_scores={
++            "direct_response": 20.0,
++            "technical_details": 18.0,
++            "acknowledges_boundary": 15.0,
++            "highlights_personal_contribution": 15.0,
++            "avoids_overclaiming": 7.5,
++            "clarity": 10.0,
++        },
++        deductions={"avoids_overclaiming": "存在轻度夸大表述。"},
++        main_problems=["存在高调措辞"],
++        suggestions=["使用客观稳妥词替换"],
++        safe_answer="稳妥应答",
++    )
++    d = res.to_dict()
++    assert d["total_score"] == 85.5
++    assert d["dimension_scores"]["direct_response"] == 20.0
++    assert len(d["main_problems"]) == 1
++    assert d["safe_answer"] == "稳妥应答"
