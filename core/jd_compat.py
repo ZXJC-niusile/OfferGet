@@ -289,6 +289,36 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
         verdict_title = "谨慎投递"
         verdict_desc = "当前材料与岗位要求的直接对应关系较少，建议先确认真实缺口。"
 
+    from core.jd_decision import DecodeBeforeMatchGate, ShouldIApplyEvaluator
+
+    should_i_apply = ShouldIApplyEvaluator().evaluate(decoded, candidate, result)
+    should_i_apply_dict = {
+        "stars": should_i_apply.stars,
+        "composite_score": should_i_apply.composite_score,
+        "verdict": should_i_apply.verdict.value,
+        "verdict_title": should_i_apply.verdict_title,
+        "verdict_description": should_i_apply.verdict_description,
+        "pros": should_i_apply.pros,
+        "cons": should_i_apply.cons,
+        "probability_range": list(should_i_apply.probability_range),
+        "probability_breakdown": {k: list(v) for k, v in should_i_apply.probability_breakdown.items()},
+        "next_action": should_i_apply.next_action.value,
+        "action_advice": should_i_apply.action_advice,
+        "dimension_scores": should_i_apply.dimension_scores,
+        "six_week_plan": {
+            "focus_summary": should_i_apply.six_week_plan.focus_summary,
+            "weeks": [
+                {
+                    "week_range": w.week_range,
+                    "phase_name": w.phase_name,
+                    "tasks": list(w.tasks),
+                    "deliverables": w.deliverables,
+                }
+                for w in should_i_apply.six_week_plan.weeks
+            ]
+        }
+    }
+
     return {
         "candidate_name": candidate.name,
         "overall_match_score": score,
@@ -314,11 +344,17 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
         "canonical_match": _json_safe(asdict(result)),
         "hard_vetoed": result.is_hard_vetoed,
         "hard_veto_reasons": result.hard_veto_reasons,
+        "should_i_apply": should_i_apply_dict,
     }
 
 
-def match_legacy(decoded: Any, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
-    canonical_jd = to_canonical(decoded)
+def match_legacy(
+    decoded: Any,
+    profile_data: Union[Dict[str, Any], ProfileContext],
+    strict_gate: bool = False,
+) -> Dict[str, Any]:
+    from core.jd_decision import DecodeBeforeMatchGate
+    canonical_jd = DecodeBeforeMatchGate.enforce(decoded, strict=strict_gate)
     candidate = profile_to_canonical(profile_data)
     result = JDMatcher().match(canonical_jd, candidate)
     return matcher_to_legacy(result, candidate, canonical_jd)

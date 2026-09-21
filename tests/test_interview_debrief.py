@@ -58,7 +58,9 @@ class TestInterviewDebriefFixes(unittest.TestCase):
         self.assertNotIn("进行结构化优化", revised)
         self.assertNotIn("50%", revised)
         self.assertIn("查询接口", revised)
-        self.assertIn("缺乏基线压测数据不作主观量化", revised)
+        self.assertIn("未提供基线数据", revised)
+        self.assertNotIn("缺乏基线压测数据", revised)
+        self.assertNotIn("没有压测数据", revised)
 
     def test_issue_02_conservative_revision_preserves_supported_baseline(self):
         """Drifts with verified baseline are properly qualified."""
@@ -165,7 +167,8 @@ class TestInterviewDebriefFixes(unittest.TestCase):
         self.assertTrue(res.can_revise)
         self.assertNotIn("50%", res.refined_answer)
         self.assertIn("没做过 Redis", res.refined_answer)
-        self.assertIn("缺乏基线压测数据不作主观量化", res.refined_answer)
+        self.assertIn("未提供基线数据", res.refined_answer)
+        self.assertNotIn("缺乏基线压测数据", res.refined_answer)
 
     def test_issue_05_pure_boundary_remains_experience_boundary(self):
         """Pure boundary answer without metrics remains EXPERIENCE_BOUNDARY."""
@@ -249,6 +252,73 @@ class TestInterviewDebriefFixes(unittest.TestCase):
         answer2 = "以开源框架为 Baseline，吞吐量由 1000 提升至 1500。"
         res2 = self.engine.analyze_question(question, answer2)
         self.assertEqual(res2.diagnosis, QuestionDiagnosis.WELL_DEFENDED)
+
+    # ----------------------------------------------------------------------
+    # R4-02: Negative tech statement vs affirmative unverified tech claim
+    # ----------------------------------------------------------------------
+    def test_r4_02_negative_statement_boundary_handling(self):
+        """Negative tech statement ('没用过 Redis') is preserved, not diagnosed as metric drift, status is not failed."""
+        answer = "这块技术我没用过 Redis。"
+        res = self.engine.analyze_question(
+            question="请谈谈你在 Redis 方面的实战经验",
+            answer=answer,
+            fact_guard=self.fact_guard
+        )
+        self.assertEqual(res.diagnosis, QuestionDiagnosis.EXPERIENCE_BOUNDARY)
+        self.assertFalse(res.can_revise)
+        self.assertEqual(res.refined_answer, "")
+        self.assertIn(res.verification_status, ["unverified", "verified"])
+        self.assertNotEqual(res.verification_status, "revision_failed_fact_check")
+        self.assertNotEqual(res.verification_status, "tech_unverified")
+
+        # Mixed: negative statement + verified tech and metric
+        answer_mixed = "我没用过 Redis，但在项目中负责查询接口开发，耗时从 200ms 降到 100ms。"
+        res_mixed = self.engine.analyze_question(
+            question="请介绍查询接口优化经验",
+            answer=answer_mixed,
+            fact_guard=self.fact_guard
+        )
+        self.assertEqual(res_mixed.diagnosis, QuestionDiagnosis.WELL_DEFENDED)
+        self.assertEqual(res_mixed.verification_status, "verified")
+        self.assertIn("没用过 Redis", res_mixed.refined_answer)
+
+    def test_r4_02_affirmative_unverified_tech_strictly_flagged(self):
+        """Affirmative unverified tech ('我用 Redis 实现了多级缓存') must NOT be exempted or marked as verified."""
+        answer = "我用 Redis 实现了多级缓存。"
+        res = self.engine.analyze_question(
+            question="请介绍缓存方案",
+            answer=answer,
+            fact_guard=self.fact_guard
+        )
+        self.assertEqual(res.diagnosis, QuestionDiagnosis.METRIC_DRIFT)
+        self.assertNotEqual(res.verification_status, "verified")
+        self.assertNotEqual(res.verification_status, "verified_with_tech_context")
+        self.assertEqual(res.verification_status, "tech_unverified")
+        self.assertIn("Redis", res.analysis_zh)
+        self.assertIn("缺少底稿依据", res.analysis_zh)
+
+    # ----------------------------------------------------------------------
+    # R4-03: Conservative revision no unsupported attribution or lead or presumption
+    # ----------------------------------------------------------------------
+    def test_r4_03_conservative_revision_no_unsupported_attribution_or_lead_or_presumption(self):
+        """Conservative revision must state '未提供基线数据', moderate lead verbs, and drop unsupported attribution/direction."""
+        answer = "我主导了查询接口重构，从而使得访问速度提升了 50%。"
+        unverified = [{"claimed_metric": "50%"}]
+        drifts = []
+        revised = self.engine._create_conservative_revision(
+            answer, drifts, unverified, fact_guard=self.fact_guard
+        )
+
+        self.assertNotIn("50%", revised)
+        self.assertIn("未提供基线数据", revised)
+        self.assertNotIn("没有压测数据", revised)
+        self.assertNotIn("缺乏基线压测数据", revised)
+        self.assertNotIn("提升了", revised)
+        self.assertNotIn("从而使得", revised)
+        self.assertNotIn("我主导", revised)
+        self.assertIn("负责", revised)
+        self.assertIn("查询接口重构", revised)
+        self.assertIn("访问速度", revised)
 
 
 if __name__ == "__main__":

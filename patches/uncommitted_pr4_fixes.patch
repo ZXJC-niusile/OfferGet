@@ -1,0 +1,2139 @@
+diff --git a/core/fact_guard.py b/core/fact_guard.py
+index 1b1b02c..359a05a 100644
+--- a/core/fact_guard.py
++++ b/core/fact_guard.py
+@@ -159,6 +159,12 @@ class FactVerificationGuard:
+         self.baseline_anchors: List[Dict[str, Any]] = []
+         self.all_verified_numbers: Set[float] = set()
+         self.profile_all_text: str = ""
++        self._experience_texts: List[str] = []
++        self._project_texts: List[str] = []
++        self._scope_to_text: Dict[str, str] = {}
++        self._claim_id_to_scope: Dict[str, str] = {}
++        self._company_to_exp_idx: Dict[str, int] = {}
++        self._project_name_to_proj_idx: Dict[str, int] = {}
+ 
+         if master_profile is not None:
+             self.load_profile(master_profile)
+@@ -232,6 +238,12 @@ class FactVerificationGuard:
+         self.baseline_anchors = []
+         self.all_verified_numbers = set()
+         self.profile_all_text = self._extract_all_profile_text().lower()
++        self._experience_texts = []
++        self._project_texts = []
++        self._scope_to_text = {}
++        self._claim_id_to_scope = {}
++        self._company_to_exp_idx = {}
++        self._project_name_to_proj_idx = {}
+ 
+         if not self.master_profile:
+             return
+@@ -263,11 +275,15 @@ class FactVerificationGuard:
+ 
+         # 2. Narrative summaries
+         narrative = norm_profile.get("narrative", {})
++        narrative_texts: List[str] = []
+         if isinstance(narrative, dict):
+             for text_key in ["summary_zh", "summary_en"]:
+                 text = narrative.get(text_key, "")
+                 if text:
++                    narrative_texts.append(text)
+                     self._extract_and_index_text_metrics(text, f"narrative:{text_key}")
++        if narrative_texts:
++            self._scope_to_text["narrative"] = " ".join(narrative_texts)
+ 
+         # 3. Experience Highlights & Verified Metrics
+         exp_list = norm_profile.get("experience")
+@@ -283,6 +299,11 @@ class FactVerificationGuard:
+             role = exp.get("role") or ""
+             base_kw = self._extract_keywords(f"{company} {role}")
+ 
++            if company:
++                self._company_to_exp_idx[company.lower()] = exp_idx
++
++            exp_text_parts = [company, role]
++
+             for h in exp.get("highlights", []):
+                 if not isinstance(h, dict):
+                     continue
+@@ -291,6 +312,12 @@ class FactVerificationGuard:
+                 claim_en = h.get("claim_en", "")
+                 verified_metrics = h.get("verified_metrics", {})
+ 
++                self._claim_id_to_scope[claim_id] = f"experience[{exp_idx}]"
++                if claim_zh:
++                    exp_text_parts.append(claim_zh)
++                if claim_en:
++                    exp_text_parts.append(claim_en)
++
+                 context_words = base_kw | self._extract_keywords(f"{claim_zh} {claim_en}")
+ 
+                 # Index explicit verified_metrics dict
+@@ -305,16 +332,30 @@ class FactVerificationGuard:
+ 
+             for b_idx, b in enumerate(exp.get("bullets", [])):
+                 b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
++                b_cid = f"experience[{exp_idx}].bullets[{b_idx}]"
++                self._claim_id_to_scope[b_cid] = f"experience[{exp_idx}]"
+                 if b_text:
++                    exp_text_parts.append(b_text)
+                     b_kw = base_kw | self._extract_keywords(b_text)
+-                    self._extract_and_index_text_metrics(b_text, f"experience[{exp_idx}].bullets[{b_idx}]", b_kw)
++                    self._extract_and_index_text_metrics(b_text, b_cid, b_kw)
++
++            exp_full_text = " ".join(t for t in exp_text_parts if t)
++            self._experience_texts.append(exp_full_text)
++            self._scope_to_text[f"experience[{exp_idx}]"] = exp_full_text
++            if company:
++                self._scope_to_text[company.lower()] = exp_full_text
+ 
+         # 4. Projects
+         for p_idx, proj in enumerate(norm_profile.get("projects", [])):
+             if not isinstance(proj, dict):
+                 continue
+             proj_name = proj.get("name", "Project")
++            proj_role = proj.get("role", "")
+             p_kw = self._extract_keywords(proj_name)
++            if proj_name:
++                self._project_name_to_proj_idx[proj_name.lower()] = p_idx
++
++            p_text_parts = [proj_name, proj_role]
+ 
+             stars = proj.get("stars")
+             if stars is not None:
+@@ -333,23 +374,76 @@ class FactVerificationGuard:
+                 except (ValueError, TypeError):
+                     pass
+ 
+-            for desc_k in ["description_zh", "description_en"]:
++            for desc_k in ["description", "description_zh", "description_en"]:
+                 d_text = proj.get(desc_k, "")
+                 if d_text:
++                    p_text_parts.append(d_text)
+                     self._extract_and_index_text_metrics(d_text, f"{proj_name}:{desc_k}", p_kw)
+ 
+             for b_idx, b in enumerate(proj.get("bullets", [])):
+                 b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
++                b_cid = f"projects[{p_idx}].bullets[{b_idx}]"
++                self._claim_id_to_scope[b_cid] = f"projects[{p_idx}]"
+                 if b_text:
+-                    self._extract_and_index_text_metrics(b_text, f"projects[{p_idx}].bullets[{b_idx}]", p_kw | self._extract_keywords(b_text))
+-
+-        # 5. Publications
++                    p_text_parts.append(b_text)
++                    self._extract_and_index_text_metrics(b_text, b_cid, p_kw | self._extract_keywords(b_text))
++
++            proj_full_text = " ".join(t for t in p_text_parts if t)
++            self._project_texts.append(proj_full_text)
++            self._scope_to_text[f"projects[{p_idx}]"] = proj_full_text
++            if proj_name:
++                self._scope_to_text[proj_name.lower()] = proj_full_text
++
++        # 5. Competencies & Skills
++        comp_text_parts: List[str] = []
++        comp = norm_profile.get("competencies")
++        if isinstance(comp, dict):
++            for k, v in comp.items():
++                if isinstance(v, list):
++                    comp_text_parts.extend(str(item) for item in v)
++                elif v:
++                    comp_text_parts.append(str(v))
++        sk = norm_profile.get("skills")
++        if isinstance(sk, list):
++            comp_text_parts.extend(str(item) for item in sk)
++        elif isinstance(sk, dict):
++            for k, v in sk.items():
++                if isinstance(v, list):
++                    comp_text_parts.extend(str(item) for item in v)
++                elif v:
++                    comp_text_parts.append(str(v))
++        comp_full_text = " ".join(comp_text_parts)
++        self._scope_to_text["competencies"] = comp_full_text
++        self._scope_to_text["skills"] = comp_full_text
++
++        # Map claims from evidence_index if available
++        if self.evidence_index:
++            for c in self.evidence_index.claims:
++                if c.claim_id:
++                    if c.source_path.startswith("experience["):
++                        m_idx = re.search(r"experience\[(\d+)\]", c.source_path)
++                        if m_idx:
++                            exp_scope_key = f"experience[{m_idx.group(1)}]"
++                            self._claim_id_to_scope[c.claim_id] = exp_scope_key
++                            if exp_scope_key in self._scope_to_text and c.text not in self._scope_to_text[exp_scope_key]:
++                                self._scope_to_text[exp_scope_key] += " " + c.text
++                    elif c.source_path.startswith("projects["):
++                        m_idx = re.search(r"projects\[(\d+)\]", c.source_path)
++                        if m_idx:
++                            proj_scope_key = f"projects[{m_idx.group(1)}]"
++                            self._claim_id_to_scope[c.claim_id] = proj_scope_key
++                            if proj_scope_key in self._scope_to_text and c.text not in self._scope_to_text[proj_scope_key]:
++                                self._scope_to_text[proj_scope_key] += " " + c.text
++                    elif c.source_path.startswith("competencies") or c.source_path.startswith("skills"):
++                        self._claim_id_to_scope[c.claim_id] = "competencies"
++
++        # 6. Publications
+         for pub in norm_profile.get("publications", []):
+             if isinstance(pub, dict):
+                 p_text = f"{pub.get('title', '')} {pub.get('highlight', '')}"
+                 self._extract_and_index_text_metrics(p_text, "publications")
+ 
+-        # 6. Constraints / Compute Floor
++        # 7. Constraints / Compute Floor
+         constraints = self.master_profile.get("constraints_and_assumptions", {}) or norm_profile.get("constraints_and_assumptions", {})
+ 
+         if isinstance(constraints, dict):
+@@ -655,8 +749,221 @@ class FactVerificationGuard:
+         return MetricPatternRegistry.extract_raw_metrics(text)
+ 
+ 
++    def _resolve_scope_key(
++        self,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++    ) -> Optional[str]:
++        """Resolves target_scope or target_claim_id to a canonical scope key (e.g. 'experience[0]', 'projects[1]')."""
++        if target_scope is not None:
++            if isinstance(target_scope, int):
++                return f"experience[{target_scope}]"
++            if isinstance(target_scope, str):
++                ts = target_scope.strip()
++                m_exp = re.match(r"^experience\[(\d+)\]", ts)
++                m_proj = re.match(r"^projects\[(\d+)\]", ts)
++                if m_exp:
++                    return f"experience[{m_exp.group(1)}]"
++                if m_proj:
++                    return f"projects[{m_proj.group(1)}]"
++                if ts.lower() in self._company_to_exp_idx:
++                    return f"experience[{self._company_to_exp_idx[ts.lower()]}]"
++                if ts.lower() in self._project_name_to_proj_idx:
++                    return f"projects[{self._project_name_to_proj_idx[ts.lower()]}]"
++                if ts in self._claim_id_to_scope:
++                    return self._claim_id_to_scope[ts]
++            elif isinstance(target_scope, dict):
++                sub_scope = target_scope.get("target_scope")
++                if sub_scope:
++                    return self._resolve_scope_key(sub_scope, target_claim_id)
++                sp = target_scope.get("source_path", "")
++                m_exp = re.search(r"experience\[(\d+)\]", sp)
++                m_proj = re.search(r"projects\[(\d+)\]", sp)
++                if m_exp:
++                    return f"experience[{m_exp.group(1)}]"
++                if m_proj:
++                    return f"projects[{m_proj.group(1)}]"
++                comp = target_scope.get("company") or target_scope.get("org")
++                if comp and comp.lower() in self._company_to_exp_idx:
++                    return f"experience[{self._company_to_exp_idx[comp.lower()]}]"
++                pname = target_scope.get("name")
++                if pname and pname.lower() in self._project_name_to_proj_idx:
++                    return f"projects[{self._project_name_to_proj_idx[pname.lower()]}]"
++                cid = target_scope.get("claim_id")
++                if cid and cid in self._claim_id_to_scope:
++                    return self._claim_id_to_scope[cid]
++
++        if target_claim_id and target_claim_id in self._claim_id_to_scope:
++            return self._claim_id_to_scope[target_claim_id]
++
++        return None
++
++    def _resolve_scope_text(
++        self,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
++    ) -> Optional[str]:
++        """
++        Resolves the textual scope for fact verification.
++        Returns None if no scope restriction is specified (signaling global fallback).
++        Returns the resolved scope text (which may be empty) when a scope is specified.
++        """
++        if target_scope is None and target_claim_id is None and target_excerpt is None:
++            return None
++
++        scope_key = self._resolve_scope_key(target_scope, target_claim_id)
++        extra_texts: List[str] = []
++
++        if target_excerpt:
++            extra_texts.append(target_excerpt)
++
++        # Handle dict target_scope extra info
++        if isinstance(target_scope, dict):
++            exc = target_scope.get("excerpt", "")
++            if exc:
++                extra_texts.append(exc)
++            if not target_claim_id and target_scope.get("claim_id"):
++                target_claim_id = target_scope.get("claim_id")
++
++        # Resolve from target_claim_id if scope_key still not found
++        if not scope_key and target_claim_id:
++            if self.evidence_index and target_claim_id in self.evidence_index.claim_by_id:
++                c = self.evidence_index.claim_by_id[target_claim_id]
++                extra_texts.append(c.text)
++                if c.source_path.startswith("experience["):
++                    m = re.search(r"experience\[(\d+)\]", c.source_path)
++                    if m:
++                        scope_key = f"experience[{m.group(1)}]"
++                elif c.source_path.startswith("projects["):
++                    m = re.search(r"projects\[(\d+)\]", c.source_path)
++                    if m:
++                        scope_key = f"projects[{m.group(1)}]"
++
++        # Resolve from target_excerpt if scope_key still not found
++        if not scope_key and target_excerpt and self.evidence_index:
++            for c in self.evidence_index.claims:
++                if target_excerpt in c.text or c.text in target_excerpt:
++                    if c.source_path.startswith("experience["):
++                        m = re.search(r"experience\[(\d+)\]", c.source_path)
++                        if m:
++                            scope_key = f"experience[{m.group(1)}]"
++                            break
++                    elif c.source_path.startswith("projects["):
++                        m = re.search(r"projects\[(\d+)\]", c.source_path)
++                        if m:
++                            scope_key = f"projects[{m.group(1)}]"
++                            break
++
++        # Fallback if target_scope was a raw descriptive string not matching any key
++        if not scope_key and isinstance(target_scope, str) and target_scope:
++            if target_scope not in extra_texts:
++                extra_texts.append(target_scope)
++
++        scoped_parts: List[str] = []
++        if scope_key and scope_key in self._scope_to_text:
++            scoped_parts.append(self._scope_to_text[scope_key])
++
++        scoped_parts.extend(extra_texts)
++
++        return " ".join(scoped_parts)
++
++    def _is_term_negated_or_planned(self, term: str, text: str) -> bool:
++        """
++        Checks whether all occurrences of a term in text appear within
++        negation or planning/hypothetical contexts.
++        Returns True if the term ONLY appears in negated/planned contexts.
++        Returns False if there is at least one positive, non-negated, non-planned occurrence.
++        """
++        if not text or not term:
++            return False
++
++        term_lower = term.lower()
++        text_lower = text.lower()
++
++        # Find all occurrences of term in text_lower
++        matches: List[Tuple[int, int]] = []
++        if re.search(r"^[a-z0-9_+#.-]+$", term_lower):
++            for m in re.finditer(r"(?<![a-z0-9_])" + re.escape(term_lower) + r"(?![a-z0-9_])", text_lower):
++                matches.append((m.start(), m.end()))
++            if not matches and term_lower.startswith("c++"):
++                idx = 0
++                while True:
++                    found = text_lower.find("c++", idx)
++                    if found == -1:
++                        break
++                    matches.append((found, found + 3))
++                    idx = found + 3
++        else:
++            idx = 0
++            while True:
++                found = text_lower.find(term_lower, idx)
++                if found == -1:
++                    break
++                matches.append((found, found + len(term_lower)))
++                idx = found + len(term_lower)
++
++        if not matches:
++            return False
++
++        neg_prefixes = [
++            r"(?:未|并未|未曾|不|没有|未能|放弃|放弃了|暂未|尚未|未考虑|未引入|未采用|未使用|不涉及)\s*$",
++            r"(?:not|did\s+not|didn't|never|abandoned|without)\s+(?:use|using|adopt|adopting)?\s*$",
++        ]
++        neg_suffixes = [
++            r"^\s*(?:[，,]?\s*(?:但|却|最终|经过评估)?(?:未|并未|没有|放弃)(?:采用|引入|使用|落地|上线|实现|通过|支持))",
++            r"^\s*(?:但|却|并未|并无|并没)?(?:未采用|未引入|未使用|未落地|未上线|未考虑|未实现|未涉及|放弃|未通过|暂未|尚未)",
++        ]
++        plan_prefixes = [
++            r"(?:计划|拟|规划|预计|待|后续计划|未来计划|计划后续|拟在|拟于|后续拟|下一阶段计划)(?:采用|引入|使用|落地|上线|实现)?\s*$",
++            r"(?:plan|planned|planning|intend|intended|intending)\s+to\s+(?:use|adopt)?\s*$",
++        ]
++        plan_suffixes = [
++            r"^\s*(?:仍在调研中|待调研|待引入|待采用|待评估|后续评估)",
++        ]
++
++        has_positive = False
++
++        for start, end in matches:
++            window_before = text_lower[max(0, start - 40):start]
++            window_after = text_lower[end:min(len(text_lower), end + 40)]
++            window_full = text_lower[max(0, start - 40):min(len(text_lower), end + 40)]
++
++            is_neg_or_plan = False
++
++            # Check prefixes
++            for pat in neg_prefixes + plan_prefixes:
++                if re.search(pat, window_before):
++                    is_neg_or_plan = True
++                    break
++
++            # Check suffixes
++            if not is_neg_or_plan:
++                for pat in neg_suffixes + plan_suffixes:
++                    if re.search(pat, window_after):
++                        is_neg_or_plan = True
++                        break
++
++            # Check full window complex patterns
++            if not is_neg_or_plan:
++                if re.search(r"调研(?:了)?\s*" + re.escape(term_lower) + r"\s*[，,]?\s*(?:但|却|最终)?(?:未|并未|没有|放弃)(?:采用|引入|使用)", window_full):
++                    is_neg_or_plan = True
++                elif re.search(r"(?:对|针对)\s*" + re.escape(term_lower) + r"\s*(?:进行调研|进行了调研|做调研)[，,]?\s*(?:但|却)?(?:未|没有|并未)(?:采用|引入|使用)", window_full):
++                    is_neg_or_plan = True
++
++            if not is_neg_or_plan:
++                has_positive = True
++                break
++
++        return not has_positive
++
+     def verify_facts(
+-        self, tailored_text_or_dict: Union[str, dict, list], master_profile: Optional[dict] = None
++        self,
++        tailored_text_or_dict: Union[str, dict, list],
++        master_profile: Optional[dict] = None,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
+     ) -> dict:
+         """
+         Inspects tailored resume bullets or text against master profile.
+@@ -676,18 +983,143 @@ class FactVerificationGuard:
+         if not self.master_profile:
+             raise ValueError("Master profile is required for fact verification.")
+ 
+-        bullets = self._extract_bullets(tailored_text_or_dict)
+-
+         drifts: List[Dict[str, Any]] = []
+         unverified_claims: List[Dict[str, Any]] = []
+         verified_bullets: List[str] = []
++        total_bullets = 0
++
++        # Structured dict input handling (when target_scope is not explicitly overriding)
++        if (
++            isinstance(tailored_text_or_dict, dict)
++            and target_scope is None
++            and target_claim_id is None
++            and target_excerpt is None
++            and ("experience" in tailored_text_or_dict or "projects" in tailored_text_or_dict)
++        ):
++            for exp_idx, exp in enumerate(tailored_text_or_dict.get("experience", [])):
++                if not isinstance(exp, dict):
++                    continue
++                exp_scope = f"experience[{exp_idx}]"
++                company = exp.get("company") or exp.get("org")
++                if company and company.lower() in self._company_to_exp_idx:
++                    exp_scope = f"experience[{self._company_to_exp_idx[company.lower()]}]"
++
++                exp_bullets: List[Tuple[str, Optional[str]]] = []
++                for h in exp.get("highlights", []):
++                    if isinstance(h, dict):
++                        if h.get("claim_zh"):
++                            exp_bullets.append((h["claim_zh"], h.get("claim_id")))
++                        if h.get("claim_en"):
++                            exp_bullets.append((h["claim_en"], h.get("claim_id")))
++                    elif isinstance(h, str):
++                        exp_bullets.append((h, None))
++                for b in exp.get("bullets", []):
++                    b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
++                    if b_text:
++                        exp_bullets.append((b_text, None))
++
++                for b_text, cid in exp_bullets:
++                    b_clean = b_text.strip()
++                    if not b_clean:
++                        continue
++                    total_bullets += 1
++                    b_drifts, b_unverified = self._verify_single_bullet(
++                        b_clean,
++                        target_scope=exp_scope,
++                        target_claim_id=cid,
++                    )
++                    if b_drifts:
++                        drifts.extend(b_drifts)
++                    if b_unverified:
++                        unverified_claims.extend(b_unverified)
++                    if not b_drifts and not b_unverified:
++                        verified_bullets.append(b_clean)
++
++            for p_idx, proj in enumerate(tailored_text_or_dict.get("projects", [])):
++                if not isinstance(proj, dict):
++                    continue
++                proj_scope = f"projects[{p_idx}]"
++                p_name = proj.get("name")
++                if p_name and p_name.lower() in self._project_name_to_proj_idx:
++                    proj_scope = f"projects[{self._project_name_to_proj_idx[p_name.lower()]}]"
++
++                p_bullets: List[str] = []
++                for k in ["description_zh", "description_en", "description"]:
++                    if proj.get(k):
++                        p_bullets.append(proj[k])
++                for b in proj.get("bullets", []):
++                    b_text = b.get("text") or b.get("claim_zh") if isinstance(b, dict) else str(b)
++                    if b_text:
++                        p_bullets.append(b_text)
++
++                for b_text in p_bullets:
++                    b_clean = b_text.strip()
++                    if not b_clean:
++                        continue
++                    total_bullets += 1
++                    b_drifts, b_unverified = self._verify_single_bullet(
++                        b_clean,
++                        target_scope=proj_scope,
++                    )
++                    if b_drifts:
++                        drifts.extend(b_drifts)
++                    if b_unverified:
++                        unverified_claims.extend(b_unverified)
++                    if not b_drifts and not b_unverified:
++                        verified_bullets.append(b_clean)
++
++            narrative = tailored_text_or_dict.get("narrative", {})
++            if isinstance(narrative, dict):
++                for k in ["summary_zh", "summary_en"]:
++                    if narrative.get(k):
++                        total_bullets += 1
++                        b_clean = narrative[k].strip()
++                        b_drifts, b_unverified = self._verify_single_bullet(
++                            b_clean,
++                            target_scope="narrative",
++                        )
++                        if b_drifts:
++                            drifts.extend(b_drifts)
++                        if b_unverified:
++                            unverified_claims.extend(b_unverified)
++                        if not b_drifts and not b_unverified:
++                            verified_bullets.append(b_clean)
++
++            passed = (len(drifts) == 0 and len(unverified_claims) == 0)
++            verdict = "FACT_CHECK_PASSED" if passed else "FACT_DRIFT_DETECTED"
++            score = 100.0
++            if not passed:
++                penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0
++                score = max(0.0, round(100.0 - penalty, 1))
++
++            return {
++                "passed": passed,
++                "score": score,
++                "drifts": drifts,
++                "unverified_claims": unverified_claims,
++                "verified_bullets": verified_bullets,
++                "verdict": verdict,
++                "summary": {
++                    "total_bullets_checked": total_bullets,
++                    "verified_bullets_count": len(verified_bullets),
++                    "drift_count": len(drifts),
++                    "unverified_claims_count": len(unverified_claims)
++                }
++            }
++
++        bullets = self._extract_bullets(tailored_text_or_dict)
+ 
+         for bullet in bullets:
+             bullet_clean = bullet.strip()
+             if not bullet_clean:
+                 continue
+ 
+-            bullet_drifts, bullet_unverified = self._verify_single_bullet(bullet_clean)
++            bullet_drifts, bullet_unverified = self._verify_single_bullet(
++                bullet_clean,
++                target_scope=target_scope,
++                target_claim_id=target_claim_id,
++                target_excerpt=target_excerpt,
++            )
+ 
+             if bullet_drifts:
+                 drifts.extend(bullet_drifts)
+@@ -720,8 +1152,60 @@ class FactVerificationGuard:
+             }
+         }
+ 
++    def verify_bullet(
++        self,
++        bullet: str,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
++    ) -> Dict[str, Any]:
++        """
++        Verifies a single bullet point with optional scope restriction.
++
++        Args:
++            bullet: The bullet point text to verify.
++            target_scope: Scope identifier (e.g. 'experience[0]', 'projects[1]', company name, project name, or dict).
++            target_claim_id: Target claim ID (e.g. 'EXP-0', 'experience[0].bullets[0]').
++            target_excerpt: Target excerpt from profile baseline.
++
++        Returns:
++            dict containing:
++              - passed: bool
++              - score: float
++              - drifts: list of metric drifts
++              - unverified_claims: list of ungrounded metrics or tech/method claims
++              - bullet: str
++              - verdict: 'FACT_CHECK_PASSED' or 'FACT_DRIFT_DETECTED'
++        """
++        bullet_clean = bullet.strip()
++        drifts, unverified = self._verify_single_bullet(
++            bullet_clean,
++            target_scope=target_scope,
++            target_claim_id=target_claim_id,
++            target_excerpt=target_excerpt,
++        )
++        passed = (len(drifts) == 0 and len(unverified) == 0)
++        verdict = "FACT_CHECK_PASSED" if passed else "FACT_DRIFT_DETECTED"
++        score = 100.0
++        if not passed:
++            penalty = len(drifts) * 25.0 + len(unverified) * 15.0
++            score = max(0.0, round(100.0 - penalty, 1))
++
++        return {
++            "passed": passed,
++            "score": score,
++            "drifts": drifts,
++            "unverified_claims": unverified,
++            "bullet": bullet_clean,
++            "verdict": verdict,
++        }
++
+     def _verify_single_bullet(
+-        self, bullet: str
++        self,
++        bullet: str,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
+     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+         """Verifies all numerical assertions and tech/method grounding in a single bullet point against SSOT baseline."""
+         bullet_drifts: List[Dict[str, Any]] = []
+@@ -734,7 +1218,13 @@ class FactVerificationGuard:
+             raw_str = met["raw"]
+             met_type = met.get("type", "")
+ 
+-            anchor = self._find_matching_anchor(met, bullet)
++            anchor = self._find_matching_anchor(
++                met,
++                bullet,
++                target_scope=target_scope,
++                target_claim_id=target_claim_id,
++                target_excerpt=target_excerpt,
++            )
+ 
+             if anchor is not None:
+                 is_drift, baseline_str = self._check_metric_drift(met, anchor)
+@@ -754,7 +1244,12 @@ class FactVerificationGuard:
+                 })
+ 
+         # 2. Non-metric tech & method grounding verification
+-        tech_method_drifts = self._verify_tech_and_method_grounding(bullet)
++        tech_method_drifts = self._verify_tech_and_method_grounding(
++            bullet,
++            target_scope=target_scope,
++            target_claim_id=target_claim_id,
++            target_excerpt=target_excerpt,
++        )
+         if tech_method_drifts:
+             bullet_unverified.extend(tech_method_drifts)
+ 
+@@ -810,44 +1305,78 @@ class FactVerificationGuard:
+ 
+         return deduped
+ 
+-    def _is_term_grounded(self, term: str) -> bool:
++    def _is_term_grounded(
++        self,
++        term: str,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
++        scope_text: Optional[str] = None,
++    ) -> bool:
+         """
+         Checks if a technology or method term is grounded in candidate SSOT profile.
++        When target_scope, target_claim_id, target_excerpt, or scope_text is provided,
++        verification is strictly restricted to that scope.
++        When no scope is specified, falls back to global profile_all_text.
++        Negated or planned-only terms are rejected.
+         """
+         if not self.master_profile:
+             return False
+ 
+-        profile_text = getattr(self, "profile_all_text", "")
++        if scope_text is not None:
++            profile_text = scope_text.lower()
++        elif target_scope is not None or target_claim_id is not None or target_excerpt is not None:
++            resolved = self._resolve_scope_text(target_scope, target_claim_id, target_excerpt)
++            profile_text = (resolved or "").lower()
++        else:
++            profile_text = getattr(self, "profile_all_text", "")
++
+         if not profile_text:
+             return False
+ 
+         term_lower = term.lower()
++        matched = False
+ 
+         # 1. Check via AliasRegistry
+         canonical = AliasRegistry.get_canonical(term_lower)
+         aliases = AliasRegistry.get_aliases(canonical) | {canonical, term_lower}
+         for a in aliases:
+             if re.search(r"(?<![a-z0-9_])" + re.escape(a) + r"(?![a-z0-9_])", profile_text):
+-                return True
++                matched = True
++                break
+             if re.search(r"[\u4e00-\u9fa5]", a) and a in profile_text:
+-                return True
++                matched = True
++                break
+ 
+         # 2. Check general word boundary for English/alphanumeric terms
+-        if re.search(r"^[a-z0-9_+#.-]+$", term_lower):
+-            if re.search(r"(?<![a-z0-9_])" + re.escape(term_lower) + r"(?![a-z0-9_])", profile_text):
+-                return True
+-            if term_lower.startswith("c++"):
+-                if "c++" in profile_text:
+-                    return True
++        if not matched:
++            if re.search(r"^[a-z0-9_+#.-]+$", term_lower):
++                if re.search(r"(?<![a-z0-9_])" + re.escape(term_lower) + r"(?![a-z0-9_])", profile_text):
++                    matched = True
++                elif term_lower.startswith("c++") and "c++" in profile_text:
++                    matched = True
+ 
+         # 3. Check substring for Chinese terms
+-        if re.search(r"[\u4e00-\u9fa5]", term_lower):
+-            if term_lower in profile_text:
+-                return True
++        if not matched:
++            if re.search(r"[\u4e00-\u9fa5]", term_lower) and term_lower in profile_text:
++                matched = True
++
++        if not matched:
++            return False
+ 
+-        return False
++        # 4. Ensure term is not purely in a negated or planning/hypothetical context
++        if self._is_term_negated_or_planned(term_lower, profile_text):
++            return False
++
++        return True
+ 
+-    def _verify_tech_and_method_grounding(self, bullet: str) -> List[Dict[str, Any]]:
++    def _verify_tech_and_method_grounding(
++        self,
++        bullet: str,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
++    ) -> List[Dict[str, Any]]:
+         """
+         Extracts technology and method terms from bullet and verifies they exist in SSOT profile.
+         Returns a list of ungrounded tech/method claims.
+@@ -856,7 +1385,12 @@ class FactVerificationGuard:
+         extracted_terms = self._extract_tech_and_method_terms(bullet)
+ 
+         for term in extracted_terms:
+-            if not self._is_term_grounded(term):
++            if not self._is_term_grounded(
++                term,
++                target_scope=target_scope,
++                target_claim_id=target_claim_id,
++                target_excerpt=target_excerpt,
++            ):
+                 ungrounded.append({
+                     "bullet": bullet,
+                     "claimed_metric": term,
+@@ -867,16 +1401,25 @@ class FactVerificationGuard:
+         return ungrounded
+ 
+     def _find_matching_anchor(
+-        self, metric: Dict[str, Any], bullet_text: str
++        self,
++        metric: Dict[str, Any],
++        bullet_text: str,
++        target_scope: Optional[Union[str, dict, int]] = None,
++        target_claim_id: Optional[str] = None,
++        target_excerpt: Optional[str] = None,
+     ) -> Optional[Dict[str, Any]]:
+         """
+         Finds the corresponding SSOT anchor for a metric using local window context and type checking.
++        When target_scope or target_claim_id is provided, restricts anchors to the specified scope.
+         """
+         met_type = metric.get("type", "")
+         allowed_topics = METRIC_TYPE_TO_TOPICS.get(met_type, set())
+         if not allowed_topics:
+             return None
+ 
++        # Resolve scope_key if provided
++        scope_key = self._resolve_scope_key(target_scope, target_claim_id)
++
+         # Extract local context around metric
+         start = metric.get("start", 0)
+         end = metric.get("end", len(bullet_text))
+@@ -899,6 +1442,36 @@ class FactVerificationGuard:
+             if topic not in allowed_topics:
+                 continue
+ 
++            # Scope filtering: if scope_key is set, restrict non-candidate anchors to that scope
++            if scope_key:
++                anchor_id = anchor.get("anchor_id", "")
++                is_cand = (
++                    anchor_id.startswith("candidate:")
++                    or anchor_id.startswith("constraints:")
++                    or anchor.get("topic") == "experience_years"
++                )
++                if not is_cand:
++                    if scope_key.startswith("experience["):
++                        m_exp = re.search(r"experience\[(\d+)\]", scope_key)
++                        if m_exp:
++                            exp_idx = m_exp.group(1)
++                            exp_patterns = [f"experience[{exp_idx}]", f"EXP-{exp_idx}"]
++                            if not any(p in anchor_id for p in exp_patterns):
++                                continue
++                    elif scope_key.startswith("projects["):
++                        m_proj = re.search(r"projects\[(\d+)\]", scope_key)
++                        if m_proj:
++                            p_idx = int(m_proj.group(1))
++                            p_patterns = [f"projects[{p_idx}]"]
++                            if self.master_profile and "projects" in self.master_profile:
++                                projs = self.master_profile["projects"]
++                                if 0 <= p_idx < len(projs) and isinstance(projs[p_idx], dict):
++                                    p_name = projs[p_idx].get("name")
++                                    if p_name:
++                                        p_patterns.append(p_name)
++                            if not any(p in anchor_id for p in p_patterns):
++                                continue
++
+             score = 1  # Base score for matching type
+ 
+             # Keyword matching in local window and full bullet
+@@ -1093,7 +1666,11 @@ class FactVerificationGuard:
+ # ---------------------------------------------------------------------------
+ 
+ def verify_resume_facts(
+-    tailored_text_or_dict: Union[str, dict, list], master_profile: Union[dict, str, Path]
++    tailored_text_or_dict: Union[str, dict, list],
++    master_profile: Union[dict, str, Path],
++    target_scope: Optional[Union[str, dict, int]] = None,
++    target_claim_id: Optional[str] = None,
++    target_excerpt: Optional[str] = None,
+ ) -> dict:
+     """
+     Convenience function to verify tailored resume bullets against SSOT master profile.
+@@ -1101,9 +1678,17 @@ def verify_resume_facts(
+     Args:
+         tailored_text_or_dict: Resume text, list of bullets, or resume profile dictionary.
+         master_profile: SSOT candidate_profile.json dictionary or filepath.
++        target_scope: Optional scope restriction (e.g. 'experience[0]', 'projects[1]').
++        target_claim_id: Optional target claim ID.
++        target_excerpt: Optional target excerpt.
+ 
+     Returns:
+         dict with verification report: passed, score, drifts, unverified_claims, verified_bullets, verdict.
+     """
+     guard = FactVerificationGuard(master_profile)
+-    return guard.verify_facts(tailored_text_or_dict)
++    return guard.verify_facts(
++        tailored_text_or_dict,
++        target_scope=target_scope,
++        target_claim_id=target_claim_id,
++        target_excerpt=target_excerpt,
++    )
+diff --git a/core/interview_debrief.py b/core/interview_debrief.py
+index 515c5f3..2cac93b 100644
+--- a/core/interview_debrief.py
++++ b/core/interview_debrief.py
+@@ -77,11 +77,83 @@ class InterviewDebriefEngine:
+     Analyzes interview questions/answers and generates actionable feedback loops.
+     """
+ 
++    @staticmethod
++    def _is_tech_in_negative_context(text: str, tech_term: str) -> bool:
++        """
++        Checks whether all occurrences of a technology term in the text appear in
++        negative/boundary contexts (e.g., '没用过 Redis', '未主导过 Redis', '对 Redis 不太了解').
++        Returns True if the term is ONLY mentioned negatively (or not found),
++        Returns False if there is at least one affirmative usage of the term (e.g. '用 Redis 实现').
++        """
++        if not text or not tech_term:
++            return False
++
++        if re.search(r"[\u4e00-\u9fa5]", tech_term):
++            term_pattern = re.compile(re.escape(tech_term), re.IGNORECASE)
++        else:
++            term_pattern = re.compile(r"(?<![a-z0-9_])" + re.escape(tech_term) + r"(?![a-z0-9_])", re.IGNORECASE)
++
++        matches = list(term_pattern.finditer(text))
++        if not matches:
++            return True
++
++        delims = r"[，。；！？,.;!?\n]"
++        for m in matches:
++            start, end = m.start(), m.end()
++            prev_text = text[:start]
++            next_text = text[end:]
++
++            last_delim = -1
++            for dm in re.finditer(delims, prev_text):
++                last_delim = dm.end()
++            clause_start = last_delim if last_delim != -1 else 0
++
++            next_m = re.search(delims, next_text)
++            clause_end = end + next_m.start() if next_m else len(text)
++
++            clause = text[clause_start:clause_end]
++            term_start_in_clause = start - clause_start
++            term_end_in_clause = end - clause_start
++
++            pre_term = clause[:term_start_in_clause].strip()
++            post_term = clause[term_end_in_clause:].strip()
++
++            pre_neg_pattern = re.compile(
++                r"(?:没(?:有)?(?:实际)?(?:怎么)?|未(?:曾)?(?:实际)?|不(?:太)?|从未|并未|无|缺少|缺乏)\s*"
++                r"(?:在[^，。；;\n]{1,15}?(?:中|环境|里))?\s*"
++                r"(?:用过|使用|接触(?:过)?|做过|主导(?:过)?|了解|涉及|涉猎|熟悉|学过|掌握|落地|配置|搭建|开发|维护)?\s*"
++                r"(?:比如|例如|像)?\s*$",
++                re.IGNORECASE,
++            )
++            post_neg_pattern = re.compile(
++                r"^(?:这块|方面|相关|技术|本身)?\s*(?:在[^，。；;\n]{1,15}?(?:中|环境|里))?\s*(?:我)?\s*(?:之前|平时|暂时)?\s*"
++                r"(?:没做过|未做过|没用过|未使用|没有用过|不了解|不太了解|不太熟悉|不熟悉|接触较少|没有实际做过|未涉猎|未主导过|未涉及|没有经验)",
++                re.IGNORECASE,
++            )
++            en_neg_pattern = re.compile(
++                r"\b(?:never|not|haven't|hasn't|hadn't|didn't|don't|without|no)\s+"
++                r"(?:used?|have\s+used|experienced?|familiar\s+with|worked\s+with)?\s*$",
++                re.IGNORECASE,
++            )
++
++            is_neg = bool(
++                pre_neg_pattern.search(pre_term)
++                or post_neg_pattern.search(post_term)
++                or en_neg_pattern.search(pre_term)
++                or ("对" in pre_term and any(nk in post_term for nk in ("不了解", "不太了解", "不熟悉", "不太熟悉")))
++            )
++
++            if not is_neg:
++                return False
++
++        return True
++
+     def _create_conservative_revision(
+         self,
+         answer: str,
+         drifts: List[Dict[str, Any]],
+         unverified: List[Dict[str, Any]],
++        fact_guard: Optional[Any] = None,
+     ) -> str:
+         """Removes or qualifies ungrounded numbers from candidate answer while preserving supported statements."""
+         revised = answer
+@@ -93,14 +165,19 @@ class InterviewDebriefEngine:
+             claimed = u.get("claimed_metric", "")
+             if claimed:
+                 pattern = re.compile(
+-                    rf"((?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?)\s*{re.escape(str(claimed))}%?",
++                    rf"(?:(?:从而|进而|导致|使得|进而导致|从而使得|带来|进而带来)\s*)*"
++                    rf"((?:[^\s，。；;\n]{{0,10}}?\s*)?)"
++                    rf"(?:大幅|显著|极大)?\s*(?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?\s*"
++                    rf"{re.escape(str(claimed))}%?",
+                     re.IGNORECASE,
+                 )
+                 def _replace_unverified(match):
+-                    verb_part = match.group(1).strip() if match.group(1) else ""
+-                    qualifier = "（具体幅度因缺乏基线压测数据不作主观量化）"
+-                    if verb_part:
+-                        return f"{verb_part}{qualifier}"
++                    noun = match.group(1).strip() if match.group(1) else ""
++                    qualifier = "（具体幅度因未提供基线数据不作主观量化）"
++                    if noun in {"我", "我们", "团队", "本人", "大家"}:
++                        noun = f"{noun}相关指标"
++                    if noun:
++                        return f"{noun}{qualifier}"
+                     return qualifier
+                 revised = pattern.sub(_replace_unverified, revised)
+         for d in drifts:
+@@ -109,6 +186,18 @@ class InterviewDebriefEngine:
+             if claimed and verified:
+                 pattern = re.compile(re.escape(str(claimed)), re.IGNORECASE)
+                 revised = pattern.sub(f"{verified}（已核验基线）", revised)
++
++        # R4-03: Moderate unsupported lead actions (unless verified in profile)
++        profile_has_lead = False
++        if fact_guard is not None:
++            profile_has_lead = "主导" in getattr(fact_guard, "profile_all_text", "")
++        if not profile_has_lead:
++            revised = re.sub(r"由我主导", "由我负责", revised)
++            revised = re.sub(r"我主导了", "我负责了", revised)
++            revised = re.sub(r"我主导", "我负责", revised)
++            revised = re.sub(r"(?<!未)(?<!没)主导了", "负责了", revised)
++            revised = re.sub(r"(?<!未)(?<!没)主导", "负责", revised)
++
+         return revised
+ 
+     def analyze_question(
+@@ -163,7 +252,13 @@ class InterviewDebriefEngine:
+             follow_up_questions.append("该方案在哪些场景会失效？你经历过什么失败并如何修正？")
+ 
+         # Check boundary indicators (ISSUE-05: distinguish pure boundary from multi-claim with metrics)
+-        boundary_markers = ("没做过", "不了解", "不会", "未涉猎", "未主导过", "没有实际做过", "接触较少", "不太了解", "没有这方面经验", "未涉及")
++        boundary_markers = (
++            "没做过", "未做过", "没用过", "未使用", "没有用过", "没有做过",
++            "未接触", "没接触过", "从未用过", "从未接触", "未曾使用", "并未用过",
++            "不了解", "不太了解", "并不了解", "不熟悉", "不太熟悉",
++            "不会", "未涉猎", "未主导过", "未主导", "没有实际做过", "接触较少",
++            "没怎么用过", "没有这方面经验", "未涉及", "未深入", "没有深入",
++        )
+         is_boundary = any(m in answer for m in boundary_markers)
+         is_pure_boundary = is_boundary and not has_metrics
+ 
+@@ -277,19 +372,33 @@ class InterviewDebriefEngine:
+         # Fact Guard verification (ISSUE-05: do not skip when boundary statement exists alongside other claims)
+         if fact_guard is not None and answer.strip():
+             guard_result = fact_guard.verify_facts(answer)
+-            if not guard_result.get("passed", False):
+-                drifts = guard_result.get("drifts", [])
+-                unverified = guard_result.get("unverified_claims", [])
++            drifts = guard_result.get("drifts", [])
++            raw_unverified = guard_result.get("unverified_claims", [])
++
++            # R4-02: Filter out tech_method claims in negative / boundary contexts
++            unverified: List[Dict[str, Any]] = []
++            for u in raw_unverified:
++                if u.get("claim_type") == "tech_method":
++                    term = u.get("claimed_metric", "") or u.get("claimed_fact", "")
++                    if self._is_tech_in_negative_context(answer, term):
++                        continue
++                unverified.append(u)
++
++            has_fact_issues = bool(drifts) or bool(unverified)
++            if has_fact_issues:
+                 diagnosis = QuestionDiagnosis.METRIC_DRIFT
+                 drift_notes = []
+                 for d in drifts:
+                     drift_notes.append(f"声称 {d.get('claimed_metric')}，但底稿基线为 {d.get('verified_baseline')}")
+                 for u in unverified:
+-                    drift_notes.append(f"声称指标 {u.get('claimed_metric')} 缺少底稿依据")
+-                analysis = f"回答中的数字或指标未通过事实核验（{'; '.join(drift_notes)}），易被判定为指标虚标或口径不实。"
+-                coaching = "所有指标必须严格基于底稿真实基线、单位和统计周期；若缺乏严密压测或监控数据，应客观陈述方案本身，不建议主观推定具体提升幅度。"
+-                takeaway = "先核对事实底稿，再回答数字问题。"
+-                refined = self._create_conservative_revision(answer, drifts, unverified)
++                    if u.get("claim_type") == "tech_method":
++                        drift_notes.append(f"声称技术/方法 {u.get('claimed_metric')} 缺少底稿依据")
++                    else:
++                        drift_notes.append(f"声称指标 {u.get('claimed_metric')} 缺少底稿依据")
++                analysis = f"回答中的技术栈或指标未通过事实核验（{'; '.join(drift_notes)}），易被判定为经历存疑或口径不实。"
++                coaching = "回答涉及的技术与指标必须严格基于底稿真实基线与经历；未在底稿中核验的技术栈不建议主观声称具备实际落地经验；若未在底稿中提供严密基线或监控数据，应客观陈述方案本身，不建议主观推定具体提升幅度。"
++                takeaway = "先核对事实底稿，再回答数字与技术经历问题。"
++                refined = self._create_conservative_revision(answer, drifts, unverified, fact_guard=fact_guard)
+                 can_revise = True
+             else:
+                 if not is_pure_boundary and is_relevant:
+@@ -299,19 +408,34 @@ class InterviewDebriefEngine:
+         if fact_guard is not None and refined and refined.strip():
+             rev_guard = fact_guard.verify_facts(refined)
+             if not rev_guard.get("passed", False):
+-                # Tech-method-only failures (e.g., "Redis" in "没做过 Redis") should not
+-                # block the revision — these terms are from the original answer context.
+                 rev_drifts = rev_guard.get("drifts", [])
+-                rev_unverified = rev_guard.get("unverified_claims", [])
++                raw_rev_unverified = rev_guard.get("unverified_claims", [])
++
++                rev_unverified: List[Dict[str, Any]] = []
++                for u in raw_rev_unverified:
++                    if u.get("claim_type") == "tech_method":
++                        term = u.get("claimed_metric", "") or u.get("claimed_fact", "")
++                        if self._is_tech_in_negative_context(refined, term):
++                            continue
++                    rev_unverified.append(u)
++
+                 has_numeric_issues = bool(rev_drifts) or any(
+                     u.get("claim_type") != "tech_method" for u in rev_unverified
+                 )
++                has_affirmative_tech = any(
++                    u.get("claim_type") == "tech_method" for u in rev_unverified
++                )
++
+                 if has_numeric_issues:
+                     refined = ""
+                     can_revise = False
+                     verification_status = "revision_failed_fact_check"
++                elif has_affirmative_tech:
++                    # R4-02: Affirmative unverified tech must NOT be exempted or marked as verified
++                    verification_status = "tech_unverified"
+                 else:
+-                    verification_status = "verified_with_tech_context"
++                    # Only negative tech context remained, which is benign
++                    verification_status = "verified"
+             else:
+                 verification_status = "verified"
+ 
+diff --git a/core/job_flow.py b/core/job_flow.py
+index 70f992a..779ed10 100644
+--- a/core/job_flow.py
++++ b/core/job_flow.py
+@@ -16,7 +16,9 @@ import copy
+ import hashlib
+ import json
+ from pathlib import Path
++import os
+ import re
++import tempfile
+ from dataclasses import dataclass, field, asdict
+ from typing import Any, Dict, List, Optional, Tuple, Union
+ 
+@@ -696,18 +698,41 @@ def select_targeted_interview_questions(
+                 best_score = score
+                 q1_obj = aq
+ 
+-    if q1_obj is not None and best_score > 0:
++    combined_jd_text = f"{getattr(decoded_jd, 'job_title', '')} {getattr(decoded_jd, 'clean_text', '')} {core_resp_text}".lower()
++    is_non_tech = any(k in combined_jd_text for k in [
++        "运营", "市场", "产品经理", "ui/ux", "设计", "新媒体", "文案", "编辑",
++        "社群", "增长", "商务", "销售", "hr", "人事", "招聘", "财务", "法务"
++    ]) and not any(k in combined_jd_text for k in [
++        "算法", "架构", "研发", "开发", "工程", "后端", "前端", "测试", "运维", "infra", "sre", "llm"
++    ])
++
++    if q1_obj is not None and best_score > 0 and not is_non_tech:
+         q1_zh = q1_obj.question_cn
+         q1_en = q1_obj.question_en
+         q1_signal = q1_obj.jd_signal
+         q1_intent = q1_obj.interviewer_intent
+         q1_prep = q1_obj.prep_keypoints
++        q1_category = "架构与系统设计"
++        q1_category_type = "ARCHITECTURE"
++        q1_expected = ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"]
++    elif is_non_tech:
++        q1_zh = f"针对岗位核心职责【{core_resp_text}】，请结合具体业务场景，阐述你的核心策略、关键落地动作、跨部门协同过程以及量化业务成效？"
++        q1_en = f"Regarding the core responsibility '{core_resp_text}', elaborate on your core strategy, execution actions, cross-functional collaboration, and quantified business outcomes."
++        q1_signal = core_resp_text
++        q1_intent = "考察候选人对岗位核心职责的理解深度、策略落地能力与量化业务成果闭环。"
++        q1_prep = "1. 明确业务场景与核心目标；2. 阐明个人主导的关键动作与策略推演；3. 给出跨部门协同机制与量化业务收益。"
++        q1_category = "业务职责与落地实践"
++        q1_category_type = "BUSINESS_CORE"
++        q1_expected = ["业务场景与目标定位", "关键动作与策略推演", "协同与执行把控", "核心指标Baseline与业务增长收益"]
+     else:
+         q1_zh = f"针对岗位核心职责【{core_resp_text}】，请结合具体业务场景，阐述你的端到端技术方案与架构设计，如何权衡关键选型及应对高并发/高可用挑战？"
+         q1_en = f"Regarding the core responsibility '{core_resp_text}', elaborate on your end-to-end architecture design, key technical trade-offs, and how you tackle concurrency and stability challenges."
+         q1_signal = core_resp_text
+         q1_intent = "考察候选人对岗位核心技术职责的系统级掌控度、技术选型权衡及工程落地深度。"
+         q1_prep = "1. 分层陈述整体架构与核心交互；2. 阐述关键技术选型与Trade-off；3. 给出高并发/稳定性保障措施与量化效果口径。"
++        q1_category = "架构与系统设计"
++        q1_category_type = "ARCHITECTURE"
++        q1_expected = ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"]
+ 
+     formatted_questions.append({
+         "question_id": 1,
+@@ -715,13 +740,13 @@ def select_targeted_interview_questions(
+         "dimension_name_cn": "核心岗位能力与技术架构深度考查",
+         "requirement_id": req_id_q1,
+         "requirement_name": core_resp_text,
+-        "category": "架构与系统设计",
+-        "category_type": "ARCHITECTURE",
++        "category": q1_category,
++        "category_type": q1_category_type,
+         "question_zh": q1_zh,
+         "question_en": q1_en,
+         "jd_signal": q1_signal,
+         "interviewer_intent": q1_intent,
+-        "expected_elements": ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"],
++        "expected_elements": q1_expected,
+         "prep_keypoints": q1_prep,
+         "evidence_refs": q1_evidence_refs,
+         "evidence_claim_ids": q1_evidence_ids,
+@@ -734,13 +759,14 @@ def select_targeted_interview_questions(
+     substantive_claims = [
+         c for c in claims
+         if c.kind in ("experience", "project", "highlight", "bullet")
+-        and len(c.text.strip()) >= 20
+-        and not any(meta in c.source_path for meta in ("candidate.", "years_of_experience", "institution", "degree"))
++        and len(c.text.strip()) >= 10
++        and not any(meta in c.source_path.lower() for meta in ("candidate.", "years_of_experience", "institution", "degree", "name", "phone", "email", "gender"))
++        and not any(meta in c.claim_id.lower() for meta in ("candidate.", "degree", "institution", "name"))
+     ]
+     distinct_claims: List[EvidenceClaim] = []
+     seen_claim_ids: Set[str] = set()
+     for c in substantive_claims:
+-        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5]", c.text):
++        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5a-zA-Z]", c.text):
+             distinct_claims.append(c)
+             seen_claim_ids.add(c.claim_id)
+     for c in substantive_claims:
+@@ -759,8 +785,6 @@ def select_targeted_interview_questions(
+         anchor_claim = candidate_q2_claims[0]
+     elif distinct_claims:
+         anchor_claim = distinct_claims[0]
+-    elif claims:
+-        anchor_claim = claims[0]
+     else:
+         anchor_claim = None
+ 
+@@ -774,7 +798,7 @@ def select_targeted_interview_questions(
+         q2_prep = "按背景、目标、个人独立动作、替代方案取舍、baseline与数据来源、团队协作边界与反省复盘结构化作答。"
+         q2_evidence_refs = [claim_ref(anchor_claim)]
+         q2_evidence_ids = [anchor_claim.claim_id]
+-        q2_req_id = anchor_claim.claim_id
++        q2_req_id = f"project_deep_dive_{anchor_claim.claim_id}"
+         q2_req_name = short_c
+     else:
+         q2_zh = "请选择你过往最具代表性的一个技术攻坚项目，深入阐述你独立负责的核心模块、遇到的最大技术瓶颈、选型对比、最终量化指标及复盘反思。"
+@@ -889,6 +913,7 @@ def run_career_review(
+     resume_theme: str = "modern-navy",
+     resume_output_dir: Optional[Union[str, Path]] = None,
+     reserve_photo: bool = True,
++    session_data: Optional[Dict[str, Any]] = None,
+ ) -> Dict[str, Any]:
+     decoder = JDDecoder()
+     decoded_jd = decoder.decode(jd_text)
+@@ -902,13 +927,27 @@ def run_career_review(
+ 
+     predictor = JDPredictor()
+     probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days)
+-    formatted_questions = select_targeted_interview_questions(
+-        decoded_jd=decoded_jd,
+-        cand_profile=cand_profile,
+-        claims=claims,
+-        matcher_result=matcher_result,
+-        predictor=predictor,
+-    )
++
++    jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
++    raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
++    profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
++
++    if session_data:
++        sess_jd_fp = session_data.get("jd_fingerprint")
++        sess_prof_fp = session_data.get("profile_fingerprint")
++        if sess_jd_fp and sess_jd_fp != jd_hash:
++            raise ValueError(f"Session JD fingerprint mismatch: expected {sess_jd_fp}, got {jd_hash}")
++        if sess_prof_fp and sess_prof_fp != profile_hash:
++            raise ValueError(f"Session Profile fingerprint mismatch: expected {sess_prof_fp}, got {profile_hash}")
++        formatted_questions = session_data.get("questions_snapshot", [])
++    else:
++        formatted_questions = select_targeted_interview_questions(
++            decoded_jd=decoded_jd,
++            cand_profile=cand_profile,
++            claims=claims,
++            matcher_result=matcher_result,
++            predictor=predictor,
++        )
+ 
+     fact_guard = FactVerificationGuard(profile_ctx)
+     resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard)
+@@ -916,11 +955,21 @@ def run_career_review(
+     debrief_engine = InterviewDebriefEngine()
+     feedback_items: List[Dict[str, Any]] = []
+     invalid_answers: List[Dict[str, Any]] = []
+-    provided_answers: List[Any] = []
+ 
++    # Map of previous feedback and answers from session_data
++    previous_feedback_map: Dict[int, Dict[str, Any]] = {}
++    previous_answers_map: Dict[int, str] = {}
++    if session_data:
++        for f in session_data.get("answer_feedback", []):
++            if isinstance(f, dict) and "question_id" in f:
++                previous_feedback_map[f["question_id"]] = f
++        for a in session_data.get("answers", []):
++            if isinstance(a, dict) and "question_id" in a:
++                previous_answers_map[a["question_id"]] = a.get("answer", "")
++
++    new_answers_by_id: Dict[int, str] = {}
+     if answers_dict and isinstance(answers_dict, dict) and answers_dict.get("answers"):
+         provided_answers = answers_dict.get("answers", [])
+-        ans_by_id: Dict[int, str] = {}
+         valid_ids = {q["question_id"] for q in formatted_questions}
+         if not isinstance(provided_answers, list):
+             invalid_answers.append({"reason": "answers_not_list"})
+@@ -933,7 +982,7 @@ def run_career_review(
+                 except (TypeError, ValueError):
+                     invalid_answers.append({"question_id": qid, "reason": "invalid_question_id"})
+                     continue
+-                if normalized_qid in ans_by_id:
++                if normalized_qid in new_answers_by_id:
+                     invalid_answers.append({"question_id": normalized_qid, "reason": "duplicate_question_id"})
+                     continue
+                 if normalized_qid not in valid_ids:
+@@ -948,19 +997,26 @@ def run_career_review(
+                 if len(txt) > 8000:
+                     invalid_answers.append({"question_id": normalized_qid, "reason": "answer_too_long", "max_length": 8000})
+                     continue
+-                ans_by_id[normalized_qid] = txt
++                new_answers_by_id[normalized_qid] = txt
+             elif isinstance(item, str):
+-                next_id = len(ans_by_id) + 1
++                next_id = len(new_answers_by_id) + 1
+                 if len(item) > 8000:
+                     invalid_answers.append({"question_id": next_id, "reason": "answer_too_long", "max_length": 8000})
+                 elif next_id in valid_ids:
+-                    ans_by_id[next_id] = item
++                    new_answers_by_id[next_id] = item
+             else:
+                 invalid_answers.append({"reason": "answer_item_invalid"})
+ 
+-        for q in formatted_questions:
+-            qid = q["question_id"]
+-            user_ans = ans_by_id.get(qid, "")
++    # Combine answers: new answers override previous answers for that question_id
++    combined_answers_map: Dict[int, str] = dict(previous_answers_map)
++    combined_answers_map.update(new_answers_by_id)
++
++    # Now evaluate each question
++    for q in formatted_questions:
++        qid = q["question_id"]
++        # If freshly answered in this round: evaluate
++        if qid in new_answers_by_id:
++            user_ans = new_answers_by_id[qid]
+             if user_ans.strip():
+                 debrief = debrief_engine.analyze_question(
+                     q["question_zh"],
+@@ -994,70 +1050,88 @@ def run_career_review(
+                     "candidate_answer": "",
+                     "status": "awaiting_answer",
+                     "diagnosis": "not_submitted",
+-                    "analysis": "未提供回答。请针对该问题提交您的作答以获得针对性攻防诊断。",
+-                    "coaching_advice": q["prep_keypoints"],
++                    "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
++                    "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
+                     "revised_answer": "",
+-                    "refined_answer": q["prep_keypoints"],
++                    "refined_answer": "",
+                     "can_revise": False,
+                     "verification_status": "unverified",
+-                    "key_takeaway": "参考题目的考查意图与备考要点构思 STAR 框架回答。",
++                    "key_takeaway": "请先提交针对该题的回答。",
++                    "evidence_refs": q.get("evidence_refs", []),
+                     "missing_elements": [],
+                     "follow_up_questions": [],
+                 })
+-    else:
+-        for q in formatted_questions:
++        # Else if previously evaluated in session_data: retain previous feedback!
++        elif qid in previous_feedback_map:
++            feedback_items.append(previous_feedback_map[qid])
++        # Else: awaiting answer
++        else:
+             feedback_items.append({
+-                "question_id": q["question_id"],
++                "question_id": qid,
+                 "question_zh": q["question_zh"],
+                 "target_dimension": q.get("target_dimension", ""),
+                 "candidate_answer": "",
+                 "status": "awaiting_answer",
+                 "diagnosis": "not_submitted",
+-                "analysis": "候选人尚未提交该题的一轮回答。请提交回答以触发基于指标与证据的诊断。",
+-                "coaching_advice": q["prep_keypoints"],
++                "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
++                "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
+                 "revised_answer": "",
+-                "refined_answer": q["prep_keypoints"],
++                "refined_answer": "",
+                 "can_revise": False,
+                 "verification_status": "unverified",
+-                "key_takeaway": "明确指标口径、数据来源和个人贡献边界。",
++                "key_takeaway": "请先提交针对该题的回答。",
++                "evidence_refs": q.get("evidence_refs", []),
+                 "missing_elements": [],
+                 "follow_up_questions": [],
+             })
+ 
+-    polish_focus = {
+-        "focus_area": "interview_defense",
+-        "description": "针对真实证据、指标口径与个人贡献边界的防守训练",
+-        "defense_checkpoints": [
+-            "确保所有量化指标自带 baseline、结果、单位和数据来源，避免被追问时判定为 metric_drift",
+-            "在被问及未涉猎领域时诚实划定边界并提出可迁移能力，避免白板硬猜触发 fatal_gap",
+-            "对主导、搭建、优化等强动词准备个人动作、替代方案、失败复盘和团队边界"
+-        ],
+-        "total_claims_indexed": len(claims),
+-        "verified_metrics_protected": bool(fact_guard.master_profile),
+-        "fact_guard_verdict": "available" if fact_guard.master_profile else "profile_missing",
+-        "invalid_answers": invalid_answers,
+-    }
++    # Prepare combined answers list for result
++    combined_answers_list = [
++        {"question_id": qid, "answer": ans}
++        for qid, ans in sorted(combined_answers_map.items())
++    ]
+ 
++    tailored_profile = generate_tailored_profile_from_review(
++        {"resume_advice": resume_advices, "match_summary": matcher_result},
++        profile_ctx,
++        fact_guard=fact_guard,
++    )
++
++    # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
+     result = {
+         "schema_version": "career-review.v1",
+         "jd_breakdown": {
+-            "job_title": getattr(decoded_jd, "job_title", ""),
+-            "company_or_dept": getattr(decoded_jd, "company_or_dept", ""),
+-            "target_level": getattr(decoded_jd, "target_level", ""),
+-            "compensation_band": getattr(decoded_jd, "compensation_band", ""),
+-            "location": getattr(decoded_jd, "location", ""),
+-            "tech_domains": getattr(decoded_jd, "tech_domains", []),
+-            "hard_thresholds": [asdict(t) for t in getattr(decoded_jd, "hard_thresholds", [])],
+-            "core_responsibilities": [asdict(r) for r in getattr(decoded_jd, "core_responsibilities", [])],
+-            "core_skills": [asdict(s) for s in getattr(decoded_jd, "core_skills", [])],
+-            "implicit_signals": [asdict(sig) for sig in getattr(decoded_jd, "implicit_signals", [])],
+-            "business_pain_points": [asdict(p) for p in getattr(decoded_jd, "business_pain_points", [])],
+-            "filtered_boilerplates": [asdict(b) if hasattr(b, "__dataclass_fields__") else str(b) for b in getattr(decoded_jd, "filtered_boilerplates", [])],
+-            "source_note": "岗位拆解仅使用提供的 JD 原文；隐性信号和业务解释属于启发式推断。",
++            "job_title": decoded_jd.job_title,
++            "company_or_dept": decoded_jd.company_or_dept,
++            "core_skills": [s.name for s in decoded_jd.core_skills],
++            "hard_thresholds": [
++                {
++                    "category": t.category,
++                    "requirement": t.requirement,
++                    "is_mandatory": t.is_mandatory,
++                }
++                for t in decoded_jd.hard_thresholds
++            ],
++            "implicit_signals": [
++                {
++                    "original_text": sig.original_text,
++                    "translated_meaning": sig.translated_meaning,
++                    "underlying_risk": sig.underlying_risk,
++                }
++                for sig in decoded_jd.implicit_signals
++            ],
++            "business_pain_points": [
++                {
++                    "aspect": p.aspect,
++                    "description": p.description,
++                    "evaluation_metric": p.evaluation_metric,
++                }
++                for p in decoded_jd.business_pain_points
++            ],
+         },
+         "match_summary": {
+-            "final_match_score": matcher_result.final_match_score,
+             "raw_match_score": matcher_result.raw_match_score,
++            "final_match_score": matcher_result.final_match_score,
+             "must_have_score": matcher_result.must_have_score,
+             "nice_to_have_score": matcher_result.nice_to_have_score,
+             "hidden_signal_fit": matcher_result.hidden_signal_fit,
+@@ -1066,36 +1140,52 @@ def run_career_review(
+             "breakthrough_advice": matcher_result.breakthrough_advice,
+             "prediction": asdict(probability_forecast),
+             "prediction_note": "基于规则和当前材料的启发式区间，不代表真实录用概率。",
++            "gap_matrix": [
++                {
++                    "requirement_name": g.requirement_name,
++                    "category": g.category,
++                    "importance": g.importance,
++                    "state": g.state.value if hasattr(g.state, "value") else str(g.state),
++                    "actionable_advice": g.actionable_advice,
++                    "candidate_evidence": g.candidate_evidence,
++                    "gap_explanation": g.gap_explanation,
++                }
++                for g in matcher_result.gap_matrix
++            ],
+         },
+         "resume_advice": resume_advices,
+         "interview_questions": formatted_questions,
+         "question_generation": {
+-            "status": "complete" if len(formatted_questions) >= 3 else "insufficient_jd_signals",
+-            "requested_count": 3,
+-            "generated_count": len(formatted_questions),
+-            "method": "deterministic JD/gap ranking over the compatibility question bank",
++            "strategy": "3_dimension_targeted_defense",
++            "dimensions": [
++                {"dimension": "core_responsibility", "name": "核心岗位能力与技术架构深度考查", "question_id": 1},
++                {"dimension": "project_deep_dive", "name": "候选人真实项目经历与关键成果深入追问", "question_id": 2},
++                {"dimension": "gap_boundary", "name": "技术缺口/证据不足边界与真实性防守考查", "question_id": 3},
++            ],
++            "total_questions": len(formatted_questions),
+         },
+-        "answers": provided_answers,
++        "answers": combined_answers_list,
+         "answer_feedback": feedback_items,
+         "input_quality": {
+-            "route": "complete_review" if jd_text.strip() and claims else "insufficient_input",
+-            "jd_available": bool(jd_text.strip()),
+-            "profile_evidence_available": bool(claims),
++            "answers": combined_answers_list,
+             "invalid_answers": invalid_answers,
+-            "evidence_claim_count": len(claims),
+-            "profile_fact_policy": "missing facts remain unknown",
++            "evaluated_count": len([f for f in feedback_items if f.get("status") == "evaluated"]),
++            "pending_count": len([f for f in feedback_items if f.get("status") == "awaiting_answer"]),
++        },
++        "polish_focus": {
++            "focus_area": "interview_defense",
++            "defense_checkpoints": [
++                f"Q{q['question_id']}: {q.get('jd_signal', '')} ({q.get('category', q.get('dimension_name_cn', ''))})"
++                for q in formatted_questions
++            ],
+         },
+-        "polish_focus": polish_focus,
++        "tailored_profile": tailored_profile,
++        "resume_patches": [
++            adv["patch"] for adv in resume_advices if adv.get("patch")
++        ],
+     }
+ 
+-    tailored_profile = generate_tailored_profile_from_review(
+-        {"resume_advice": resume_advices, "match_summary": matcher_result},
+-        profile_ctx,
+-        fact_guard=fact_guard,
+-    )
+-    result["tailored_profile"] = tailored_profile
+-    result["resume_patches"] = tailored_profile.get("_audit", {}).get("applied_patches", [])
+-
++    # Optional resume generation using tailored_profile
+     if build_resume:
+         from core.resume_builder import ResumeBuilder
+ 
+@@ -1137,51 +1227,75 @@ def create_review_session(
+     jd_text: str,
+     profile_dict: Union[Dict[str, Any], ProfileContext],
+     review_result: Dict[str, Any],
++    base_session: Optional[Dict[str, Any]] = None,
+ ) -> Dict[str, Any]:
+     """Creates a verifiable lightweight JSON session snapshot."""
+     jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
+     raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
+     profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+-    session_id = f"SESSION-{jd_hash}-{profile_hash}"
+-
+-    questions_snapshot = []
+-    for q in review_result.get("interview_questions", []):
+-        questions_snapshot.append({
+-            "question_id": q.get("question_id"),
+-            "target_dimension": q.get("target_dimension", ""),
+-            "dimension_name_cn": q.get("dimension_name_cn", ""),
+-            "requirement_id": q.get("requirement_id", ""),
+-            "requirement_name": q.get("requirement_name", ""),
+-            "question_zh": q.get("question_zh", ""),
+-            "jd_signal": q.get("jd_signal", ""),
+-            "interviewer_intent": q.get("interviewer_intent", ""),
+-            "expected_elements": q.get("expected_elements", []),
+-        })
++    session_id = base_session.get("session_id") if (base_session and base_session.get("session_id")) else f"SESSION-{jd_hash}-{profile_hash}"
++
++    if base_session and base_session.get("questions_snapshot"):
++        questions_snapshot = base_session["questions_snapshot"]
++    else:
++        questions_snapshot = []
++        for q in review_result.get("interview_questions", []):
++            questions_snapshot.append({
++                "question_id": q.get("question_id"),
++                "target_dimension": q.get("target_dimension", ""),
++                "dimension_name_cn": q.get("dimension_name_cn", ""),
++                "category": q.get("category", ""),
++                "category_type": q.get("category_type", ""),
++                "requirement_id": q.get("requirement_id", ""),
++                "requirement_name": q.get("requirement_name", ""),
++                "question_zh": q.get("question_zh", ""),
++                "jd_signal": q.get("jd_signal", ""),
++                "interviewer_intent": q.get("interviewer_intent", ""),
++                "expected_elements": q.get("expected_elements", []),
++            })
+ 
+     session_answers = review_result.get("answers", [])
+     if not session_answers and isinstance(review_result.get("input_quality"), dict):
+         session_answers = review_result["input_quality"].get("answers", [])
+ 
++    feedbacks = review_result.get("answer_feedback", [])
++    evaluated_count = len([f for f in feedbacks if f.get("status") == "evaluated" and f.get("diagnosis") != "not_submitted"])
++    total_q = len(questions_snapshot)
++    status = "completed" if (total_q > 0 and evaluated_count >= total_q) else "awaiting_answer"
++
+     return {
+         "session_id": session_id,
+         "schema_version": "career-review-session.v1",
+         "jd_fingerprint": jd_hash,
+         "profile_fingerprint": profile_hash,
+-        "status": "awaiting_answer" if any(f.get("status") == "awaiting_answer" for f in review_result.get("answer_feedback", [])) else "completed",
++        "status": status,
++        "generated_questions_count": total_q,
++        "answered_questions_count": len(session_answers),
++        "evaluated_questions_count": evaluated_count,
++        "minimum_loop_completed": evaluated_count >= 1,
++        "all_questions_completed": total_q > 0 and evaluated_count >= total_q,
+         "questions_snapshot": questions_snapshot,
+         "answers": session_answers,
+-        "answer_feedback": review_result.get("answer_feedback", []),
++        "answer_feedback": feedbacks,
+     }
+ 
+ 
+ def save_review_session(session: Dict[str, Any], output_path: Union[str, Path]) -> None:
+-    """Atomically save review session JSON to disk."""
+-    out = Path(output_path)
++    """Atomically save review session JSON to disk using a unique temporary file."""
++    out = Path(output_path).resolve()
+     out.parent.mkdir(parents=True, exist_ok=True)
+-    temp_path = out.with_suffix(".tmp")
+-    with open(temp_path, "w", encoding="utf-8") as f:
+-        json.dump(session, f, ensure_ascii=False, indent=2)
+-    temp_path.replace(out)
++    temp_fd, temp_path_str = tempfile.mkstemp(prefix="sess_", suffix=".tmp", dir=str(out.parent))
++    try:
++        with open(temp_fd, "w", encoding="utf-8") as f:
++            json.dump(session, f, ensure_ascii=False, indent=2)
++        os.replace(temp_path_str, str(out))
++    except Exception:
++        if os.path.exists(temp_path_str):
++            try:
++                os.remove(temp_path_str)
++            except OSError:
++                pass
++        raise
+ 
+ 
+ def load_review_session(session_path: Union[str, Path]) -> Dict[str, Any]:
+diff --git a/docs/EXECUTION_STATE.md b/docs/EXECUTION_STATE.md
+index 87c4128..3b4033c 100644
+--- a/docs/EXECUTION_STATE.md
++++ b/docs/EXECUTION_STATE.md
+@@ -5,24 +5,19 @@
+   JD 拆解 → 用户事实整理 → 基于事实的简历建议 → 至少三道针对性问题 → 用户真实作答 → 一轮具体反馈。
+   重点打磨：基于真实经历、岗位要求和证据边界的面试训练。
+ - **Active Milestone**:
+-  - `M0`: Baseline confirmation, issue ledger establishment, subagent delegation.
+-  - `M1`: Fact constraints fix, prohibit fabricating optimization actions after removing numbers, ResumePatch contract hardening.
+-  - `M2`: Interview 3-question targeted generation, concrete feedback, and session loop.
+-  - `M3`: Public component convergence, default user workflow.
+-  - `M4`: Quality benchmark (24 scenarios), installation verification, performance evidence.
++  - `M1`: 把“全档案查词”收敛为有范围的事实判断（经历级作用域、否定/计划句式识别、移除出口豁免）。
++  - `M2`: 将会话辅助函数接成真正可恢复的流程（多轮历史保留、严格指纹与答案校验、原子保存）。
++  - `M3`: 问题与反馈贴合岗位（运营/业务岗位自适应、禁止姓名/学历作项目追问、短经历支持）。
++  - `M4`: 独立验收与质量集对齐。
+ 
+ ## 2. Baseline & Code Snapshot
+ - **Repository Root**: `E:/github/OfferGet`
+-- **Current HEAD**: `ea71f4406ed54bfb86a4cdd3d26d24d05964c812` (PR #3: feat(release-candidate))
+-- **Merged Main**: `e311ef1adb41d3c9cee809422cc1c4599c8060d8`
+-- **Working Tree State**: Clean (0 uncommitted changes at baseline)
++- **Baseline HEAD**: `c9a9a2cd0812544f0244280b85c67e7b219d9108` (PR #4 head, merged at `377814fde14c98900472feea60a77abeb59092a4`)
+ - **Python Runtime**: 3.13.11 (win32)
+ - **Chrome Path**: `C:\Program Files\Google\Chrome\Application\chrome.exe`
+ 
+ ## 3. Issue Ledger
+ 
+-| issue_id | priority | code_location | user_impact | evidence_grade | owner | status | acceptance_test | log_or_artifact |
+-|:---|:---:|:---|:---|:---:|:---:|:---:|:---|:---|
+ | issue_id | priority | code_location | user_impact | evidence_grade | owner | status | acceptance_test | log_or_artifact |
+ |:---|:---:|:---|:---|:---:|:---:|:---:|:---|:---|
+ | `ISSUE-01` | P0 | `core/fact_guard.py`, `core/job_flow.py`, `tests/test_career_review.py:371` | 简历改写在数值保持 20% 时，无依据注入 `Megatron-LM` 与通信算子重构被误判为 verified 并应用 | CODE_CONFIRMED | Subagent A / Primary | RESOLVED | `tests/test_career_review.py:test_18`, `tests/test_fact_guard.py:test_11-13` | `core/fact_guard.py` |
+@@ -35,6 +30,11 @@
+ | `ISSUE-08` | P1 | `core/interview_debrief.py:150,151` | 单个字母 `'s'` 或中文 `'从'` 误触发指标和基线判断 | CODE_CONFIRMED | Subagent B | RESOLVED | `tests/test_interview_debrief.py:test_issue_08` | `core/interview_debrief.py` |
+ | `ISSUE-09` | P1 | `core/job_flow.py` | 面试题目按 idx 机械分配标签，缺乏题目意图与统一岗位要求-证据映射 | CODE_CONFIRMED | Subagent B / Primary | RESOLVED | `tests/test_career_review.py:test_21` | `core/job_flow.py` |
+ | `ISSUE-10` | P1 | `core/job_flow.py` | 会话管理未接入真实 CLI 入口，缺乏可恢复的最小本地会话状态机 | CODE_CONFIRMED | Subagent B / Primary | RESOLVED | `tests/test_career_review.py:test_22,test_23` | `core/job_flow.py`, `core/services.py`, `presentation/commands/review_cmd.py`, `cli.py` |
++| `R4-01` | P0 | `core/fact_guard.py` | 全档案查词导致技能清单/项目A的技术被借用到项目B，或将否定/计划误当成已完成经历 | CODE_CONFIRMED | Subagent A (`a560e526`) | RESOLVED | `tests/test_fact_guard.py:test_14-16` | `core/fact_guard.py` |
++| `R4-02` | P0 | `core/interview_debrief.py` | 修订结果只剩 tech_method 时被 verified_with_tech_context 豁免，放行肯定陈述中新增的技术 | CODE_CONFIRMED | Subagent B (`f7633838`) | RESOLVED | `tests/test_interview_debrief.py:test_r4_02_*` | `core/interview_debrief.py` |
++| `R4-03` | P1 | `core/interview_debrief.py` | 保守修订武断断定“没有基线压测数据”并保留未核验的主导动词与因果归因 | CODE_CONFIRMED | Subagent B (`f7633838`) | RESOLVED | `tests/test_interview_debrief.py:test_r4_03_*` | `core/interview_debrief.py` |
++| `R4-04` | P0 | `core/job_flow.py`, `presentation/commands/review_cmd.py` | `--session` 加载后未传入恢复路径导致重出题、旧答案/反馈丢失，校验失败未非零退出 | CODE_CONFIRMED | Primary Agent | RESOLVED | `tests/test_career_review.py:test_24,test_25` | `core/job_flow.py`, `presentation/commands/review_cmd.py` |
++| `R4-05` | P1 | `core/job_flow.py` | Q1 对非技术岗位机械要求架构/高并发；Q2 无实体经历时回退到 claims[0] 引用姓名/学位 | CODE_CONFIRMED | Primary Agent | RESOLVED | `tests/test_career_review.py:test_26` | `core/job_flow.py` |
+ 
+ ## 4. Subagent Delegation Ledger
+ 
+@@ -43,12 +43,15 @@
+ | `TASK-A01` | subagent-fact-consistency | Subagent A: Fact & Data Consistency | `core/fact_guard.py`, `core/profile_adapter.py`, `tests/test_fact_guard.py`, `tests/test_career_review.py` | None | VERIFIED | Non-metric hallucination detection, ResumePatch validation, grounding tests |
+ | `TASK-B01` | subagent-interview-quality | Subagent B: Interview Quality | `core/interview_debrief.py`, `tests/test_interview_debrief.py` | None | VERIFIED | Remove fabricated actions, separate coaching from answer, fix boundary/relevance/metric regex |
+ | `TASK-B02` | primary-agent | Primary Agent: Question Grounding & Session Loop | `core/job_flow.py`, `core/services.py`, `presentation/commands/review_cmd.py`, `cli.py`, `tests/test_career_review.py` | TASK-A01, TASK-B01 | VERIFIED | 3 fixed dimension questions, session save/load/validate, CLI flags --session/--save-session |
+-
+-## 5. Verification Results
+-- `tests/test_fact_guard.py`: 13/13 passed
+-- `tests/test_career_review.py`: 23/23 passed
+-- `tests/test_interview_debrief.py`: 13/13 passed
+-- Complete test suite (`tests/`): 371/371 passed (0 failed, 0 skipped, 124.64s)
++| `TASK-A02` | `a560e526-5230-4a4e-bd73-6d8e4e136782` | Fact & Scope Grounding Auditor | `core/fact_guard.py`, `tests/test_fact_guard.py` | None | VERIFIED | 经历级作用域索引、否定与规划句式排除、verify_bullet(target_scope=...) |
++| `TASK-B03` | `f7633838-e53d-4e47-a736-6d11cf1ca7e1` | Interview Feedback & Revision Auditor | `core/interview_debrief.py`, `tests/test_interview_debrief.py` | None | VERIFIED | 移除出口豁免、否定语境保护、主导动词与因果归因降级、客观未提供基线口径 |
++| `TASK-R01` | `3fcba67f-63b4-482a-b611-a096f49e456b` | Independent Verification & Anti-example Auditor | Read-only across workspace | TASK-A02, TASK-B03 | VERIFIED | 独立反例验证全通、发现并推动修复 job_flow 变量作用域回归与负向语境介词增强 |
++
++## 5. Verification Results (Current Snapshot)
++- `tests/test_fact_guard.py`: 16/16 passed
++- `tests/test_interview_debrief.py`: 16/16 passed
++- `tests/test_career_review.py`: 26/26 passed
++- `tests/` (full OfferGet suite): 380/380 passed
+ - `ApexResume/tests/`: 34/34 passed
+-- `python cli.py selftest`: 11/11 passed, production ready
+-
++- `python cli.py selftest`: 11/11 passed
++- External repos in `E:\github\简历`: 26 repositories untouched, 0 files deleted/modified.
+diff --git a/presentation/commands/review_cmd.py b/presentation/commands/review_cmd.py
+index eacf1dc..71b8b83 100644
+--- a/presentation/commands/review_cmd.py
++++ b/presentation/commands/review_cmd.py
+@@ -5,6 +5,8 @@ OfferGet Career Review Command Handler:
+ 
+ from __future__ import annotations
+ 
++import hashlib
++import json
+ import os
+ import sys
+ from pathlib import Path
+@@ -40,6 +42,9 @@ def cmd_career_review(args):
+         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
+         sys.exit(1)
+ 
++    jd_text = read_text(jd_path)
++    profile_data = load_json(profile_path)
++
+     session_data = None
+     if session_path:
+         if not os.path.exists(session_path):
+@@ -47,6 +52,17 @@ def cmd_career_review(args):
+             sys.exit(1)
+         session_data = load_review_session(session_path)
+ 
++        jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
++        profile_hash = hashlib.sha256(json.dumps(profile_data, sort_keys=True).encode("utf-8")).hexdigest()[:12]
++        sess_jd_fp = session_data.get("jd_fingerprint")
++        sess_prof_fp = session_data.get("profile_fingerprint")
++        if sess_jd_fp and sess_jd_fp != jd_hash:
++            emit_stderr(f"[-] Error: Session JD fingerprint mismatch: session={sess_jd_fp}, current={jd_hash}")
++            sys.exit(1)
++        if sess_prof_fp and sess_prof_fp != profile_hash:
++            emit_stderr(f"[-] Error: Session Profile fingerprint mismatch: session={sess_prof_fp}, current={profile_hash}")
++            sys.exit(1)
++
+     answers_data = None
+     if answers_path:
+         if not os.path.exists(answers_path):
+@@ -56,22 +72,25 @@ def cmd_career_review(args):
+         if session_data:
+             valid, errors = validate_session_answers(session_data, answers_data)
+             if not valid:
+-                emit_stderr(f"[-] Warning: Answers do not match session snapshot: {'; '.join(errors)}")
+-
+-    jd_text = read_text(jd_path)
+-    profile_data = load_json(profile_path)
+-
+-    review_result = run_career_review(
+-        jd_text=jd_text,
+-        profile_dict=profile_data,
+-        answers_dict=answers_data,
+-        build_resume=getattr(args, "build_resume", False),
+-        resume_theme=getattr(args, "resume_theme", "modern-navy"),
+-        resume_output_dir=getattr(args, "resume_output_dir", None),
+-    )
++                emit_stderr(f"[-] Error: Answers do not match session snapshot: {'; '.join(errors)}")
++                sys.exit(1)
++
++    try:
++        review_result = run_career_review(
++            jd_text=jd_text,
++            profile_dict=profile_data,
++            answers_dict=answers_data,
++            build_resume=getattr(args, "build_resume", False),
++            resume_theme=getattr(args, "resume_theme", "modern-navy"),
++            resume_output_dir=getattr(args, "resume_output_dir", None),
++            session_data=session_data,
++        )
++    except ValueError as e:
++        emit_stderr(f"[-] Error: {e}")
++        sys.exit(1)
+ 
+     if save_session_path:
+-        session = create_review_session(jd_text, profile_data, review_result)
++        session = create_review_session(jd_text, profile_data, review_result, base_session=session_data)
+         save_review_session(session, save_session_path)
+         if args.json:
+             emit_stderr(f"[+] Review session saved to {save_session_path}")
+diff --git a/tests/test_career_review.py b/tests/test_career_review.py
+index 8d6e5d8..b0a0135 100644
+--- a/tests/test_career_review.py
++++ b/tests/test_career_review.py
+@@ -706,6 +706,129 @@ class TestCareerReviewPipeline(unittest.TestCase):
+             self.assertEqual(proc2.returncode, 0, f"CLI error: {proc2.stderr}")
+             self.assertTrue(session_out2.exists())
+ 
++    def test_24_session_multi_round_preserves_history(self):
++        """Test that submitting Q1 in round 1 and Q2 in round 2 retains both answers and feedbacks."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmpdir:
++            # Round 1: answer Q1
++            ans1 = {"answers": [{"question_id": 1, "answer": "负责集群训练通信优化，从 40% 提升至 52%，测算口径为 H800 峰值。"}]}
++            res1 = run_career_review(self.jd_text, self.profile_data, answers_dict=ans1)
++            sess1 = create_review_session(self.jd_text, self.profile_data, res1)
++            sess_path1 = Path(tmpdir) / "sess1.json"
++            save_review_session(sess1, sess_path1)
++
++            # Round 2: load sess1, answer Q2
++            loaded_sess1 = load_review_session(sess_path1)
++            ans2 = {"answers": [{"question_id": 2, "answer": "64B Dense 预训练 Baseline MFU 为 38%，负责 Megatron-LM Sequence Parallel，提升至 52%，测算口径为 H800 理论峰值。"}]}
++            res2 = run_career_review(self.jd_text, self.profile_data, answers_dict=ans2, session_data=loaded_sess1)
++            sess2 = create_review_session(self.jd_text, self.profile_data, res2, base_session=loaded_sess1)
++
++            # Assertions
++            # 1. Questions snapshot must be identical
++            self.assertEqual(sess2["questions_snapshot"], sess1["questions_snapshot"])
++            # 2. Both Q1 and Q2 answers must be present
++            ans_map = {a["question_id"]: a["answer"] for a in sess2.get("answers", [])}
++            self.assertIn(1, ans_map)
++            self.assertIn(2, ans_map)
++            # 3. Both Q1 and Q2 feedback must be evaluated
++            fb_map = {f["question_id"]: f for f in sess2.get("answer_feedback", [])}
++            self.assertEqual(fb_map[1]["status"], "evaluated")
++            self.assertEqual(fb_map[2]["status"], "evaluated")
++            # 4. Progress metrics
++            self.assertTrue(sess2.get("minimum_loop_completed", False))
++            self.assertGreaterEqual(sess2.get("evaluated_questions_count", 0), 2)
++
++    def test_25_session_cli_validation_and_fingerprint_rejection(self):
++        """CLI must exit non-zero and not overwrite session when answers are invalid or fingerprints mismatch."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmpdir:
++            sess_out = Path(tmpdir) / "session.json"
++            cmd_init = [
++                sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
++                str(self.jd_path), "--profile", str(self.profile_path),
++                "--save-session", str(sess_out), "--json"
++            ]
++            subprocess.run(cmd_init, capture_output=True, check=True, cwd=str(PROJECT_ROOT))
++
++            # Case A: invalid question_id (e.g. 999) must fail with non-zero exit code
++            bad_ans_file = Path(tmpdir) / "bad_ans.json"
++            with open(bad_ans_file, "w", encoding="utf-8") as f:
++                json.dump({"answers": [{"question_id": 999, "answer": "invalid question answer"}]}, f)
++            cmd_bad_ans = [
++                sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
++                str(self.jd_path), "--profile", str(self.profile_path),
++                "--session", str(sess_out), "--answers", str(bad_ans_file), "--json"
++            ]
++            proc_bad = subprocess.run(cmd_bad_ans, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
++            self.assertNotEqual(proc_bad.returncode, 0, "CLI must reject unknown question_id with non-zero exit code")
++            self.assertIn("question_id_999_not_in_session_snapshot", proc_bad.stderr)
++
++            # Case B: mismatched JD with old session must fail
++            other_jd_file = Path(tmpdir) / "other_jd.txt"
++            other_jd_file.write_text("【岗位】新媒体运营专员\n职责：内容创作与用户运营", encoding="utf-8")
++            cmd_mismatch = [
++                sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
++                str(other_jd_file), "--profile", str(self.profile_path),
++                "--session", str(sess_out), "--json"
++            ]
++            proc_mismatch = subprocess.run(cmd_mismatch, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
++            self.assertNotEqual(proc_mismatch.returncode, 0, "CLI must reject mismatched JD fingerprint with non-zero exit code")
++
++    def test_26_targeted_questions_role_adaptation_and_no_name_as_project(self):
++        """Test Q1 adapts to non-engineering roles and Q2 does not quote candidate name/degree as project."""
++        from modules.jd_analyst.decoder import JDDecoder
++        from modules.jd_analyst.matcher import JDMatcher
++        from modules.jd_analyst.predictor import JDPredictor
++        from core.profile_adapter import build_profile_context
++        from core.job_flow import select_targeted_interview_questions
++
++        # Scenario A: Operations role should not ask about architecture/high-concurrency/QPS
++        ops_jd = "【岗位名称】新媒体运营专员\n【岗位职责】1. 负责微信公众号与小红书内容策划、撰写与排版；2. 负责粉丝社群日常运营与裂变增长。"
++        ops_profile = {
++            "candidate": {"name": "王小花", "degree": "本科", "institution": "中国传媒大学"},
++            "experience": [
++                {"title": "新媒体运营实习生", "company": "某互联网公司", "bullets": ["负责公众号推文策划，月均阅读量提升 30%。"]}
++            ]
++        }
++        dec = JDDecoder().decode(ops_jd)
++        ctx = build_profile_context(ops_profile)
++        p_canon = ctx.get_canonical_profile()
++        matcher_res = JDMatcher().match(dec, p_canon)
++        pred = JDPredictor()
++        qs = select_targeted_interview_questions(dec, p_canon, list(ctx.claims), matcher_res, pred)
++
++        q1 = qs[0]
++        self.assertNotIn("架构设计", q1["question_zh"], "Operations role Q1 should not mention architecture design")
++        self.assertNotIn("高并发", q1["question_zh"], "Operations role Q1 should not mention high concurrency")
++
++        # Scenario B: Profile with only candidate info (no experience/project) must NOT use name/degree in Q2
++        empty_exp_profile = {
++            "candidate": {"name": "张无忌", "degree": "硕士", "institution": "明教大学"}
++        }
++        ctx_empty = build_profile_context(empty_exp_profile)
++        p_empty = ctx_empty.get_canonical_profile()
++        m_empty = JDMatcher().match(dec, p_empty)
++        qs_empty = select_targeted_interview_questions(dec, p_empty, list(ctx_empty.claims), m_empty, pred)
++
++        q2 = qs_empty[1]
++        self.assertNotIn("张无忌", q2["question_zh"], "Q2 must not quote candidate name as project anchor")
++        self.assertNotIn("硕士", q2["question_zh"], "Q2 must not quote candidate degree as project anchor")
++        self.assertNotIn("明教大学", q2["question_zh"], "Q2 must not quote candidate institution as project anchor")
++
++        # Scenario C: Short real experience (15 chars) should be anchored, not ignored
++        short_exp_profile = {
++            "candidate": {"name": "赵敏"},
++            "experience": [
++                {"title": "助理", "bullets": ["搭建SQLite测试库与索引优化。"]}
++            ]
++        }
++        ctx_short = build_profile_context(short_exp_profile)
++        p_short = ctx_short.get_canonical_profile()
++        m_short = JDMatcher().match(dec, p_short)
++        qs_short = select_targeted_interview_questions(dec, p_short, list(ctx_short.claims), m_short, pred)
++        q2_short = qs_short[1]
++        self.assertIn("SQLite", q2_short["question_zh"], "Short real experience should be anchored in Q2")
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests/test_fact_guard.py b/tests/test_fact_guard.py
+index 78efdd2..4cb623a 100644
+--- a/tests/test_fact_guard.py
++++ b/tests/test_fact_guard.py
+@@ -265,6 +265,155 @@ class TestFactVerificationGuard(unittest.TestCase):
+         self.assertTrue(res_megatron["passed"])
+         self.assertEqual(res_megatron["verdict"], "FACT_CHECK_PASSED")
+ 
++    def test_14_competency_cannot_authorize_specific_experience_expansion(self):
++        # Counterexample 1: Candidate only has Redis / Megatron-LM in competencies.
++        # Specific experience bullet only mentions "负责数据存储".
++        # Rewritten bullet introducing Redis or Megatron-LM must be flagged as ungrounded under experience scope.
++        profile = {
++            "candidate": {"name": "张三", "title_zh": "后端开发工程师"},
++            "competencies": {
++                "frameworks": ["Redis", "Megatron-LM", "通信算子重构"]
++            },
++            "experience": [
++                {
++                    "company": "科技公司A",
++                    "role": "后端开发",
++                    "bullets": ["负责数据存储。"]
++                }
++            ]
++        }
++        guard = FactVerificationGuard(profile)
++
++        # 1a. Bullet introducing Redis under experience scope
++        redis_bullet = "负责基于 Redis 的数据缓存与持久化。"
++        res_scope_str = guard.verify_bullet(redis_bullet, target_scope="experience[0]")
++        self.assertFalse(res_scope_str["passed"])
++        self.assertEqual(res_scope_str["verdict"], "FACT_DRIFT_DETECTED")
++        claimed_unv_1 = [u["claimed_metric"] for u in res_scope_str["unverified_claims"]]
++        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv_1))
++
++        # Also test with company name scope
++        res_company = guard.verify_bullet(redis_bullet, target_scope="科技公司A")
++        self.assertFalse(res_company["passed"])
++
++        # Also test with target_excerpt scope
++        res_excerpt = guard.verify_bullet(redis_bullet, target_excerpt="负责数据存储。")
++        self.assertFalse(res_excerpt["passed"])
++
++        # 1b. Bullet introducing Megatron-LM / operator refactoring under experience scope
++        megatron_bullet = "基于 Megatron-LM 重构并行训练通信算子，通信开销降低 20%。"
++        res_megatron = guard.verify_bullet(megatron_bullet, target_scope="experience[0]")
++        self.assertFalse(res_megatron["passed"])
++        self.assertEqual(res_megatron["verdict"], "FACT_DRIFT_DETECTED")
++        claimed_unv_2 = [u["claimed_metric"] for u in res_megatron["unverified_claims"]]
++        self.assertTrue(any("Megatron-LM" in c for c in claimed_unv_2))
++
++        # 1c. Positive case: when experience explicitly mentions Redis, it passes under experience scope
++        profile_grounded = {
++            "candidate": {"name": "张三", "title_zh": "后端开发工程师"},
++            "competencies": {
++                "frameworks": ["Redis"]
++            },
++            "experience": [
++                {
++                    "company": "科技公司A",
++                    "role": "后端开发",
++                    "bullets": ["负责基于 Redis 的数据存储与缓存架构。"]
++                }
++            ]
++        }
++        guard_grounded = FactVerificationGuard(profile_grounded)
++        res_grounded = guard_grounded.verify_bullet(redis_bullet, target_scope="experience[0]")
++        self.assertTrue(res_grounded["passed"])
++        self.assertEqual(res_grounded["verdict"], "FACT_CHECK_PASSED")
++        self.assertEqual(len(res_grounded["unverified_claims"]), 0)
++
++    def test_15_project_a_tech_cannot_authorize_project_b(self):
++        # Counterexample 2: Candidate Project A has Redis, Project B only has SQLite.
++        # Project B rewrite cannot borrow Redis from Project A.
++        profile = {
++            "candidate": {"name": "李四", "title_zh": "全栈开发工程师"},
++            "projects": [
++                {
++                    "name": "Project A",
++                    "bullets": ["使用 Redis 实现高并发缓存系统。"]
++                },
++                {
++                    "name": "Project B",
++                    "bullets": ["使用 SQLite 设计并实现课程数据表的 SQL 查询接口。"]
++                }
++            ]
++        }
++        guard = FactVerificationGuard(profile)
++
++        # Rewrite for Project B introducing Redis must fail under Project B scope
++        bullet_b_redis = "基于 Redis 缓存热点数据，提高系统并发与响应能力。"
++        res_b = guard.verify_bullet(bullet_b_redis, target_scope="projects[1]")
++        self.assertFalse(res_b["passed"])
++        self.assertEqual(res_b["verdict"], "FACT_DRIFT_DETECTED")
++        claimed_unv = [u["claimed_metric"] for u in res_b["unverified_claims"]]
++        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv))
++
++        # Also fails with project name scope
++        res_b_name = guard.verify_bullet(bullet_b_redis, target_scope="Project B")
++        self.assertFalse(res_b_name["passed"])
++
++        # Positive case: Project A rewrite using Redis passes under Project A scope
++        bullet_a_redis = "基于 Redis 优化高并发缓存架构。"
++        res_a = guard.verify_bullet(bullet_a_redis, target_scope="projects[0]")
++        self.assertTrue(res_a["passed"])
++        self.assertEqual(res_a["verdict"], "FACT_CHECK_PASSED")
++
++        # Positive case: Project B rewrite using SQLite passes under Project B scope
++        bullet_b_sqlite = "基于 SQLite 优化课程数据表的 SQL 查询接口与索引。"
++        res_b_sqlite = guard.verify_bullet(bullet_b_sqlite, target_scope="projects[1]")
++        self.assertTrue(res_b_sqlite["passed"])
++        self.assertEqual(res_b_sqlite["verdict"], "FACT_CHECK_PASSED")
++
++    def test_16_negated_or_planned_tech_cannot_authorize_expansion(self):
++        # Negation case: Experience text says "调研了 Redis 但未采用"
++        profile_negated = {
++            "candidate": {"name": "王五", "title_zh": "后端开发工程师"},
++            "experience": [
++                {
++                    "company": "科技公司C",
++                    "role": "后端开发",
++                    "bullets": [
++                        "负责数据层架构选型，调研了 Redis 但未采用，最终基于 SQLite 完成单机存储方案开发。"
++                    ]
++                }
++            ]
++        }
++        guard_neg = FactVerificationGuard(profile_negated)
++        bullet_redis = "负责基于 Redis 的数据缓存与持久化。"
++        res_neg = guard_neg.verify_bullet(bullet_redis, target_scope="experience[0]")
++        self.assertFalse(res_neg["passed"])
++        self.assertEqual(res_neg["verdict"], "FACT_DRIFT_DETECTED")
++        claimed_unv_neg = [u["claimed_metric"] for u in res_neg["unverified_claims"]]
++        self.assertTrue(any("Redis" in c or "redis" in c.lower() for c in claimed_unv_neg))
++
++        # Planning case: Experience text says "计划后续引入 Megatron-LM"
++        profile_planned = {
++            "candidate": {"name": "赵六", "title_zh": "算法工程师"},
++            "experience": [
++                {
++                    "company": "科技公司D",
++                    "role": "算法工程师",
++                    "bullets": [
++                        "负责模型推理加速，计划后续引入 Megatron-LM 进行算子融合重构。"
++                    ]
++                }
++            ]
++        }
++        guard_plan = FactVerificationGuard(profile_planned)
++        bullet_megatron = "基于 Megatron-LM 重构并行训练通信算子。"
++        res_plan = guard_plan.verify_bullet(bullet_megatron, target_scope="experience[0]")
++        self.assertFalse(res_plan["passed"])
++        self.assertEqual(res_plan["verdict"], "FACT_DRIFT_DETECTED")
++        claimed_unv_plan = [u["claimed_metric"] for u in res_plan["unverified_claims"]]
++        self.assertTrue(any("Megatron-LM" in c for c in claimed_unv_plan))
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
++
+diff --git a/tests/test_interview_debrief.py b/tests/test_interview_debrief.py
+index 99fc227..13b391c 100644
+--- a/tests/test_interview_debrief.py
++++ b/tests/test_interview_debrief.py
+@@ -58,7 +58,9 @@ class TestInterviewDebriefFixes(unittest.TestCase):
+         self.assertNotIn("进行结构化优化", revised)
+         self.assertNotIn("50%", revised)
+         self.assertIn("查询接口", revised)
+-        self.assertIn("缺乏基线压测数据不作主观量化", revised)
++        self.assertIn("未提供基线数据", revised)
++        self.assertNotIn("缺乏基线压测数据", revised)
++        self.assertNotIn("没有压测数据", revised)
+ 
+     def test_issue_02_conservative_revision_preserves_supported_baseline(self):
+         """Drifts with verified baseline are properly qualified."""
+@@ -165,7 +167,8 @@ class TestInterviewDebriefFixes(unittest.TestCase):
+         self.assertTrue(res.can_revise)
+         self.assertNotIn("50%", res.refined_answer)
+         self.assertIn("没做过 Redis", res.refined_answer)
+-        self.assertIn("缺乏基线压测数据不作主观量化", res.refined_answer)
++        self.assertIn("未提供基线数据", res.refined_answer)
++        self.assertNotIn("缺乏基线压测数据", res.refined_answer)
+ 
+     def test_issue_05_pure_boundary_remains_experience_boundary(self):
+         """Pure boundary answer without metrics remains EXPERIENCE_BOUNDARY."""
+@@ -250,6 +253,73 @@ class TestInterviewDebriefFixes(unittest.TestCase):
+         res2 = self.engine.analyze_question(question, answer2)
+         self.assertEqual(res2.diagnosis, QuestionDiagnosis.WELL_DEFENDED)
+ 
++    # ----------------------------------------------------------------------
++    # R4-02: Negative tech statement vs affirmative unverified tech claim
++    # ----------------------------------------------------------------------
++    def test_r4_02_negative_statement_boundary_handling(self):
++        """Negative tech statement ('没用过 Redis') is preserved, not diagnosed as metric drift, status is not failed."""
++        answer = "这块技术我没用过 Redis。"
++        res = self.engine.analyze_question(
++            question="请谈谈你在 Redis 方面的实战经验",
++            answer=answer,
++            fact_guard=self.fact_guard
++        )
++        self.assertEqual(res.diagnosis, QuestionDiagnosis.EXPERIENCE_BOUNDARY)
++        self.assertFalse(res.can_revise)
++        self.assertEqual(res.refined_answer, "")
++        self.assertIn(res.verification_status, ["unverified", "verified"])
++        self.assertNotEqual(res.verification_status, "revision_failed_fact_check")
++        self.assertNotEqual(res.verification_status, "tech_unverified")
++
++        # Mixed: negative statement + verified tech and metric
++        answer_mixed = "我没用过 Redis，但在项目中负责查询接口开发，耗时从 200ms 降到 100ms。"
++        res_mixed = self.engine.analyze_question(
++            question="请介绍查询接口优化经验",
++            answer=answer_mixed,
++            fact_guard=self.fact_guard
++        )
++        self.assertEqual(res_mixed.diagnosis, QuestionDiagnosis.WELL_DEFENDED)
++        self.assertEqual(res_mixed.verification_status, "verified")
++        self.assertIn("没用过 Redis", res_mixed.refined_answer)
++
++    def test_r4_02_affirmative_unverified_tech_strictly_flagged(self):
++        """Affirmative unverified tech ('我用 Redis 实现了多级缓存') must NOT be exempted or marked as verified."""
++        answer = "我用 Redis 实现了多级缓存。"
++        res = self.engine.analyze_question(
++            question="请介绍缓存方案",
++            answer=answer,
++            fact_guard=self.fact_guard
++        )
++        self.assertEqual(res.diagnosis, QuestionDiagnosis.METRIC_DRIFT)
++        self.assertNotEqual(res.verification_status, "verified")
++        self.assertNotEqual(res.verification_status, "verified_with_tech_context")
++        self.assertEqual(res.verification_status, "tech_unverified")
++        self.assertIn("Redis", res.analysis_zh)
++        self.assertIn("缺少底稿依据", res.analysis_zh)
++
++    # ----------------------------------------------------------------------
++    # R4-03: Conservative revision no unsupported attribution or lead or presumption
++    # ----------------------------------------------------------------------
++    def test_r4_03_conservative_revision_no_unsupported_attribution_or_lead_or_presumption(self):
++        """Conservative revision must state '未提供基线数据', moderate lead verbs, and drop unsupported attribution/direction."""
++        answer = "我主导了查询接口重构，从而使得访问速度提升了 50%。"
++        unverified = [{"claimed_metric": "50%"}]
++        drifts = []
++        revised = self.engine._create_conservative_revision(
++            answer, drifts, unverified, fact_guard=self.fact_guard
++        )
++
++        self.assertNotIn("50%", revised)
++        self.assertIn("未提供基线数据", revised)
++        self.assertNotIn("没有压测数据", revised)
++        self.assertNotIn("缺乏基线压测数据", revised)
++        self.assertNotIn("提升了", revised)
++        self.assertNotIn("从而使得", revised)
++        self.assertNotIn("我主导", revised)
++        self.assertIn("负责", revised)
++        self.assertIn("查询接口重构", revised)
++        self.assertIn("访问速度", revised)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()

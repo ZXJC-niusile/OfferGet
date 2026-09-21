@@ -47,6 +47,7 @@ class DebriefQuestionItem:
     follow_up_questions: List[str] = field(default_factory=list)
     can_revise: bool = True
     verification_status: str = "unverified"
+    defense_score: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         if not self.can_revise:
@@ -77,11 +78,83 @@ class InterviewDebriefEngine:
     Analyzes interview questions/answers and generates actionable feedback loops.
     """
 
+    @staticmethod
+    def _is_tech_in_negative_context(text: str, tech_term: str) -> bool:
+        """
+        Checks whether all occurrences of a technology term in the text appear in
+        negative/boundary contexts (e.g., '没用过 Redis', '未主导过 Redis', '对 Redis 不太了解').
+        Returns True if the term is ONLY mentioned negatively (or not found),
+        Returns False if there is at least one affirmative usage of the term (e.g. '用 Redis 实现').
+        """
+        if not text or not tech_term:
+            return False
+
+        if re.search(r"[\u4e00-\u9fa5]", tech_term):
+            term_pattern = re.compile(re.escape(tech_term), re.IGNORECASE)
+        else:
+            term_pattern = re.compile(r"(?<![a-z0-9_])" + re.escape(tech_term) + r"(?![a-z0-9_])", re.IGNORECASE)
+
+        matches = list(term_pattern.finditer(text))
+        if not matches:
+            return True
+
+        delims = r"[，。；！？,.;!?\n]"
+        for m in matches:
+            start, end = m.start(), m.end()
+            prev_text = text[:start]
+            next_text = text[end:]
+
+            last_delim = -1
+            for dm in re.finditer(delims, prev_text):
+                last_delim = dm.end()
+            clause_start = last_delim if last_delim != -1 else 0
+
+            next_m = re.search(delims, next_text)
+            clause_end = end + next_m.start() if next_m else len(text)
+
+            clause = text[clause_start:clause_end]
+            term_start_in_clause = start - clause_start
+            term_end_in_clause = end - clause_start
+
+            pre_term = clause[:term_start_in_clause].strip()
+            post_term = clause[term_end_in_clause:].strip()
+
+            pre_neg_pattern = re.compile(
+                r"(?:没(?:有)?(?:实际)?(?:怎么)?|未(?:曾)?(?:实际)?|不(?:太)?|从未|并未|无|缺少|缺乏)\s*"
+                r"(?:在[^，。；;\n]{1,15}?(?:中|环境|里))?\s*"
+                r"(?:用过|使用|接触(?:过)?|做过|主导(?:过)?|了解|涉及|涉猎|熟悉|学过|掌握|落地|配置|搭建|开发|维护)?\s*"
+                r"(?:比如|例如|像)?\s*$",
+                re.IGNORECASE,
+            )
+            post_neg_pattern = re.compile(
+                r"^(?:这块|方面|相关|技术|本身)?\s*(?:在[^，。；;\n]{1,15}?(?:中|环境|里))?\s*(?:我)?\s*(?:之前|平时|暂时)?\s*"
+                r"(?:没做过|未做过|没用过|未使用|没有用过|不了解|不太了解|不太熟悉|不熟悉|接触较少|没有实际做过|未涉猎|未主导过|未涉及|没有经验)",
+                re.IGNORECASE,
+            )
+            en_neg_pattern = re.compile(
+                r"\b(?:never|not|haven't|hasn't|hadn't|didn't|don't|without|no)\s+"
+                r"(?:used?|have\s+used|experienced?|familiar\s+with|worked\s+with)?\s*$",
+                re.IGNORECASE,
+            )
+
+            is_neg = bool(
+                pre_neg_pattern.search(pre_term)
+                or post_neg_pattern.search(post_term)
+                or en_neg_pattern.search(pre_term)
+                or ("对" in pre_term and any(nk in post_term for nk in ("不了解", "不太了解", "不熟悉", "不太熟悉")))
+            )
+
+            if not is_neg:
+                return False
+
+        return True
+
     def _create_conservative_revision(
         self,
         answer: str,
         drifts: List[Dict[str, Any]],
         unverified: List[Dict[str, Any]],
+        fact_guard: Optional[Any] = None,
     ) -> str:
         """Removes or qualifies ungrounded numbers from candidate answer while preserving supported statements."""
         revised = answer
@@ -93,14 +166,19 @@ class InterviewDebriefEngine:
             claimed = u.get("claimed_metric", "")
             if claimed:
                 pattern = re.compile(
-                    rf"((?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?)\s*{re.escape(str(claimed))}%?",
+                    rf"(?:(?:从而|进而|导致|使得|进而导致|从而使得|带来|进而带来)\s*)*"
+                    rf"((?:[^\s，。；;\n]{{0,10}}?\s*)?)"
+                    rf"(?:大幅|显著|极大)?\s*(?:提升|降低|减少|提高|优化|下降)?\s*(?:了)?\s*"
+                    rf"{re.escape(str(claimed))}%?",
                     re.IGNORECASE,
                 )
                 def _replace_unverified(match):
-                    verb_part = match.group(1).strip() if match.group(1) else ""
-                    qualifier = "（具体幅度因缺乏基线压测数据不作主观量化）"
-                    if verb_part:
-                        return f"{verb_part}{qualifier}"
+                    noun = match.group(1).strip() if match.group(1) else ""
+                    qualifier = "（具体幅度因未提供基线数据不作主观量化）"
+                    if noun in {"我", "我们", "团队", "本人", "大家"}:
+                        noun = f"{noun}相关指标"
+                    if noun:
+                        return f"{noun}{qualifier}"
                     return qualifier
                 revised = pattern.sub(_replace_unverified, revised)
         for d in drifts:
@@ -109,6 +187,18 @@ class InterviewDebriefEngine:
             if claimed and verified:
                 pattern = re.compile(re.escape(str(claimed)), re.IGNORECASE)
                 revised = pattern.sub(f"{verified}（已核验基线）", revised)
+
+        # R4-03: Moderate unsupported lead actions (unless verified in profile)
+        profile_has_lead = False
+        if fact_guard is not None:
+            profile_has_lead = "主导" in getattr(fact_guard, "profile_all_text", "")
+        if not profile_has_lead:
+            revised = re.sub(r"由我主导", "由我负责", revised)
+            revised = re.sub(r"我主导了", "我负责了", revised)
+            revised = re.sub(r"我主导", "我负责", revised)
+            revised = re.sub(r"(?<!未)(?<!没)主导了", "负责了", revised)
+            revised = re.sub(r"(?<!未)(?<!没)主导", "负责", revised)
+
         return revised
 
     def analyze_question(
@@ -163,7 +253,13 @@ class InterviewDebriefEngine:
             follow_up_questions.append("该方案在哪些场景会失效？你经历过什么失败并如何修正？")
 
         # Check boundary indicators (ISSUE-05: distinguish pure boundary from multi-claim with metrics)
-        boundary_markers = ("没做过", "不了解", "不会", "未涉猎", "未主导过", "没有实际做过", "接触较少", "不太了解", "没有这方面经验", "未涉及")
+        boundary_markers = (
+            "没做过", "未做过", "没用过", "未使用", "没有用过", "没有做过",
+            "未接触", "没接触过", "从未用过", "从未接触", "未曾使用", "并未用过",
+            "不了解", "不太了解", "并不了解", "不熟悉", "不太熟悉",
+            "不会", "未涉猎", "未主导过", "未主导", "没有实际做过", "接触较少",
+            "没怎么用过", "没有这方面经验", "未涉及", "未深入", "没有深入",
+        )
         is_boundary = any(m in answer for m in boundary_markers)
         is_pure_boundary = is_boundary and not has_metrics
 
@@ -277,19 +373,33 @@ class InterviewDebriefEngine:
         # Fact Guard verification (ISSUE-05: do not skip when boundary statement exists alongside other claims)
         if fact_guard is not None and answer.strip():
             guard_result = fact_guard.verify_facts(answer)
-            if not guard_result.get("passed", False):
-                drifts = guard_result.get("drifts", [])
-                unverified = guard_result.get("unverified_claims", [])
+            drifts = guard_result.get("drifts", [])
+            raw_unverified = guard_result.get("unverified_claims", [])
+
+            # R4-02: Filter out tech_method claims in negative / boundary contexts
+            unverified: List[Dict[str, Any]] = []
+            for u in raw_unverified:
+                if u.get("claim_type") == "tech_method":
+                    term = u.get("claimed_metric", "") or u.get("claimed_fact", "")
+                    if self._is_tech_in_negative_context(answer, term):
+                        continue
+                unverified.append(u)
+
+            has_fact_issues = bool(drifts) or bool(unverified)
+            if has_fact_issues:
                 diagnosis = QuestionDiagnosis.METRIC_DRIFT
                 drift_notes = []
                 for d in drifts:
                     drift_notes.append(f"声称 {d.get('claimed_metric')}，但底稿基线为 {d.get('verified_baseline')}")
                 for u in unverified:
-                    drift_notes.append(f"声称指标 {u.get('claimed_metric')} 缺少底稿依据")
-                analysis = f"回答中的数字或指标未通过事实核验（{'; '.join(drift_notes)}），易被判定为指标虚标或口径不实。"
-                coaching = "所有指标必须严格基于底稿真实基线、单位和统计周期；若缺乏严密压测或监控数据，应客观陈述方案本身，不建议主观推定具体提升幅度。"
-                takeaway = "先核对事实底稿，再回答数字问题。"
-                refined = self._create_conservative_revision(answer, drifts, unverified)
+                    if u.get("claim_type") == "tech_method":
+                        drift_notes.append(f"声称技术/方法 {u.get('claimed_metric')} 缺少底稿依据")
+                    else:
+                        drift_notes.append(f"声称指标 {u.get('claimed_metric')} 缺少底稿依据")
+                analysis = f"回答中的技术栈或指标未通过事实核验（{'; '.join(drift_notes)}），易被判定为经历存疑或口径不实。"
+                coaching = "回答涉及的技术与指标必须严格基于底稿真实基线与经历；未在底稿中核验的技术栈不建议主观声称具备实际落地经验；若未在底稿中提供严密基线或监控数据，应客观陈述方案本身，不建议主观推定具体提升幅度。"
+                takeaway = "先核对事实底稿，再回答数字与技术经历问题。"
+                refined = self._create_conservative_revision(answer, drifts, unverified, fact_guard=fact_guard)
                 can_revise = True
             else:
                 if not is_pure_boundary and is_relevant:
@@ -299,24 +409,48 @@ class InterviewDebriefEngine:
         if fact_guard is not None and refined and refined.strip():
             rev_guard = fact_guard.verify_facts(refined)
             if not rev_guard.get("passed", False):
-                # Tech-method-only failures (e.g., "Redis" in "没做过 Redis") should not
-                # block the revision — these terms are from the original answer context.
                 rev_drifts = rev_guard.get("drifts", [])
-                rev_unverified = rev_guard.get("unverified_claims", [])
+                raw_rev_unverified = rev_guard.get("unverified_claims", [])
+
+                rev_unverified: List[Dict[str, Any]] = []
+                for u in raw_rev_unverified:
+                    if u.get("claim_type") == "tech_method":
+                        term = u.get("claimed_metric", "") or u.get("claimed_fact", "")
+                        if self._is_tech_in_negative_context(refined, term):
+                            continue
+                    rev_unverified.append(u)
+
                 has_numeric_issues = bool(rev_drifts) or any(
                     u.get("claim_type") != "tech_method" for u in rev_unverified
                 )
+                has_affirmative_tech = any(
+                    u.get("claim_type") == "tech_method" for u in rev_unverified
+                )
+
                 if has_numeric_issues:
                     refined = ""
                     can_revise = False
                     verification_status = "revision_failed_fact_check"
+                elif has_affirmative_tech:
+                    # R4-02: Affirmative unverified tech must NOT be exempted or marked as verified
+                    verification_status = "tech_unverified"
                 else:
-                    verification_status = "verified_with_tech_context"
+                    # Only negative tech context remained, which is benign
+                    verification_status = "verified"
             else:
                 verification_status = "verified"
 
         # ISSUE-04: refined_answer and revised_answer must be empty if cannot revise, never use coaching_advice
         final_revised = refined if can_revise else ""
+
+        # M3: Evaluate against 100-point defense rubric
+        from core.defense.evaluator import DefenseEvaluator
+        defense_eval = DefenseEvaluator.evaluate(question, answer)
+        defense_score_dict = defense_eval.to_dict()
+        for p in defense_eval.main_problems:
+            if p not in missing_elements:
+                missing_elements.append(p)
+
         return DebriefQuestionItem(
             question=question,
             candidate_answer=answer,
@@ -332,6 +466,7 @@ class InterviewDebriefEngine:
             follow_up_questions=list(dict.fromkeys(follow_up_questions)),
             can_revise=can_revise,
             verification_status=verification_status,
+            defense_score=defense_score_dict,
         )
 
     def generate_session_debrief(

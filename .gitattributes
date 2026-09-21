@@ -1,0 +1,2 @@
+# Ignore trailing whitespace warnings in patch files
+*.patch whitespace=-trailing-space

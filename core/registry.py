@@ -654,6 +654,201 @@ class QualityRuleRegistry:
         "作为一名深耕", "深耕.*领域", "不仅.*而且.*更.*"
     ]
 
+    # -------------------------------------------------------------------------
+    # ApexResume Decision, Depth, and Evidence Standards
+    # -------------------------------------------------------------------------
+    DECISION_PLANNING_KEYWORDS: List[str] = [
+        "选型", "技术路线", "架构设计", "方案决策", "规划", "制定", "技术决策",
+        "重构方案", "标准制定", "规范制定", "rfc", "决策", "调研论证", "技术评审"
+    ]
+
+    DATA_DEPTH_LEVELS: Dict[str, str] = {
+        "D0": "描述性统计 (Descriptive: 计数、均值、汇总)",
+        "D1": "诊断性归因 (Diagnostic: 细分下钻、漏斗、同比环比)",
+        "D2": "探索性关联 (Exploratory: 相关性分析、特征重要度、切片对比)",
+        "D3": "预测性建模 (Predictive/Causal: 趋势预估、因果推断、PSM、DID)",
+        "D4": "规范性自适应 (Prescriptive: 运筹优化、强化学习闭环、动态调度)",
+    }
+
+    RESULT_EVIDENCE_LEVELS: Dict[str, str] = {
+        "R0": "理论预估 (Theoretical: 纯假定、无外部验证)",
+        "R1": "离线基准 (Offline Benchmark: 实验室评测、公开数据集静态分)",
+        "R2": "灰度验证 (Gray-scale / A/B Test: 准生产、小流量实验验证)",
+        "R3": "生产实效 (Production Impact: 全量生产稳定运行与宏观商业价值)",
+    }
+
+    # -------------------------------------------------------------------------
+    # Validator Anti-AI-Slop Patterns
+    # -------------------------------------------------------------------------
+    BANNED_SLOP_PATTERNS: List[Tuple[str, str]] = [
+        (r"[—\u2014\u2013]{1,2}", "Banned Dash/Em-dash syntax (破折号修饰滥用)"),
+        (r"不仅.*而且.*更.*", "Banned Rule-of-Three parallelism (排比三段论假大空)"),
+        (r"(深度赋能|全面革新|强力驱动|革命性突破|显著提高|大幅优化|卓越成效|无缝打通|全方位重塑)", "Banned hyperbolic buzzword without metric (虚高空洞动词/副词)"),
+        (r"作为一名深耕.*的", "Banned empty appositive title (空洞自封同位语)"),
+        (r"(delve into|testament to|pivotal role|game-changing transformation|intricate tapestry)", "Banned English AI cliche phrase")
+    ]
+
+    # -------------------------------------------------------------------------
+    # ATS Formats and Defense Guides
+    # -------------------------------------------------------------------------
+    STANDARD_SECTIONS: Dict[str, List[str]] = {
+        "Experience": [
+            "experience", "work experience", "professional experience",
+            "employment history", "work history", "工作经历", "工作经验", "职业经历"
+        ],
+        "Education": [
+            "education", "academic background", "educational background",
+            "education & credentials", "教育背景", "教育经历", "学历", "教育"
+        ],
+        "Skills": [
+            "skills", "technical skills", "competencies", "core competencies",
+            "skillset", "专业技能", "核心技能", "技能清单", "技能专长", "技术栈"
+        ],
+        "Projects": [
+            "projects", "project experience", "key projects", "selected projects",
+            "项目经历", "项目经验", "核心项目", "重点项目"
+        ],
+        "Summary": [
+            "summary", "professional summary", "executive summary", "about me",
+            "profile", "narrative", "个人总结", "个人评价", "个人简介", "自我评价", "职业概述", "概述"
+        ]
+    }
+
+    FORMATTING_RISKS: List[Tuple[str, re.Pattern, str]] = [
+        ("table", re.compile(r"<table\b|<tr\b|<td\b|<th\b|\|[^\n]+\|\s*\n\s*\|[-:| ]+\|\s*\n|\\begin\{tabular\}", re.IGNORECASE), "Tables in ATS resumes often cause text scrambling or parser failure"),
+        ("multi_column", re.compile(r"column-count\s*:|display\s*:\s*(?:flex|grid)|grid-template-columns|class=[\"'][^\"']*(?:col-\d+|two-column|multi-column|sidebar)[^\"']*", re.IGNORECASE), "Multi-column layouts disrupt linear parsing reading order"),
+        ("complex_nested_blocks", re.compile(r"<div[^>]*>\s*<div[^>]*>\s*<div[^>]*>\s*<div|<iframe\b|<canvas\b|<script\b|<object\b", re.IGNORECASE), "Complex nested HTML elements or embeds fail in legacy ATS parsers"),
+        ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
+    ]
+
+    DEFENSE_GUIDE_TEMPLATES: Dict[str, str] = {
+        "kubernetes": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
+        "k8s": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
+        "triton": "Be transparent: state that custom kernels were previously written in CUDA/C++ or optimized PyTorch. Highlight strong grasp of GPU SRAM/HBM memory hierarchies and tile-level compilation principles.",
+        "rust": "Honestly state no commercial Rust production experience. Emphasize deep mastery of C++17/20 systems programming, explicit memory safety concepts, and ability to read Rust codebases immediately.",
+        "megatron-lm": "Clarify that 3D parallelism principles (TP/PP/DP/SP) were mastered conceptually and on DeepSpeed/FSDP; demonstrate exact communication volume equations during interview.",
+        "default": "Transparently acknowledge the gap without defensiveness. Pivot to adjacent production architectures, emphasize deep conceptual grasp of the underlying principles, and highlight rapid 48-hour ramp-up history."
+    }
+
+    # -------------------------------------------------------------------------
+    # Baoyan Academic Integrity & Typography Standards
+    # -------------------------------------------------------------------------
+    BAOYAN_SPEC_RANGES: Dict[str, Tuple[int, int]] = {
+        "摘要版": (40, 60),
+        "简历版": (80, 110),
+        "陈述版": (150, 220),
+    }
+
+    BAOYAN_SPEC_ALIASES: Dict[str, str] = {
+        "摘要版": "摘要版",
+        "摘要": "摘要版",
+        "summary": "摘要版",
+        "简历版": "简历版",
+        "简历": "简历版",
+        "resume": "简历版",
+        "陈述版": "陈述版",
+        "陈述": "陈述版",
+        "个人陈述": "陈述版",
+        "statement": "陈述版",
+    }
+
+    FORBIDDEN_DASHES: Dict[str, str] = {
+        "——": "chinese em dash (——)",
+        "\u2014": "em dash (—)",
+        "\u2013": "en dash (–)",
+        "\u2015": "horizontal bar (―)",
+        "\u2212": "minus (−)",
+        "\u2e3a": "two-em dash (⸺)",
+        "\u2e3b": "three-em dash (⸻)",
+    }
+
+    FORBIDDEN_QUOTES: Dict[str, str] = {
+        "\u201c": "left double quote (“)",
+        "\u201d": "right double quote (”)",
+        "\u2018": "left single quote (‘)",
+        "\u2019": "right single quote (’)",
+    }
+
+    FORBIDDEN_DOUBLE_HYPHEN: str = "--"
+
+    BAOYAN_LEAD_ROLES: Set[str] = {
+        "项目负责人", "负责人", "队长", "主持人", "算法链负责人", "模块负责人", "课题组长", "第一完成人"
+    }
+
+    BAOYAN_CORE_ROLES: Set[str] = {
+        "核心成员", "核心骨干", "核心研发"
+    }
+
+    BAOYAN_LEAD_OR_CORE_ROLES: Set[str] = BAOYAN_LEAD_ROLES | BAOYAN_CORE_ROLES
+
+    BAOYAN_NON_LEAD_ROLES: Set[str] = {
+        "参赛队员", "队员", "辅助成员", "成员", "团队成员", "组员", "协作者"
+    }
+
+    BAOYAN_ESCALATED_VERBS: List[str] = [
+        "主导", "负责", "统筹", "独立完成"
+    ]
+
+    BAOYAN_LEADER_ONLY_VERBS: List[str] = [
+        "主导", "统筹"
+    ]
+
+    SIMULATION_TERMS: List[str] = [
+        "gazebo", "gym", "pybullet", "toy dataset", "toy-dataset", "toy数据集", "纯仿真",
+        "flexsim", "carla", "isaac gym", "isaac-gym", "mujoco", "airsim", "ns-3",
+        "matlab仿真", "仿真环境", "模拟环境", "仿真平台", "仿真系统", "仿真测试", "仿真验证", "模拟路网"
+    ]
+
+    REAL_CLUSTER_TERMS: List[str] = [
+        "万卡集群", "千卡集群", "百卡集群", "物理机", "物理机集群", "物理集群",
+        "真实物理机", "真实集群", "实机", "实机部署", "实机测试", "实机验证",
+        "实测", "产线实测", "产线部署", "真实产线", "实车", "实车测试", "实车部署",
+        "硬件落地", "硬件部署", "端侧实测", "板端实测", "上车实测"
+    ]
+
+    EXPECTED_OUTCOME_TERMS: List[str] = [
+        "在投", "准备投稿", "拟投稿", "预计录用", "拟发表", "待审", "待评审",
+        "审稿中", "拟申请", "拟申报", "预期录用", "预期发表", "under review", "in submission", "submitted"
+    ]
+
+    ACQUIRED_OUTCOME_TERMS: List[str] = [
+        "已录用", "已见刊", "已发表", "录用待刊", "已出版", "已授权", "accepted", "published"
+    ]
+
+    # Safe Read-Only Getters
+    @classmethod
+    def get_data_depth_levels(cls) -> Dict[str, str]:
+        return dict(cls.DATA_DEPTH_LEVELS)
+
+    @classmethod
+    def get_result_evidence_levels(cls) -> Dict[str, str]:
+        return dict(cls.RESULT_EVIDENCE_LEVELS)
+
+    @classmethod
+    def get_decision_planning_keywords(cls) -> List[str]:
+        return list(cls.DECISION_PLANNING_KEYWORDS)
+
+    @classmethod
+    def get_banned_slop_patterns(cls) -> List[Tuple[str, str]]:
+        return list(cls.BANNED_SLOP_PATTERNS)
+
+    @classmethod
+    def get_standard_sections(cls) -> Dict[str, List[str]]:
+        return {k: list(v) for k, v in cls.STANDARD_SECTIONS.items()}
+
+    @classmethod
+    def get_formatting_risks(cls) -> List[Tuple[str, re.Pattern, str]]:
+        return list(cls.FORMATTING_RISKS)
+
+    @classmethod
+    def get_defense_guide_templates(cls) -> Dict[str, str]:
+        return dict(cls.DEFENSE_GUIDE_TEMPLATES)
+
+    @classmethod
+    def get_baoyan_spec_ranges(cls) -> Dict[str, Tuple[int, int]]:
+        return dict(cls.BAOYAN_SPEC_RANGES)
+
+
     @staticmethod
     def detect_role_rank(text: str) -> Tuple[Optional[int], Optional[str]]:
         """

@@ -11,7 +11,12 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from core.profile_adapter import build_profile_evidence_index
+from core.profile_adapter import (
+    ProfileContext,
+    ProfileEvidenceIndex,
+    build_profile_context,
+    build_profile_evidence_index,
+)
 from core.lexicon import (
     STRONG_ACTION_VERBS_EN,
     STRONG_ACTION_VERBS_ZH,
@@ -21,50 +26,10 @@ from core.lexicon import (
     AI_BUZZWORDS_LEXICON,
     VERB_HIERARCHY,
     ROLE_RANKS,
+    STANDARD_SECTIONS,
+    FORMATTING_RISKS,
+    DEFENSE_GUIDE_TEMPLATES,
 )
-
-# Standard Section Names mapping
-STANDARD_SECTIONS = {
-    "Experience": [
-        "experience", "work experience", "professional experience",
-        "employment history", "work history", "工作经历", "工作经验", "职业经历"
-    ],
-    "Education": [
-        "education", "academic background", "educational background",
-        "education & credentials", "教育背景", "教育经历", "学历", "教育"
-    ],
-    "Skills": [
-        "skills", "technical skills", "competencies", "core competencies",
-        "skillset", "专业技能", "核心技能", "技能清单", "技能专长", "技术栈"
-    ],
-    "Projects": [
-        "projects", "project experience", "key projects", "selected projects",
-        "项目经历", "项目经验", "核心项目", "重点项目"
-    ],
-    "Summary": [
-        "summary", "professional summary", "executive summary", "about me",
-        "profile", "narrative", "个人总结", "个人评价", "个人简介", "自我评价", "职业概述", "概述"
-    ]
-}
-
-# Formatting risk patterns
-FORMATTING_RISKS = [
-    ("table", re.compile(r"<table\b|<tr\b|<td\b|<th\b|\|[^\n]+\|\s*\n\s*\|[-:| ]+\|\s*\n|\\begin\{tabular\}", re.IGNORECASE), "Tables in ATS resumes often cause text scrambling or parser failure"),
-    ("multi_column", re.compile(r"column-count\s*:|display\s*:\s*(?:flex|grid)|grid-template-columns|class=[\"'][^\"']*(?:col-\d+|two-column|multi-column|sidebar)[^\"']*", re.IGNORECASE), "Multi-column layouts disrupt linear parsing reading order"),
-    ("complex_nested_blocks", re.compile(r"<div[^>]*>\s*<div[^>]*>\s*<div[^>]*>\s*<div|<iframe\b|<canvas\b|<script\b|<object\b", re.IGNORECASE), "Complex nested HTML elements or embeds fail in legacy ATS parsers"),
-    ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
-]
-
-
-# Default Transferable Defense Guidance
-DEFENSE_GUIDE_TEMPLATES = {
-    "kubernetes": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
-    "k8s": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
-    "triton": "Be transparent: state that custom kernels were previously written in CUDA/C++ or optimized PyTorch. Highlight strong grasp of GPU SRAM/HBM memory hierarchies and tile-level compilation principles.",
-    "rust": "Honestly state no commercial Rust production experience. Emphasize deep mastery of C++17/20 systems programming, explicit memory safety concepts, and ability to read Rust codebases immediately.",
-    "megatron-lm": "Clarify that 3D parallelism principles (TP/PP/DP/SP) were mastered conceptually and on DeepSpeed/FSDP; demonstrate exact communication volume equations during interview.",
-    "default": "Transparently acknowledge the gap without defensiveness. Pivot to adjacent production architectures, emphasize deep conceptual grasp of the underlying principles, and highlight rapid 48-hour ramp-up history."
-}
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +38,8 @@ DEFENSE_GUIDE_TEMPLATES = {
 
 def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[str, Any]]:
     """
-    Extracts bullet points and metadata from a candidate profile dict or raw resume text.
+    Extracts bullet points and metadata from a candidate profile dict, ProfileContext,
+    ProfileEvidenceIndex, or raw resume text.
     Returns: (bullets_list, meta_info)
     """
     bullets: List[str] = []
@@ -81,10 +47,45 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
         "raw_text": "",
         "years_of_experience": 0,
         "is_dict": False,
-        "parsed_profile": None
+        "parsed_profile": None,
+        "evidence_index": None,
     }
 
-    # 1. Handle dict
+    # 1. Handle ProfileEvidenceIndex directly
+    if isinstance(profile_or_text, ProfileEvidenceIndex):
+        index = profile_or_text
+        cand = index.profile.get("candidate", {})
+        yoe = cand.get("years_of_experience", 0)
+        try:
+            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
+        except (ValueError, TypeError):
+            meta["years_of_experience"] = 0
+
+        meta["is_dict"] = True
+        meta["parsed_profile"] = index.profile
+        meta["evidence_index"] = index
+        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
+        bullets = list(index.bullets)
+        return bullets, meta
+
+    # 2. Handle ProfileContext directly
+    if isinstance(profile_or_text, ProfileContext):
+        index = profile_or_text.evidence_index
+        cand = index.profile.get("candidate", {})
+        yoe = cand.get("years_of_experience", 0)
+        try:
+            meta["years_of_experience"] = int(float(yoe)) if yoe is not None else 0
+        except (ValueError, TypeError):
+            meta["years_of_experience"] = 0
+
+        meta["is_dict"] = True
+        meta["parsed_profile"] = index.profile
+        meta["evidence_index"] = index
+        meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
+        bullets = list(index.bullets)
+        return bullets, meta
+
+    # 3. Handle raw dict
     if isinstance(profile_or_text, dict):
         index = build_profile_evidence_index(profile_or_text)
         cand = index.profile.get("candidate", {})
@@ -96,11 +97,12 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
 
         meta["is_dict"] = True
         meta["parsed_profile"] = index.profile
+        meta["evidence_index"] = index
         meta["raw_text"] = json.dumps(index.profile, ensure_ascii=False)
         bullets = list(index.bullets)
         return bullets, meta
 
-    # 2. Handle string (text, filepath, or json string)
+    # 4. Handle string (text, filepath, or json string)
     text_content = str(profile_or_text).strip()
 
     # Check if it's a file path
@@ -576,10 +578,12 @@ class ATSAuditor:
         active_input = meta["parsed_profile"] if meta["parsed_profile"] is not None else profile_or_text
 
         # If target_tag is specified and input is a profile dict, filter first
+        # Note: Filtering produces an intentional materialized derived dict view with a fresh index
         if target_tag and isinstance(active_input, dict):
             active_input = filter_profile_by_visibility(active_input, target_tag)
             bullets, meta = extract_bullets_from_input(active_input)
 
+        evidence_index = meta.get("evidence_index")
         raw_text = meta["raw_text"]
         years_exp = meta["years_of_experience"]
 
@@ -625,8 +629,8 @@ class ATSAuditor:
         else:
             verdict = "NEEDS_REVISION"
 
-        # Three-State Skill Ledger
-        skill_ledger = generate_skill_ledger(active_input, jd_decoded_or_text)
+        # Three-State Skill Ledger (reusing evidence_index to avoid duplicate index construction)
+        skill_ledger = generate_skill_ledger(active_input, jd_decoded_or_text, evidence_index=evidence_index)
 
         # Actionable recommendations
         recommendations = []
@@ -699,29 +703,44 @@ def extract_skills_from_jd(jd_decoded_or_text: Any) -> List[str]:
     return sorted(list(skills))
 
 
-def extract_candidate_skills(profile_data: Any) -> Tuple[Set[str], List[str]]:
+def extract_candidate_skills(
+    profile_data: Any,
+    evidence_index: Optional[ProfileEvidenceIndex] = None,
+) -> Tuple[Set[str], List[str]]:
     """
     Extracts all candidate competencies and bullet texts for matching.
+    Supports ProfileContext, ProfileEvidenceIndex, dict, or text, reusing evidence_index when provided.
     Returns: (competencies_set, verified_bullets)
     """
     competencies: Set[str] = set()
     verified_bullets: List[str] = []
 
-    # If file path
-    if isinstance(profile_data, str) and os.path.exists(profile_data):
-        try:
-            with open(profile_data, "r", encoding="utf-8") as f:
-                content = f.read()
-            if profile_data.endswith(".json") or content.strip().startswith("{"):
-                try:
-                    profile_data = json.loads(content)
-                except Exception:
-                    pass
-        except Exception:
-            pass
+    # 1. Reuse existing evidence_index if provided
+    index: Optional[ProfileEvidenceIndex] = evidence_index
 
-    if isinstance(profile_data, dict):
-        index = build_profile_evidence_index(profile_data)
+    # 2. Resolve index if not provided directly
+    if index is None:
+        if isinstance(profile_data, ProfileEvidenceIndex):
+            index = profile_data
+        elif isinstance(profile_data, ProfileContext):
+            index = profile_data.evidence_index
+        elif isinstance(profile_data, dict):
+            index = build_profile_evidence_index(profile_data)
+        elif isinstance(profile_data, str) and os.path.exists(profile_data):
+            try:
+                with open(profile_data, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if profile_data.endswith(".json") or content.strip().startswith("{"):
+                    try:
+                        loaded = json.loads(content)
+                        if isinstance(loaded, dict):
+                            index = build_profile_evidence_index(loaded)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    if index is not None:
         for item in index.skills:
             competencies.add(item.strip())
             sub_tokens = re.findall(r"\b[A-Za-z0-9_\-\+\#]{2,}\b", item)
@@ -754,7 +773,8 @@ def generate_skill_defense(skill: str) -> str:
 def generate_skill_ledger(
     profile_data: Any,
     jd_decoded_or_text: Any,
-    skills_to_evaluate: Optional[List[str]] = None
+    skills_to_evaluate: Optional[List[str]] = None,
+    evidence_index: Optional[ProfileEvidenceIndex] = None,
 ) -> Dict[str, Any]:
     """
     Categorizes skills against JD requirements into:
@@ -763,7 +783,7 @@ def generate_skill_ledger(
     - 'unsupported_gap': Skills required by JD but absent in candidate profile.
       CRITICAL: Strictly flag as honest gaps with interview defense advice, never fabricate or hallucinate!
     """
-    competencies, verified_bullets = extract_candidate_skills(profile_data)
+    competencies, verified_bullets = extract_candidate_skills(profile_data, evidence_index=evidence_index)
 
     # Determine skills to evaluate
     if skills_to_evaluate:

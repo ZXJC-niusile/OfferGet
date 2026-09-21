@@ -1,0 +1,42 @@
+diff --git a/core/resume_builder.py b/core/resume_builder.py
+index 4910953..e97465e 100644
+--- a/core/resume_builder.py
++++ b/core/resume_builder.py
+@@ -88,6 +88,7 @@ class ResumeBuilder:
+         "silicon-clean",
+         "classic-tech",
+         "ats-plain",
++        "ats-docx",
+         "academic-latex",
+         "academic-typst",
+     ]
+@@ -392,9 +393,29 @@ class ResumeBuilder:
+                 photo_path=eff_photo_path,
+                 anonymize=anonymize,
+             )
++        elif theme_normalized in ("ats-docx", "docx"):
++            return self.build_ats_docx(
++                output_dir,
++                anonymize=anonymize,
++            )
+         else:
+             raise ValueError(f"Unknown resume theme '{theme}'. Choices: {self.THEMES}")
+ 
++    def build_ats_docx(
++        self,
++        output_dir: Union[str, Path],
++        anonymize: Optional[str] = None,
++    ) -> Dict[str, Path]:
++        """Builds ATS-friendly single-column Word (.docx) resume."""
++        from core.ats_docx_renderer import AtsDocxRenderer
++        out_dir = Path(output_dir).resolve()
++        out_dir.mkdir(parents=True, exist_ok=True)
++        prof = self._resolve_profile(anonymize)
++        vm = self._get_view_model(profile=prof)
++        docx_path = out_dir / "resume_ats.docx"
++        AtsDocxRenderer().render(vm, docx_path)
++        return {"docx": docx_path}
++
+     def build_all(
+         self,
+         output_dir: Union[str, Path],

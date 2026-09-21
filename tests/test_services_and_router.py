@@ -204,10 +204,15 @@ class TestServices(unittest.TestCase):
         claims = service.extract_claims(self.sample_profile)
         self.assertTrue(len(claims) > 0)
 
-        # 4. ProfileContext
+        # 4. ProfileContext & ProfileEvidenceIndex
         ctx = service.get_context(self.sample_profile)
         self.assertEqual(ctx.normalized_profile["candidate"]["name"], norm["candidate"]["name"])
         self.assertIs(ctx.evidence_index, service.get_evidence_index(ctx))
+        self.assertIs(ctx.evidence_index, service.get_evidence_index(ctx.evidence_index))
+        claims_from_ctx = service.extract_claims(ctx)
+        self.assertEqual(len(claims_from_ctx), len(claims))
+        claims_from_idx = service.extract_claims(ctx.evidence_index)
+        self.assertEqual(len(claims_from_idx), len(claims))
 
     def test_match_service(self):
         jd_service = JDService()
@@ -328,6 +333,61 @@ class TestServices(unittest.TestCase):
             content = open(generated_path, encoding="utf-8").read()
             self.assertIn("王工", content)
             self.assertIn("大模型强化学习专家", content)
+
+    def test_new_services_m10_m14(self):
+        """Test newly converged services (OfferService.compare_offers, CareerReviewService.debrief_real_interview, CommunicationService, AcademicService, ApplicationGuardService)."""
+        from core.services import (
+            OfferService,
+            CareerReviewService,
+            CommunicationService,
+            AcademicService,
+            ApplicationGuardService,
+        )
+
+        # 1. OfferService.compare_offers
+        offer_service = OfferService()
+        rep = offer_service.compare_offers([
+            {"offer_id": "o1", "company_name": "字节", "role_title": "后端", "base_salary_k": 30, "months": 15},
+            {"offer_id": "o2", "company_name": "阿里", "role_title": "后端", "base_salary_k": 32, "months": 16},
+        ])
+        self.assertEqual(len(rep.evaluations), 2)
+        self.assertIsNotNone(rep.winner_offer_id)
+
+        # 2. CareerReviewService.debrief_real_interview
+        cr_service = CareerReviewService()
+        checklist = cr_service.debrief_real_interview(
+            transcript_text="面试官：简单自我介绍\n候选人：我负责高并发中间件研发，主导限流组件落地。",
+            target_role="后端架构师",
+        )
+        self.assertEqual(checklist.total_turns, 1)
+
+        # 3. CommunicationService
+        comm_service = CommunicationService()
+        letter = comm_service.follow_up(
+            candidate_name="李明",
+            recruiter_name="HR Lucy",
+            role_name="算法工程师",
+            interview_date="2026-09-10",
+            company_name="智谱AI",
+        )
+        self.assertIn("智谱AI", letter.body_text)
+
+        # 4. AcademicService
+        acad_service = AcademicService()
+        pubs = acad_service.parse_bibtex("@article{test2025, title={AI for Science}, author={Zhang, San}, journal={Nature}, year={2025}}")
+        self.assertEqual(len(pubs), 1)
+
+        # 5. ApplicationGuardService
+        guard_service = ApplicationGuardService()
+        from core.duplicate_guard import ApplicationChannel
+        res = guard_service.check_application(
+            new_company="抖音",
+            new_role="后端",
+            new_channel=ApplicationChannel.DIRECT_CAREERS_SITE,
+            applied_date="2026-09-20",
+            history=[],
+        )
+        self.assertFalse(res.has_collision)
 
     def test_lazy_services_compatibility_matrix(self):
         """Test PEP 562 lazy loading compatibility across core.services symbols and command handlers."""

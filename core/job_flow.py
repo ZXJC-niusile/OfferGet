@@ -16,7 +16,9 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+import os
 import re
+import tempfile
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -696,18 +698,41 @@ def select_targeted_interview_questions(
                 best_score = score
                 q1_obj = aq
 
-    if q1_obj is not None and best_score > 0:
+    combined_jd_text = f"{getattr(decoded_jd, 'job_title', '')} {getattr(decoded_jd, 'clean_text', '')} {core_resp_text}".lower()
+    is_non_tech = any(k in combined_jd_text for k in [
+        "运营", "市场", "产品经理", "ui/ux", "设计", "新媒体", "文案", "编辑",
+        "社群", "增长", "商务", "销售", "hr", "人事", "招聘", "财务", "法务"
+    ]) and not any(k in combined_jd_text for k in [
+        "算法", "架构", "研发", "开发", "工程", "后端", "前端", "测试", "运维", "infra", "sre", "llm"
+    ])
+
+    if q1_obj is not None and best_score > 0 and not is_non_tech:
         q1_zh = q1_obj.question_cn
         q1_en = q1_obj.question_en
         q1_signal = q1_obj.jd_signal
         q1_intent = q1_obj.interviewer_intent
         q1_prep = q1_obj.prep_keypoints
+        q1_category = "架构与系统设计"
+        q1_category_type = "ARCHITECTURE"
+        q1_expected = ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"]
+    elif is_non_tech:
+        q1_zh = f"针对岗位核心职责【{core_resp_text}】，请结合具体业务场景，阐述你的核心策略、关键落地动作、跨部门协同过程以及量化业务成效？"
+        q1_en = f"Regarding the core responsibility '{core_resp_text}', elaborate on your core strategy, execution actions, cross-functional collaboration, and quantified business outcomes."
+        q1_signal = core_resp_text
+        q1_intent = "考察候选人对岗位核心职责的理解深度、策略落地能力与量化业务成果闭环。"
+        q1_prep = "1. 明确业务场景与核心目标；2. 阐明个人主导的关键动作与策略推演；3. 给出跨部门协同机制与量化业务收益。"
+        q1_category = "业务职责与落地实践"
+        q1_category_type = "BUSINESS_CORE"
+        q1_expected = ["业务场景与目标定位", "关键动作与策略推演", "协同与执行把控", "核心指标Baseline与业务增长收益"]
     else:
         q1_zh = f"针对岗位核心职责【{core_resp_text}】，请结合具体业务场景，阐述你的端到端技术方案与架构设计，如何权衡关键选型及应对高并发/高可用挑战？"
         q1_en = f"Regarding the core responsibility '{core_resp_text}', elaborate on your end-to-end architecture design, key technical trade-offs, and how you tackle concurrency and stability challenges."
         q1_signal = core_resp_text
         q1_intent = "考察候选人对岗位核心技术职责的系统级掌控度、技术选型权衡及工程落地深度。"
         q1_prep = "1. 分层陈述整体架构与核心交互；2. 阐述关键技术选型与Trade-off；3. 给出高并发/稳定性保障措施与量化效果口径。"
+        q1_category = "架构与系统设计"
+        q1_category_type = "ARCHITECTURE"
+        q1_expected = ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"]
 
     formatted_questions.append({
         "question_id": 1,
@@ -715,13 +740,13 @@ def select_targeted_interview_questions(
         "dimension_name_cn": "核心岗位能力与技术架构深度考查",
         "requirement_id": req_id_q1,
         "requirement_name": core_resp_text,
-        "category": "架构与系统设计",
-        "category_type": "ARCHITECTURE",
+        "category": q1_category,
+        "category_type": q1_category_type,
         "question_zh": q1_zh,
         "question_en": q1_en,
         "jd_signal": q1_signal,
         "interviewer_intent": q1_intent,
-        "expected_elements": ["核心架构设计与模块划分", "关键技术选型与Trade-off", "高并发/吞吐/稳定性保障措施", "指标Baseline与量化收益"],
+        "expected_elements": q1_expected,
         "prep_keypoints": q1_prep,
         "evidence_refs": q1_evidence_refs,
         "evidence_claim_ids": q1_evidence_ids,
@@ -734,13 +759,14 @@ def select_targeted_interview_questions(
     substantive_claims = [
         c for c in claims
         if c.kind in ("experience", "project", "highlight", "bullet")
-        and len(c.text.strip()) >= 20
-        and not any(meta in c.source_path for meta in ("candidate.", "years_of_experience", "institution", "degree"))
+        and len(c.text.strip()) >= 10
+        and not any(meta in c.source_path.lower() for meta in ("candidate.", "years_of_experience", "institution", "degree", "name", "phone", "email", "gender"))
+        and not any(meta in c.claim_id.lower() for meta in ("candidate.", "degree", "institution", "name"))
     ]
     distinct_claims: List[EvidenceClaim] = []
     seen_claim_ids: Set[str] = set()
     for c in substantive_claims:
-        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5]", c.text):
+        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5a-zA-Z]", c.text):
             distinct_claims.append(c)
             seen_claim_ids.add(c.claim_id)
     for c in substantive_claims:
@@ -759,8 +785,6 @@ def select_targeted_interview_questions(
         anchor_claim = candidate_q2_claims[0]
     elif distinct_claims:
         anchor_claim = distinct_claims[0]
-    elif claims:
-        anchor_claim = claims[0]
     else:
         anchor_claim = None
 
@@ -774,7 +798,7 @@ def select_targeted_interview_questions(
         q2_prep = "按背景、目标、个人独立动作、替代方案取舍、baseline与数据来源、团队协作边界与反省复盘结构化作答。"
         q2_evidence_refs = [claim_ref(anchor_claim)]
         q2_evidence_ids = [anchor_claim.claim_id]
-        q2_req_id = anchor_claim.claim_id
+        q2_req_id = f"project_deep_dive_{anchor_claim.claim_id}"
         q2_req_name = short_c
     else:
         q2_zh = "请选择你过往最具代表性的一个技术攻坚项目，深入阐述你独立负责的核心模块、遇到的最大技术瓶颈、选型对比、最终量化指标及复盘反思。"
@@ -889,6 +913,7 @@ def run_career_review(
     resume_theme: str = "modern-navy",
     resume_output_dir: Optional[Union[str, Path]] = None,
     reserve_photo: bool = True,
+    session_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     decoder = JDDecoder()
     decoded_jd = decoder.decode(jd_text)
@@ -902,13 +927,27 @@ def run_career_review(
 
     predictor = JDPredictor()
     probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days)
-    formatted_questions = select_targeted_interview_questions(
-        decoded_jd=decoded_jd,
-        cand_profile=cand_profile,
-        claims=claims,
-        matcher_result=matcher_result,
-        predictor=predictor,
-    )
+
+    jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
+    raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
+    profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+
+    if session_data:
+        sess_jd_fp = session_data.get("jd_fingerprint")
+        sess_prof_fp = session_data.get("profile_fingerprint")
+        if sess_jd_fp and sess_jd_fp != jd_hash:
+            raise ValueError(f"Session JD fingerprint mismatch: expected {sess_jd_fp}, got {jd_hash}")
+        if sess_prof_fp and sess_prof_fp != profile_hash:
+            raise ValueError(f"Session Profile fingerprint mismatch: expected {sess_prof_fp}, got {profile_hash}")
+        formatted_questions = session_data.get("questions_snapshot", [])
+    else:
+        formatted_questions = select_targeted_interview_questions(
+            decoded_jd=decoded_jd,
+            cand_profile=cand_profile,
+            claims=claims,
+            matcher_result=matcher_result,
+            predictor=predictor,
+        )
 
     fact_guard = FactVerificationGuard(profile_ctx)
     resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard)
@@ -916,11 +955,21 @@ def run_career_review(
     debrief_engine = InterviewDebriefEngine()
     feedback_items: List[Dict[str, Any]] = []
     invalid_answers: List[Dict[str, Any]] = []
-    provided_answers: List[Any] = []
 
+    # Map of previous feedback and answers from session_data
+    previous_feedback_map: Dict[int, Dict[str, Any]] = {}
+    previous_answers_map: Dict[int, str] = {}
+    if session_data:
+        for f in session_data.get("answer_feedback", []):
+            if isinstance(f, dict) and "question_id" in f:
+                previous_feedback_map[f["question_id"]] = f
+        for a in session_data.get("answers", []):
+            if isinstance(a, dict) and "question_id" in a:
+                previous_answers_map[a["question_id"]] = a.get("answer", "")
+
+    new_answers_by_id: Dict[int, str] = {}
     if answers_dict and isinstance(answers_dict, dict) and answers_dict.get("answers"):
         provided_answers = answers_dict.get("answers", [])
-        ans_by_id: Dict[int, str] = {}
         valid_ids = {q["question_id"] for q in formatted_questions}
         if not isinstance(provided_answers, list):
             invalid_answers.append({"reason": "answers_not_list"})
@@ -933,7 +982,7 @@ def run_career_review(
                 except (TypeError, ValueError):
                     invalid_answers.append({"question_id": qid, "reason": "invalid_question_id"})
                     continue
-                if normalized_qid in ans_by_id:
+                if normalized_qid in new_answers_by_id:
                     invalid_answers.append({"question_id": normalized_qid, "reason": "duplicate_question_id"})
                     continue
                 if normalized_qid not in valid_ids:
@@ -948,19 +997,26 @@ def run_career_review(
                 if len(txt) > 8000:
                     invalid_answers.append({"question_id": normalized_qid, "reason": "answer_too_long", "max_length": 8000})
                     continue
-                ans_by_id[normalized_qid] = txt
+                new_answers_by_id[normalized_qid] = txt
             elif isinstance(item, str):
-                next_id = len(ans_by_id) + 1
+                next_id = len(new_answers_by_id) + 1
                 if len(item) > 8000:
                     invalid_answers.append({"question_id": next_id, "reason": "answer_too_long", "max_length": 8000})
                 elif next_id in valid_ids:
-                    ans_by_id[next_id] = item
+                    new_answers_by_id[next_id] = item
             else:
                 invalid_answers.append({"reason": "answer_item_invalid"})
 
-        for q in formatted_questions:
-            qid = q["question_id"]
-            user_ans = ans_by_id.get(qid, "")
+    # Combine answers: new answers override previous answers for that question_id
+    combined_answers_map: Dict[int, str] = dict(previous_answers_map)
+    combined_answers_map.update(new_answers_by_id)
+
+    # Now evaluate each question
+    for q in formatted_questions:
+        qid = q["question_id"]
+        # If freshly answered in this round: evaluate
+        if qid in new_answers_by_id:
+            user_ans = new_answers_by_id[qid]
             if user_ans.strip():
                 debrief = debrief_engine.analyze_question(
                     q["question_zh"],
@@ -994,70 +1050,88 @@ def run_career_review(
                     "candidate_answer": "",
                     "status": "awaiting_answer",
                     "diagnosis": "not_submitted",
-                    "analysis": "未提供回答。请针对该问题提交您的作答以获得针对性攻防诊断。",
-                    "coaching_advice": q["prep_keypoints"],
+                    "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
+                    "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
                     "revised_answer": "",
-                    "refined_answer": q["prep_keypoints"],
+                    "refined_answer": "",
                     "can_revise": False,
                     "verification_status": "unverified",
-                    "key_takeaway": "参考题目的考查意图与备考要点构思 STAR 框架回答。",
+                    "key_takeaway": "请先提交针对该题的回答。",
+                    "evidence_refs": q.get("evidence_refs", []),
                     "missing_elements": [],
                     "follow_up_questions": [],
                 })
-    else:
-        for q in formatted_questions:
+        # Else if previously evaluated in session_data: retain previous feedback!
+        elif qid in previous_feedback_map:
+            feedback_items.append(previous_feedback_map[qid])
+        # Else: awaiting answer
+        else:
             feedback_items.append({
-                "question_id": q["question_id"],
+                "question_id": qid,
                 "question_zh": q["question_zh"],
                 "target_dimension": q.get("target_dimension", ""),
                 "candidate_answer": "",
                 "status": "awaiting_answer",
                 "diagnosis": "not_submitted",
-                "analysis": "候选人尚未提交该题的一轮回答。请提交回答以触发基于指标与证据的诊断。",
-                "coaching_advice": q["prep_keypoints"],
+                "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
+                "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
                 "revised_answer": "",
-                "refined_answer": q["prep_keypoints"],
+                "refined_answer": "",
                 "can_revise": False,
                 "verification_status": "unverified",
-                "key_takeaway": "明确指标口径、数据来源和个人贡献边界。",
+                "key_takeaway": "请先提交针对该题的回答。",
+                "evidence_refs": q.get("evidence_refs", []),
                 "missing_elements": [],
                 "follow_up_questions": [],
             })
 
-    polish_focus = {
-        "focus_area": "interview_defense",
-        "description": "针对真实证据、指标口径与个人贡献边界的防守训练",
-        "defense_checkpoints": [
-            "确保所有量化指标自带 baseline、结果、单位和数据来源，避免被追问时判定为 metric_drift",
-            "在被问及未涉猎领域时诚实划定边界并提出可迁移能力，避免白板硬猜触发 fatal_gap",
-            "对主导、搭建、优化等强动词准备个人动作、替代方案、失败复盘和团队边界"
-        ],
-        "total_claims_indexed": len(claims),
-        "verified_metrics_protected": bool(fact_guard.master_profile),
-        "fact_guard_verdict": "available" if fact_guard.master_profile else "profile_missing",
-        "invalid_answers": invalid_answers,
-    }
+    # Prepare combined answers list for result
+    combined_answers_list = [
+        {"question_id": qid, "answer": ans}
+        for qid, ans in sorted(combined_answers_map.items())
+    ]
 
+    tailored_profile = generate_tailored_profile_from_review(
+        {"resume_advice": resume_advices, "match_summary": matcher_result},
+        profile_ctx,
+        fact_guard=fact_guard,
+    )
+
+    # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
     result = {
         "schema_version": "career-review.v1",
         "jd_breakdown": {
-            "job_title": getattr(decoded_jd, "job_title", ""),
-            "company_or_dept": getattr(decoded_jd, "company_or_dept", ""),
-            "target_level": getattr(decoded_jd, "target_level", ""),
-            "compensation_band": getattr(decoded_jd, "compensation_band", ""),
-            "location": getattr(decoded_jd, "location", ""),
-            "tech_domains": getattr(decoded_jd, "tech_domains", []),
-            "hard_thresholds": [asdict(t) for t in getattr(decoded_jd, "hard_thresholds", [])],
-            "core_responsibilities": [asdict(r) for r in getattr(decoded_jd, "core_responsibilities", [])],
-            "core_skills": [asdict(s) for s in getattr(decoded_jd, "core_skills", [])],
-            "implicit_signals": [asdict(sig) for sig in getattr(decoded_jd, "implicit_signals", [])],
-            "business_pain_points": [asdict(p) for p in getattr(decoded_jd, "business_pain_points", [])],
-            "filtered_boilerplates": [asdict(b) if hasattr(b, "__dataclass_fields__") else str(b) for b in getattr(decoded_jd, "filtered_boilerplates", [])],
-            "source_note": "岗位拆解仅使用提供的 JD 原文；隐性信号和业务解释属于启发式推断。",
+            "job_title": decoded_jd.job_title,
+            "company_or_dept": decoded_jd.company_or_dept,
+            "core_skills": [s.name for s in decoded_jd.core_skills],
+            "hard_thresholds": [
+                {
+                    "category": t.category,
+                    "requirement": t.requirement,
+                    "is_mandatory": t.is_mandatory,
+                }
+                for t in decoded_jd.hard_thresholds
+            ],
+            "implicit_signals": [
+                {
+                    "original_text": sig.original_text,
+                    "translated_meaning": sig.translated_meaning,
+                    "underlying_risk": sig.underlying_risk,
+                }
+                for sig in decoded_jd.implicit_signals
+            ],
+            "business_pain_points": [
+                {
+                    "aspect": p.aspect,
+                    "description": p.description,
+                    "evaluation_metric": p.evaluation_metric,
+                }
+                for p in decoded_jd.business_pain_points
+            ],
         },
         "match_summary": {
-            "final_match_score": matcher_result.final_match_score,
             "raw_match_score": matcher_result.raw_match_score,
+            "final_match_score": matcher_result.final_match_score,
             "must_have_score": matcher_result.must_have_score,
             "nice_to_have_score": matcher_result.nice_to_have_score,
             "hidden_signal_fit": matcher_result.hidden_signal_fit,
@@ -1066,36 +1140,52 @@ def run_career_review(
             "breakthrough_advice": matcher_result.breakthrough_advice,
             "prediction": asdict(probability_forecast),
             "prediction_note": "基于规则和当前材料的启发式区间，不代表真实录用概率。",
+            "gap_matrix": [
+                {
+                    "requirement_name": g.requirement_name,
+                    "category": g.category,
+                    "importance": g.importance,
+                    "state": g.state.value if hasattr(g.state, "value") else str(g.state),
+                    "actionable_advice": g.actionable_advice,
+                    "candidate_evidence": g.candidate_evidence,
+                    "gap_explanation": g.gap_explanation,
+                }
+                for g in matcher_result.gap_matrix
+            ],
         },
         "resume_advice": resume_advices,
         "interview_questions": formatted_questions,
         "question_generation": {
-            "status": "complete" if len(formatted_questions) >= 3 else "insufficient_jd_signals",
-            "requested_count": 3,
-            "generated_count": len(formatted_questions),
-            "method": "deterministic JD/gap ranking over the compatibility question bank",
+            "strategy": "3_dimension_targeted_defense",
+            "dimensions": [
+                {"dimension": "core_responsibility", "name": "核心岗位能力与技术架构深度考查", "question_id": 1},
+                {"dimension": "project_deep_dive", "name": "候选人真实项目经历与关键成果深入追问", "question_id": 2},
+                {"dimension": "gap_boundary", "name": "技术缺口/证据不足边界与真实性防守考查", "question_id": 3},
+            ],
+            "total_questions": len(formatted_questions),
         },
-        "answers": provided_answers,
+        "answers": combined_answers_list,
         "answer_feedback": feedback_items,
         "input_quality": {
-            "route": "complete_review" if jd_text.strip() and claims else "insufficient_input",
-            "jd_available": bool(jd_text.strip()),
-            "profile_evidence_available": bool(claims),
+            "answers": combined_answers_list,
             "invalid_answers": invalid_answers,
-            "evidence_claim_count": len(claims),
-            "profile_fact_policy": "missing facts remain unknown",
+            "evaluated_count": len([f for f in feedback_items if f.get("status") == "evaluated"]),
+            "pending_count": len([f for f in feedback_items if f.get("status") == "awaiting_answer"]),
         },
-        "polish_focus": polish_focus,
+        "polish_focus": {
+            "focus_area": "interview_defense",
+            "defense_checkpoints": [
+                f"Q{q['question_id']}: {q.get('jd_signal', '')} ({q.get('category', q.get('dimension_name_cn', ''))})"
+                for q in formatted_questions
+            ],
+        },
+        "tailored_profile": tailored_profile,
+        "resume_patches": [
+            adv["patch"] for adv in resume_advices if adv.get("patch")
+        ],
     }
 
-    tailored_profile = generate_tailored_profile_from_review(
-        {"resume_advice": resume_advices, "match_summary": matcher_result},
-        profile_ctx,
-        fact_guard=fact_guard,
-    )
-    result["tailored_profile"] = tailored_profile
-    result["resume_patches"] = tailored_profile.get("_audit", {}).get("applied_patches", [])
-
+    # Optional resume generation using tailored_profile
     if build_resume:
         from core.resume_builder import ResumeBuilder
 
@@ -1137,51 +1227,75 @@ def create_review_session(
     jd_text: str,
     profile_dict: Union[Dict[str, Any], ProfileContext],
     review_result: Dict[str, Any],
+    base_session: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Creates a verifiable lightweight JSON session snapshot."""
     jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
     raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
     profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
-    session_id = f"SESSION-{jd_hash}-{profile_hash}"
+    session_id = base_session.get("session_id") if (base_session and base_session.get("session_id")) else f"SESSION-{jd_hash}-{profile_hash}"
 
-    questions_snapshot = []
-    for q in review_result.get("interview_questions", []):
-        questions_snapshot.append({
-            "question_id": q.get("question_id"),
-            "target_dimension": q.get("target_dimension", ""),
-            "dimension_name_cn": q.get("dimension_name_cn", ""),
-            "requirement_id": q.get("requirement_id", ""),
-            "requirement_name": q.get("requirement_name", ""),
-            "question_zh": q.get("question_zh", ""),
-            "jd_signal": q.get("jd_signal", ""),
-            "interviewer_intent": q.get("interviewer_intent", ""),
-            "expected_elements": q.get("expected_elements", []),
-        })
+    if base_session and base_session.get("questions_snapshot"):
+        questions_snapshot = base_session["questions_snapshot"]
+    else:
+        questions_snapshot = []
+        for q in review_result.get("interview_questions", []):
+            questions_snapshot.append({
+                "question_id": q.get("question_id"),
+                "target_dimension": q.get("target_dimension", ""),
+                "dimension_name_cn": q.get("dimension_name_cn", ""),
+                "category": q.get("category", ""),
+                "category_type": q.get("category_type", ""),
+                "requirement_id": q.get("requirement_id", ""),
+                "requirement_name": q.get("requirement_name", ""),
+                "question_zh": q.get("question_zh", ""),
+                "jd_signal": q.get("jd_signal", ""),
+                "interviewer_intent": q.get("interviewer_intent", ""),
+                "expected_elements": q.get("expected_elements", []),
+            })
 
     session_answers = review_result.get("answers", [])
     if not session_answers and isinstance(review_result.get("input_quality"), dict):
         session_answers = review_result["input_quality"].get("answers", [])
+
+    feedbacks = review_result.get("answer_feedback", [])
+    evaluated_count = len([f for f in feedbacks if f.get("status") == "evaluated" and f.get("diagnosis") != "not_submitted"])
+    total_q = len(questions_snapshot)
+    status = "completed" if (total_q > 0 and evaluated_count >= total_q) else "awaiting_answer"
 
     return {
         "session_id": session_id,
         "schema_version": "career-review-session.v1",
         "jd_fingerprint": jd_hash,
         "profile_fingerprint": profile_hash,
-        "status": "awaiting_answer" if any(f.get("status") == "awaiting_answer" for f in review_result.get("answer_feedback", [])) else "completed",
+        "status": status,
+        "generated_questions_count": total_q,
+        "answered_questions_count": len(session_answers),
+        "evaluated_questions_count": evaluated_count,
+        "minimum_loop_completed": evaluated_count >= 1,
+        "all_questions_completed": total_q > 0 and evaluated_count >= total_q,
         "questions_snapshot": questions_snapshot,
         "answers": session_answers,
-        "answer_feedback": review_result.get("answer_feedback", []),
+        "answer_feedback": feedbacks,
     }
 
 
 def save_review_session(session: Dict[str, Any], output_path: Union[str, Path]) -> None:
-    """Atomically save review session JSON to disk."""
-    out = Path(output_path)
+    """Atomically save review session JSON to disk using a unique temporary file."""
+    out = Path(output_path).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = out.with_suffix(".tmp")
-    with open(temp_path, "w", encoding="utf-8") as f:
-        json.dump(session, f, ensure_ascii=False, indent=2)
-    temp_path.replace(out)
+    temp_fd, temp_path_str = tempfile.mkstemp(prefix="sess_", suffix=".tmp", dir=str(out.parent))
+    try:
+        with open(temp_fd, "w", encoding="utf-8") as f:
+            json.dump(session, f, ensure_ascii=False, indent=2)
+        os.replace(temp_path_str, str(out))
+    except Exception:
+        if os.path.exists(temp_path_str):
+            try:
+                os.remove(temp_path_str)
+            except OSError:
+                pass
+        raise
 
 
 def load_review_session(session_path: Union[str, Path]) -> Dict[str, Any]:
@@ -1215,4 +1329,30 @@ def validate_session_answers(
         else:
             errors.append("invalid_answer_entry_format")
     return len(errors) == 0, errors
+
+
+def generate_defense_followup_chain(
+    context_text: str = "",
+    chain_type: str = "project_boundary",
+    role: str = "tech_interviewer",
+    num_layers: int = 3,
+) -> Dict[str, Any]:
+    """
+    Generates a 2-4 layer defense follow-up question chain.
+    Absorbed from defense-beating-simulator (M3).
+    """
+    from core.defense.chain import DefenseQuestionChain, DefenseRole, QuestionChainType
+
+    try:
+        ct = QuestionChainType(chain_type)
+    except ValueError:
+        ct = QuestionChainType.PROJECT_BOUNDARY
+
+    try:
+        r = DefenseRole(role)
+    except ValueError:
+        r = DefenseRole.TECH_INTERVIEWER
+
+    chain = DefenseQuestionChain.generate_chain(ct, context_text=context_text, role=r, num_layers=num_layers)
+    return chain.to_dict()
 

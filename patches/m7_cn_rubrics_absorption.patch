@@ -1,0 +1,49 @@
+diff --git a/core/services.py b/core/services.py
+index b092a8b..bbc509b 100644
+--- a/core/services.py
++++ b/core/services.py
+@@ -214,6 +214,44 @@ class CareerReviewService:
+         """Loads review session JSON."""
+         return load_review_session(session_path)
+ 
++    def score_rubrics(
++        self,
++        profile_data: Union[Dict[str, Any], ProfileContext, Any],
++        jd_input: Optional[Any] = None,
++        matcher_result: Optional[Any] = None,
++    ) -> Dict[str, Any]:
++        """Evaluates Chinese recruitment rubrics (JD match, Credibility, HR Screen, Interview Readiness)."""
++        from core.cn_rubrics import ComprehensiveRubricScorer, RubricScoreCard
++        from core.jd_compat import profile_to_canonical, to_canonical
++        from modules.jd_analyst.models import CandidateProfile, DecodedJD, MatcherResult
++        from modules.jd_analyst.matcher import JDMatcher
++
++        if isinstance(profile_data, CandidateProfile):
++            candidate = profile_data
++        else:
++            candidate = profile_to_canonical(profile_data)
++
++        decoded_jd: Optional[DecodedJD] = None
++        if jd_input is not None:
++            if isinstance(jd_input, DecodedJD):
++                decoded_jd = jd_input
++            else:
++                decoded_jd = to_canonical(jd_input)
++
++        if decoded_jd is not None and matcher_result is None:
++            matcher_result = JDMatcher().match(decoded_jd, candidate)
++
++        scorer = ComprehensiveRubricScorer()
++        results: Dict[str, Any] = {
++            "credibility": scorer.score_credibility(candidate),
++            "hr_screen": scorer.score_hr_screen(candidate, decoded_jd),
++            "interview_readiness": scorer.score_interview_readiness(candidate, matcher_result),
++        }
++        if decoded_jd is not None and matcher_result is not None:
++            results["jd_match"] = scorer.score_jd_match(decoded_jd, candidate, matcher_result)
++
++        return results
++
+ 
+ class ResumeService:
+     """Domain service for generating multi-template resumes and auditing layout/XSS health."""

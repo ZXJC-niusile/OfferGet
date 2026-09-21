@@ -59,6 +59,48 @@ class JDService:
         text = self._read_text_or_path(jd_text_or_path)
         return classify_role_taxonomy(text)
 
+    def evaluate_should_i_apply(
+        self,
+        jd_input: Any,
+        profile_data: Union[Dict[str, Any], ProfileContext],
+        constraints: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Evaluates Go/No-Go decision, ⭐ rating, pros/cons, and 6-week action plan."""
+        from core.jd_decision import DecodeBeforeMatchGate, ShouldIApplyEvaluator
+        from core.jd_compat import profile_to_canonical
+        from modules.jd_analyst.matcher import JDMatcher
+
+        canonical_jd = DecodeBeforeMatchGate.enforce(jd_input)
+        candidate = profile_to_canonical(profile_data)
+        matcher_result = JDMatcher().match(canonical_jd, candidate)
+        report = ShouldIApplyEvaluator().evaluate(canonical_jd, candidate, matcher_result, constraints)
+        return {
+            "stars": report.stars,
+            "composite_score": report.composite_score,
+            "verdict": report.verdict.value,
+            "verdict_title": report.verdict_title,
+            "verdict_description": report.verdict_description,
+            "pros": report.pros,
+            "cons": report.cons,
+            "probability_range": list(report.probability_range),
+            "probability_breakdown": {k: list(v) for k, v in report.probability_breakdown.items()},
+            "next_action": report.next_action.value,
+            "action_advice": report.action_advice,
+            "dimension_scores": report.dimension_scores,
+            "six_week_plan": {
+                "focus_summary": report.six_week_plan.focus_summary,
+                "weeks": [
+                    {
+                        "week_range": w.week_range,
+                        "phase_name": w.phase_name,
+                        "tasks": list(w.tasks),
+                        "deliverables": w.deliverables,
+                    }
+                    for w in report.six_week_plan.weeks
+                ],
+            },
+        }
+
     @staticmethod
     def _read_text_or_path(jd_text_or_path: Union[str, Path]) -> str:
         if isinstance(jd_text_or_path, Path):
@@ -69,7 +111,7 @@ class JDService:
 class ProfileService:
     """Domain service for candidate profile normalization, evidence indexing, and claims."""
 
-    def normalize(self, profile_data: Dict[str, Any]) -> Dict[str, Any]:
+    def normalize(self, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
         """Normalizes candidate profile into standard SSOT schema."""
         return normalize_candidate_profile(profile_data)
 
@@ -77,12 +119,20 @@ class ProfileService:
         """Constructs or returns a unified, immutable ProfileContext from candidate profile without cross-call caching."""
         return build_profile_context(profile_data)
 
-    def get_evidence_index(self, profile_data: Dict[str, Any]) -> ProfileEvidenceIndex:
-        """Extracts deterministic, auditable evidence index from candidate profile."""
+    def get_evidence_index(self, profile_data: Union[Dict[str, Any], ProfileContext, ProfileEvidenceIndex]) -> ProfileEvidenceIndex:
+        """Extracts deterministic, auditable evidence index from candidate profile or returns existing index."""
+        if isinstance(profile_data, ProfileEvidenceIndex):
+            return profile_data
+        if isinstance(profile_data, ProfileContext):
+            return profile_data.evidence_index
         return build_profile_evidence_index(profile_data)
 
-    def extract_claims(self, profile_data: Dict[str, Any]) -> List[EvidenceClaim]:
-        """Extracts traceable evidence claims from profile."""
+    def extract_claims(self, profile_data: Union[Dict[str, Any], ProfileContext, ProfileEvidenceIndex]) -> List[EvidenceClaim]:
+        """Extracts traceable evidence claims from profile or returns claims from existing context/index."""
+        if isinstance(profile_data, ProfileEvidenceIndex):
+            return list(profile_data.claims)
+        if isinstance(profile_data, ProfileContext):
+            return list(profile_data.claims)
         normalized = self.normalize(profile_data)
         return iter_profile_claims(normalized)
 
@@ -90,9 +140,14 @@ class ProfileService:
 class MatchService:
     """Domain service for matching candidate profiles against decoded JDs."""
 
-    def match(self, jd_compat: Any, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
+    def match(
+        self,
+        jd_compat: Any,
+        profile_data: Union[Dict[str, Any], ProfileContext],
+        strict_gate: bool = False,
+    ) -> Dict[str, Any]:
         """Matches profile or ProfileContext against decoded JD using canonical matcher and returns compatibility view."""
-        return match_legacy(jd_compat, profile_data)
+        return match_legacy(jd_compat, profile_data, strict_gate=strict_gate)
 
 
 class CareerReviewService:
@@ -158,6 +213,61 @@ class CareerReviewService:
     def load_session(self, session_path: Union[str, Path]) -> Dict[str, Any]:
         """Loads review session JSON."""
         return load_review_session(session_path)
+
+    def score_rubrics(
+        self,
+        profile_data: Union[Dict[str, Any], ProfileContext, Any],
+        jd_input: Optional[Any] = None,
+        matcher_result: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Evaluates Chinese recruitment rubrics (JD match, Credibility, HR Screen, Interview Readiness)."""
+        from core.cn_rubrics import ComprehensiveRubricScorer, RubricScoreCard
+        from core.jd_compat import profile_to_canonical, to_canonical
+        from modules.jd_analyst.models import CandidateProfile, DecodedJD, MatcherResult
+        from modules.jd_analyst.matcher import JDMatcher
+
+        if isinstance(profile_data, CandidateProfile):
+            candidate = profile_data
+        else:
+            candidate = profile_to_canonical(profile_data)
+
+        decoded_jd: Optional[DecodedJD] = None
+        if jd_input is not None:
+            if isinstance(jd_input, DecodedJD):
+                decoded_jd = jd_input
+            else:
+                decoded_jd = to_canonical(jd_input)
+
+        if decoded_jd is not None and matcher_result is None:
+            matcher_result = JDMatcher().match(decoded_jd, candidate)
+
+        scorer = ComprehensiveRubricScorer()
+        results: Dict[str, Any] = {
+            "credibility": scorer.score_credibility(candidate),
+            "hr_screen": scorer.score_hr_screen(candidate, decoded_jd),
+            "interview_readiness": scorer.score_interview_readiness(candidate, matcher_result),
+        }
+        if decoded_jd is not None and matcher_result is not None:
+            results["jd_match"] = scorer.score_jd_match(decoded_jd, candidate, matcher_result)
+
+        return results
+
+    def debrief_real_interview(
+        self,
+        transcript_text: str,
+        target_role: str = "后端开发工程师",
+        session_title: str = "真实面试复盘",
+        profile_evidence_index: Optional[Dict[str, Any]] = None,
+    ) -> Any:
+        """Debriefs real-world interview transcript, diagnoses blindspots, and generates (N+1) checklist."""
+        from core.post_interview import PostInterviewDebriefEngine
+
+        return PostInterviewDebriefEngine.debrief(
+            transcript_text=transcript_text,
+            target_role=target_role,
+            session_title=session_title,
+            profile_evidence_index=profile_evidence_index,
+        )
 
 
 class ResumeService:
@@ -283,6 +393,68 @@ class OfferService:
             lang=lang,
         )
 
+    def compare_offers(
+        self,
+        offers: Sequence[Any],
+        weights: Optional[Dict[str, float]] = None,
+    ) -> Any:
+        """Compares multiple offers across real hourly rate, compensation, and 6 dimensions."""
+        from core.offer_comparator import MultiOfferComparator
+
+        return MultiOfferComparator.compare_offers(list(offers), weights=weights)
+
+
+class CommunicationService:
+    """Domain service for career correspondence, cold outreach, and negotiation letters."""
+
+    def cold_outreach(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.cold_outreach(*args, **kwargs)
+
+    def cover_letter(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.cover_letter(*args, **kwargs)
+
+    def reschedule(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.reschedule(*args, **kwargs)
+
+    def thank_you(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.thank_you(*args, **kwargs)
+
+    def follow_up(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.follow_up(*args, **kwargs)
+
+    def salary_negotiation(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.salary_negotiation(*args, **kwargs)
+
+    def decline_offer(self, *args, **kwargs) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.decline_offer(*args, **kwargs)
+
+
+class AcademicService:
+    """Domain service for academic publication ingestion and camp presentation planning."""
+
+    def parse_bibtex(self, bib_content: str, candidate_name: Optional[str] = None) -> Any:
+        from core.academic_sync import BibTexPublicationParser
+        return BibTexPublicationParser.parse_string(bib_content, candidate_name=candidate_name)
+
+    def plan_camp_presentation(self, *args, **kwargs) -> Any:
+        from core.academic_sync import CampPresentationPlanner
+        return CampPresentationPlanner.plan(*args, **kwargs)
+
+
+class ApplicationGuardService:
+    """Domain service for multi-channel duplicate application and recruiter collision guard."""
+
+    def check_application(self, *args, **kwargs) -> Any:
+        from core.duplicate_guard import DuplicateApplicationGuard
+        return DuplicateApplicationGuard.check_application(*args, **kwargs)
+
 
 class ReportService:
     """Domain service for generating and validating strategy reports across dual tracks."""
@@ -380,6 +552,9 @@ _LAZY_EXPORTS: Dict[str, Tuple[str, str]] = {
     "BaoyanStatus": ("core.baoyan_pipeline", "BaoyanStatus"),
     "validate_academic_profile": ("core.baoyan_pipeline", "validate_academic_profile"),
     "generate_camp_checklist": ("core.baoyan_pipeline", "generate_camp_checklist"),
+    "BaoyanPackageBuilder": ("core.baoyan_package", "BaoyanPackageBuilder"),
+    "PersonalStatementBuilder": ("core.baoyan_package", "PersonalStatementBuilder"),
+    "TaocixinOutreachBuilder": ("core.baoyan_package", "TaocixinOutreachBuilder"),
     "AdvisorMatcher": ("core.advisor_matcher", "AdvisorMatcher"),
     "match_advisor_and_draft_email": ("core.advisor_matcher", "match_advisor_and_draft_email"),
     "CandidateProfile": ("modules.jd_analyst.models", "CandidateProfile"),
@@ -388,6 +563,12 @@ _LAZY_EXPORTS: Dict[str, Tuple[str, str]] = {
     "PredictionResult": ("modules.jd_analyst.models", "PredictionResult"),
     "RedFlagReport": ("modules.jd_analyst.models", "RedFlagReport"),
     "OfferStrategyReporter": ("modules.jd_analyst.reporter", "OfferStrategyReporter"),
+    "MultiOfferComparator": ("core.offer_comparator", "MultiOfferComparator"),
+    "CareerCommunicationKit": ("core.communication_kit", "CareerCommunicationKit"),
+    "PostInterviewDebriefEngine": ("core.post_interview", "PostInterviewDebriefEngine"),
+    "DuplicateApplicationGuard": ("core.duplicate_guard", "DuplicateApplicationGuard"),
+    "BibTexPublicationParser": ("core.academic_sync", "BibTexPublicationParser"),
+    "CampPresentationPlanner": ("core.academic_sync", "CampPresentationPlanner"),
 }
 
 
@@ -412,6 +593,9 @@ __all__ = [
     "CareerReviewService",
     "ResumeService",
     "OfferService",
+    "CommunicationService",
+    "AcademicService",
+    "ApplicationGuardService",
     "ReportService",
     "decode_jd",
     "match_profile_to_jd",
@@ -444,4 +628,10 @@ __all__ = [
     "match_advisor_and_draft_email",
     "run_career_review",
     "ResumeBuilder",
+    "MultiOfferComparator",
+    "CareerCommunicationKit",
+    "PostInterviewDebriefEngine",
+    "DuplicateApplicationGuard",
+    "BibTexPublicationParser",
+    "CampPresentationPlanner",
 ]

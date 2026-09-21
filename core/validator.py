@@ -8,13 +8,9 @@ import re
 from typing import Dict, Any, List
 
 
-BANNED_SLOP_PATTERNS = [
-    (r"[—\u2014\u2013]{1,2}", "Banned Dash/Em-dash syntax (破折号修饰滥用)"),
-    (r"不仅.*而且.*更.*", "Banned Rule-of-Three parallelism (排比三段论假大空)"),
-    (r"(深度赋能|全面革新|强力驱动|革命性突破|显著提高|大幅优化|卓越成效|无缝打通|全方位重塑)", "Banned hyperbolic buzzword without metric (虚高空洞动词/副词)"),
-    (r"作为一名深耕.*的", "Banned empty appositive title (空洞自封同位语)"),
-    (r"(delve into|testament to|pivotal role|game-changing transformation|intricate tapestry)", "Banned English AI cliche phrase")
-]
+from core.registry import QualityRuleRegistry
+
+BANNED_SLOP_PATTERNS = QualityRuleRegistry.BANNED_SLOP_PATTERNS
 
 
 def validate_bilingual_html(html_or_path: str) -> Dict[str, Any]:
