@@ -198,26 +198,65 @@ def profile_to_canonical(profile_data: Union[Dict[str, Any], ProfileContext]) ->
 def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
     """Rehydrate a plain JSON legacy result when it did not come from decode_legacy."""
     raw_text = str(decoded.get("raw_text") or decoded.get("clean_text") or "")
-    if raw_text:
+    if raw_text and not any(k in decoded for k in ("job_title", "title", "required_skills", "core_skills", "requirements")):
         return JDDecoder().decode(raw_text)
 
-    metadata = decoded.get("metadata", {})
-    requirements = decoded.get("requirements", {})
-    hard_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=True) for item in requirements.get("must_haves", [])]
-    nice_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=False) for item in requirements.get("nice_haves", [])]
-    skills = [CoreSkill(name=str(item), category="other", importance=SkillImportance.MUST_HAVE.value, domain="general") for item in requirements.get("must_haves", [])]
-    skills.extend(CoreSkill(name=str(item), category="other", importance=SkillImportance.NICE_TO_HAVE.value, domain="general") for item in requirements.get("nice_haves", []))
-    layers = decoded.get("layers", {})
-    responsibilities = []
-    for layer_key in ("layer_1", "layer_3"):
-        text = layers.get(layer_key, {}).get("jd_text_zh", "")
-        if text:
-            responsibilities.append(CoreResponsibility(title=text[:30], description=text, domain="general"))
+    metadata = decoded.get("metadata", {}) if isinstance(decoded.get("metadata"), dict) else {}
+    job_title = str(decoded.get("job_title") or decoded.get("title") or metadata.get("role") or "未指定职位")
+    company_or_dept = str(
+        decoded.get("company_or_dept")
+        or decoded.get("company")
+        or metadata.get("company")
+        or metadata.get("department")
+        or "未指定公司"
+    )
+
+    requirements = decoded.get("requirements", {}) if isinstance(decoded.get("requirements"), dict) else {}
+    req_must_raw = decoded.get("required_skills") or requirements.get("must_haves") or []
+    req_nice_raw = decoded.get("preferred_skills") or requirements.get("nice_haves") or []
+    req_must = req_must_raw if isinstance(req_must_raw, (list, tuple)) else ([req_must_raw] if req_must_raw else [])
+    req_nice = req_nice_raw if isinstance(req_nice_raw, (list, tuple)) else ([req_nice_raw] if req_nice_raw else [])
+
+    hard_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=True) for item in req_must]
+    nice_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=False) for item in req_nice]
+
+    skills: List[CoreSkill] = []
+    if "core_skills" in decoded and isinstance(decoded["core_skills"], (list, tuple)):
+        for item in decoded["core_skills"]:
+            if isinstance(item, CoreSkill):
+                skills.append(item)
+            elif isinstance(item, dict):
+                skills.append(CoreSkill(name=str(item.get("name", "")), category=str(item.get("category", "other")), importance=str(item.get("importance", SkillImportance.MUST_HAVE.value)), domain=str(item.get("domain", "general"))))
+            else:
+                skills.append(CoreSkill(name=str(item), category="other", importance=SkillImportance.MUST_HAVE.value, domain="general"))
+    else:
+        skills.extend(CoreSkill(name=str(item), category="other", importance=SkillImportance.MUST_HAVE.value, domain="general") for item in req_must)
+        skills.extend(CoreSkill(name=str(item), category="other", importance=SkillImportance.NICE_TO_HAVE.value, domain="general") for item in req_nice)
+
+    responsibilities: List[CoreResponsibility] = []
+    if "core_responsibilities" in decoded and isinstance(decoded["core_responsibilities"], (list, tuple)):
+        for item in decoded["core_responsibilities"]:
+            if isinstance(item, CoreResponsibility):
+                responsibilities.append(item)
+            elif isinstance(item, dict):
+                responsibilities.append(CoreResponsibility(title=str(item.get("title", "")), description=str(item.get("description", "")), domain=str(item.get("domain", "general"))))
+            else:
+                responsibilities.append(CoreResponsibility(title=str(item)[:30], description=str(item), domain="general"))
+    elif "responsibilities" in decoded and isinstance(decoded["responsibilities"], (list, tuple)):
+        for item in decoded["responsibilities"]:
+            responsibilities.append(CoreResponsibility(title=str(item)[:30], description=str(item), domain="general"))
+    else:
+        layers = decoded.get("layers", {}) if isinstance(decoded.get("layers"), dict) else {}
+        for layer_key in ("layer_1", "layer_3"):
+            text = layers.get(layer_key, {}).get("jd_text_zh", "")
+            if text:
+                responsibilities.append(CoreResponsibility(title=text[:30], description=text, domain="general"))
+
     signals = [ImplicitSignal(**item) for item in decoded.get("detected_signals", []) if isinstance(item, dict) and "original_text" in item]
     return DecodedJD(
         raw_text=raw_text,
-        job_title=str(metadata.get("role", "未指定职位")),
-        company_or_dept=str(metadata.get("company", metadata.get("department", "未指定公司"))),
+        job_title=job_title,
+        company_or_dept=company_or_dept,
         hard_thresholds=hard_thresholds + nice_thresholds,
         core_responsibilities=responsibilities,
         core_skills=skills,
@@ -228,11 +267,41 @@ def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
 
 
 def to_canonical(decoded: Any) -> DecodedJD:
+    """Universal ingress gateway returning the SSOT canonical DecodedJD.
+
+    Accepts DecodedJD, DecodedJDCompat, legacy dictionary, Path, or raw JD text.
+    """
     if isinstance(decoded, DecodedJDCompat):
         return decoded.canonical
     if isinstance(decoded, DecodedJD):
         return decoded
+    if isinstance(decoded, str):
+        if not decoded.strip():
+            return DecodedJD(
+                raw_text=decoded,
+                job_title="未指定职位",
+                company_or_dept="未指定公司",
+                clean_text=decoded.strip(),
+            )
+        return JDDecoder().decode(decoded)
+    if hasattr(decoded, "read_text"):  # pathlib.Path
+        text = decoded.read_text(encoding="utf-8")
+        if not text.strip():
+            return DecodedJD(
+                raw_text=text,
+                job_title="未指定职位",
+                company_or_dept="未指定公司",
+                clean_text=text.strip(),
+            )
+        return JDDecoder().decode(text)
     if isinstance(decoded, dict):
+        if not decoded:
+            return DecodedJD(
+                raw_text="",
+                job_title="未指定职位",
+                company_or_dept="未指定公司",
+                clean_text="",
+            )
         return _legacy_to_canonical(decoded)
     raise TypeError(f"Unsupported decoded JD type: {type(decoded).__name__}")
 

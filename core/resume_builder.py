@@ -314,11 +314,13 @@ class ResumeBuilder:
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        tex_src = self.academic_exporter.generate_latex(prof, reserve_photo=photo, photo_path=eff_photo_path)
+        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
+
+        tex_src = self.academic_exporter.generate_latex(vm, reserve_photo=photo, photo_path=eff_photo_path)
         tex_path = out_dir / "resume_academic_latex.tex"
         tex_path.write_text(tex_src, encoding="utf-8")
 
-        html_src = self.academic_exporter.generate_latex_html_preview(prof, reserve_photo=photo, photo_path=eff_photo_path)
+        html_src = self.academic_exporter.generate_latex_html_preview(vm, reserve_photo=photo, photo_path=eff_photo_path)
         html_path = out_dir / "resume_academic_latex.html"
         html_path.write_text(html_src, encoding="utf-8")
 
@@ -353,7 +355,8 @@ class ResumeBuilder:
             except Exception:
                 typ_photo = eff_photo_path
 
-        typ_src = self.academic_exporter.generate_typst(prof, reserve_photo=photo, photo_path=typ_photo)
+        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
+        typ_src = self.academic_exporter.generate_typst(vm, reserve_photo=photo, photo_path=typ_photo)
         typ_path = out_dir / "resume_academic_typst.typ"
         typ_path.write_text(typ_src, encoding="utf-8")
 

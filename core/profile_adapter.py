@@ -195,6 +195,91 @@ class ProfileContext:
         """Explicit helper returning a defensive copy of the canonical CandidateProfile."""
         return self.get_canonical_profile()
 
+    def to_analyst_candidate(self) -> Any:
+        """Project this ProfileContext into modules.jd_analyst.models.CandidateProfile."""
+        return self.get_canonical_profile()
+
+    def to_advisor_candidate(self) -> Any:
+        """Project this ProfileContext into core.advisor_matcher.CandidateProfile."""
+        from core.advisor_matcher import CandidateProfile as AdvisorCandidateProfile
+
+        prof = self._normalized_profile
+        raw = self._raw_profile
+        cand = prof.get("candidate", {}) if isinstance(prof.get("candidate"), dict) else {}
+        raw_cand = raw.get("candidate", {}) if isinstance(raw.get("candidate"), dict) else raw
+        edu = prof.get("education", {}) if isinstance(prof.get("education"), dict) else {}
+        raw_edu = raw.get("education", {}) if isinstance(raw.get("education"), dict) else {}
+        standing = raw.get("academic_standing", {}) if isinstance(raw.get("academic_standing"), dict) else {}
+
+        school = (
+            raw_edu.get("school")
+            or edu.get("school")
+            or cand.get("school")
+            or cand.get("institution")
+            or raw_cand.get("undergraduate_school")
+            or raw_cand.get("university")
+            or raw.get("degree_school", "")
+        )
+        major = raw_edu.get("major") or edu.get("major") or cand.get("major") or raw_cand.get("major", "")
+        gpa = str(standing.get("gpa_display") or standing.get("gpa") or raw_edu.get("gpa") or cand.get("gpa") or raw.get("gpa", ""))
+        rank = str(standing.get("rank") or raw_edu.get("rank") or cand.get("rank") or raw.get("rank", ""))
+
+        coursework = [c.get("course_name", "") for c in standing.get("core_courses", [])] if "core_courses" in standing else list(raw.get("coursework", raw.get("courses", [])))
+        honors = [
+            h.get("name", "") if isinstance(h, dict) else str(h)
+            for h in (raw.get("honors") or raw.get("honors_awards") or raw.get("awards") or prof.get("honors_awards") or [])
+        ]
+
+        interests = list(raw.get("research_interests", raw.get("interests", [])))
+        if not interests and "target_schools" in raw:
+            for ts in raw["target_schools"]:
+                if isinstance(ts, dict) and ts.get("research_direction") and ts["research_direction"] not in interests:
+                    interests.append(ts["research_direction"])
+        if not interests and "graduation_thesis" in raw and isinstance(raw["graduation_thesis"], dict):
+            interests.extend(raw["graduation_thesis"].get("tags", []))
+
+        grade = str(raw_cand.get("grade") or cand.get("grade") or raw.get("grade") or "")
+        target_degree = str(raw.get("target_degree") or raw_cand.get("target_degree") or cand.get("target_degree") or "")
+
+        return AdvisorCandidateProfile(
+            name=str(cand.get("name") or raw_cand.get("name", "候选人")),
+            undergraduate_school=str(school),
+            major=str(major),
+            grade=grade,
+            target_degree=target_degree,
+            gpa=gpa,
+            rank=rank,
+            rank_percentage=standing.get("rank_percentage") or raw.get("rank_percentage"),
+            honors_awards=honors,
+            publications=list(raw.get("publications", prof.get("publications", []))),
+            projects=list(raw.get("projects", prof.get("projects", []))),
+            coursework=coursework,
+            skills=list(self.skills),
+            research_interests=interests,
+            read_advisor_papers=list(raw.get("read_advisor_papers", [])),
+            email=str(cand.get("email") or raw_cand.get("email", "")),
+            phone=str(cand.get("phone") or raw_cand.get("phone", "")),
+            wechat=str(raw_cand.get("wechat", "")),
+        )
+
+    def to_view_model(
+        self,
+        photo_path: Optional[Union[str, Path]] = None,
+        reserve_photo: bool = True,
+    ) -> Any:
+        """Constructs a sanitized ResumeViewModel from this ProfileContext SSOT."""
+        from core.resume_view_model import ResumeViewModel
+
+        return ResumeViewModel.from_profile(
+            self,
+            photo_path=photo_path,
+            reserve_photo=reserve_photo,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Returns a defensive deep copy of the normalized profile dictionary."""
+        return copy.deepcopy(self._normalized_profile)
+
     def __repr__(self) -> str:
         name = self._normalized_profile.get("candidate", {}).get("name", "unknown")
         return f"ProfileContext(candidate={name}, skills={len(self.skills)})"
@@ -510,7 +595,7 @@ def _normalize_experiences(items: Iterable[Any], *, prefer_org_key: bool = True)
 def _normalize_single_project(p: Dict[str, Any]) -> Dict[str, Any]:
     """Normalizes a single project entry into standard name, role, time, period, bullets schema."""
     p_copy = dict(p)
-    p_name = p_copy.get("name") or p_copy.get("title") or "校园经历"
+    p_name = p_copy.get("name") or p_copy.get("title") or ""
     p_role = p_copy.get("role", "")
     time_str = p_copy.get("time") or p_copy.get("period", "")
     bullets = list(p_copy.get("bullets", []))
@@ -575,6 +660,34 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
         if "reserve_photo" not in cand:
             cand["reserve_photo"] = True
 
+        raw_awards = (
+            raw_profile_copy.get("awards")
+            or raw_profile_copy.get("honors")
+            or raw_profile_copy.get("honors_awards")
+            or cand.get("honors_awards")
+            or cand.get("awards")
+            or cand.get("honors")
+            or []
+        )
+        if isinstance(raw_awards, list):
+            awards_list = copy.deepcopy(raw_awards)
+        else:
+            awards_list = [raw_awards] if raw_awards else []
+
+        raw_pubs = (
+            raw_profile_copy.get("publications")
+            or raw_profile_copy.get("papers")
+            or cand.get("publications")
+            or []
+        )
+        if isinstance(raw_pubs, list):
+            pubs_list = copy.deepcopy(raw_pubs)
+        else:
+            pubs_list = [raw_pubs] if raw_pubs else []
+
+        if awards_list and "honors_awards" not in cand:
+            cand["honors_awards"] = awards_list
+
         norm_exp = _normalize_experiences(raw_profile_copy.get("experience", []), prefer_org_key=True)
         norm_proj = _normalize_projects(raw_profile_copy.get("projects", []))
 
@@ -583,7 +696,11 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
             "competencies": raw_profile_copy.get("competencies", {}),
             "experience": norm_exp,
             "projects": norm_proj,
-            "publications": raw_profile_copy.get("publications", []),
+            "publications": pubs_list,
+            "papers": pubs_list,
+            "awards": awards_list,
+            "honors": awards_list,
+            "honors_awards": awards_list,
             "narrative": raw_profile_copy.get("narrative", {}),
         }
 
@@ -644,12 +761,42 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
     if yoe is not None:
         cand_dict["years_of_experience"] = yoe
 
+    raw_awards = (
+        raw_profile_copy.get("awards")
+        or raw_profile_copy.get("honors")
+        or raw_profile_copy.get("honors_awards")
+        or cand_dict.get("honors_awards")
+        or cand_dict.get("awards")
+        or []
+    )
+    if isinstance(raw_awards, list):
+        awards_list = copy.deepcopy(raw_awards)
+    else:
+        awards_list = [raw_awards] if raw_awards else []
+
+    raw_pubs = raw_profile_copy.get("publications") or raw_profile_copy.get("papers") or []
+    if isinstance(raw_pubs, list):
+        pubs_list = copy.deepcopy(raw_pubs)
+    else:
+        pubs_list = [raw_pubs] if raw_pubs else []
+
+    if awards_list:
+        cand_dict["honors_awards"] = awards_list
+    if "grade" in raw_profile_copy:
+        cand_dict["grade"] = raw_profile_copy["grade"]
+    if "target_degree" in raw_profile_copy:
+        cand_dict["target_degree"] = raw_profile_copy["target_degree"]
+
     return {
         "candidate": cand_dict,
         "competencies": competencies,
         "experience": norm_exp,
         "projects": norm_proj,
-        "publications": raw_profile_copy.get("publications", []),
+        "publications": pubs_list,
+        "papers": pubs_list,
+        "awards": awards_list,
+        "honors": awards_list,
+        "honors_awards": awards_list,
         "narrative": raw_profile_copy.get("narrative", {}),
     }
 

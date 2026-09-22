@@ -8,7 +8,18 @@
   - `M1`: 把“全档案查词”收敛为有范围的事实判断（经历级作用域、否定/计划句式识别、移除出口豁免）。
   - `M2`: 将会话辅助函数接成真正可恢复的流程（多轮历史保留、严格指纹与答案校验、原子保存）。
   - `M3`: 问题与反馈贴合岗位（运营/业务岗位自适应、禁止姓名/学历作项目追问、短经历支持）。
-  - `M4`: 独立验收与质量集对齐。
+   - `M4`: 独立验收与质量集对齐。
+   - `M15`: 外部简历生态吸收后的公共契约收敛，优先统一画像、JD、答辩、渲染和投递跟踪边界；删除/归档工作暂停。
+
+## 1.1 Current Architecture Convergence Snapshot (2026-09-22)
+- **Profile SSOT**: `ProfileContext` now exposes explicit boundary projections for JD analyst, advisor matching, and resume rendering. Existing domain dataclasses remain compatibility projections, not independent facts. Factual defaults (grade, target_degree, 校园经历) completely removed to guarantee zero hallucination. Field aliases (`awards`, `honors`, `honors_awards`, `publications`, `papers`) normalized across tracks.
+- **Defense SSOT**: `core.defense.simulator` is the sole unified engine; `core.defense_simulator` is a 100% backward-compatible facade; `core.services` directly routes to the canonical simulator; `FollowUpChain`, `EvidenceStatus`, and `RiskBasis` are cleanly shared.
+- **JD Ingress**: `core.jd_compat.to_canonical()` is the universal ingress gateway for raw text, `Path`, dictionaries, legacy views, and canonical `DecodedJD`. Hardened against empty strings, blank whitespace, empty dicts, and non-list skill/requirement containers.
+- **Resume Rendering**: Academic LaTeX, Typst, and HTML preview consume `ResumeViewModel` SSOT directly; hallucinated defaults ("算法架构师", "运营岗", "candidate@example.com", "+86 138-0000-0000", "架构 Owner") completely eliminated; compilation callers wrapped with fail-safe error handling.
+- **Application Tracking**: `ApplicationStore` persists lifecycle history, evidence snapshots, offer details, and collision risk with SQLite `PRAGMA user_version` migrations (v1 schema). `AppStatus` provides canonical coercion (`from_string`) and bidirectional mapping with collision guard.
+- **Academic Truth Boundary**: Personal statements and advisor outreach strictly avoid fabricated awards, rank claims, first-author claims, and project ownership claims; generated factual text passes through `FactVerificationGuard`.
+- **Verification at this snapshot**: `tests/` 493/493 passed (100%); `ApexResume/tests/` 34/34 passed (100%); `tests/test_architecture_convergence.py` 6/6 passed; `tests/test_architecture_negative.py` 5/5 passed; `python cli.py selftest` 11/11 passed; `git diff --check` clean (0 errors).
+- **Known next work**: Proceed to Stage 2: absorb applyr core assets (Evidence Graph state machine, immutable historical scoring snapshots, unified application schema).
 
 ## 2. Baseline & Code Snapshot
 - **Repository Root**: `E:/github/OfferGet`
@@ -91,10 +102,10 @@
   - `tests/test_jd_decision.py`: 8/8 passed
   - `tests/test_cn_rubrics.py`: 8/8 passed
   - `tests/test_baoyan_package.py`: 4/4 passed
-  - `tests/test_registry.py`: 23/23 passed
-  - `tests/` (full OfferGet suite): **482/482 passed** (0 failed, exit code 0)
+  - `tests/test_architecture_convergence.py`: 6/6 passed
+  - `tests/test_architecture_negative.py`: 5/5 passed
+  - `tests/` (full OfferGet suite): **493/493 passed** (0 failed, exit code 0)
   - `ApexResume/tests/`: **34/34 passed** (0 failed, exit code 0)
   - `python cli.py selftest`: **11/11 passed** (0 failed, exit code 0)
   - `git diff --check`: **0 errors** (clean whitespace & line formatting)
 - External repos in `E:\github\简历`: 26 repositories untouched, 0 files deleted/modified.
-

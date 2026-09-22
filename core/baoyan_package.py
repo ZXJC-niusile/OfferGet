@@ -312,13 +312,20 @@ class PersonalStatementBuilder:
                 projects.append(claim.text)
         if not projects:
             projects = [
-                "参与多项专业课程设计与科研探索，具备独立调研与工程实现能力。"
+                "在校期间完成专业培养方案规定的各项实验与专业课程设计，具备扎实的代码实现能力。"
             ]
 
-        # Academic achievements (papers, awards)
-        achievements = prof.get("awards", []) or prof.get("honors", [])
-        if not achievements:
-            achievements = ["多次获得校级奖学金与学业优秀表彰。"]
+        # Academic achievements (papers, awards) - strict anti-hallucination, never fabricate scholarships
+        raw_achievements = (
+            prof.get("awards", [])
+            or prof.get("honors", [])
+            or raw.get("awards", [])
+            or raw.get("honors", [])
+            or raw.get("honors_awards", [])
+            or []
+        )
+        achievements = [str(a) for a in raw_achievements]
+        achievements_display = [f"- {a}" for a in achievements[:3]] if achievements else ["- （暂无已登记的校级或国家级奖项，建议在申请前补充）"]
 
         study_plan = future_plan or (
             f"若有幸进入{target_school}{target_major}攻读研究生，将在导师指导下深入开展课题研究，"
@@ -331,7 +338,7 @@ class PersonalStatementBuilder:
             f"一、学术背景\n{academic_bg}\n\n"
             f"二、研究兴趣与学术志趣\n" + "；".join(interests) + "。\n\n"
             f"三、科研与工程实践\n" + "\n".join(f"- {p}" for p in projects[:4]) + "\n\n"
-            f"四、荣誉与学术成果\n" + "\n".join(f"- {a}" for a in achievements[:3]) + "\n\n"
+            f"四、荣誉与学术成果\n" + "\n".join(achievements_display) + "\n\n"
             f"五、研究生学业规划\n{study_plan}\n"
         )
 
@@ -344,6 +351,21 @@ class PersonalStatementBuilder:
             if buzz in full_text:
                 warnings.append(f"发现空洞套话【{buzz}】，建议删除或替换为具体科研动作")
 
+        # Integrated Fact Verification Guard
+        from core.fact_guard import FactVerificationGuard
+        guard = FactVerificationGuard(ctx)
+        for p_str in projects[:4]:
+            verify_res = guard.verify_facts(p_str)
+            if isinstance(verify_res, dict):
+                if not verify_res.get("passed", True):
+                    for drift in verify_res.get("drifts", []):
+                        warnings.append(f"项目描述存在指标漂移：{drift}")
+                    for unv in verify_res.get("unverified_claims", []):
+                        warnings.append(f"项目描述存在未核验事实：{unv}")
+            elif hasattr(verify_res, "passed") and not verify_res.passed:
+                for issue in getattr(verify_res, "issues", []):
+                    warnings.append(f"项目描述存在未核验事实：{issue}")
+
         return PersonalStatementDraft(
             applicant_name=name,
             target_school=target_school,
@@ -351,7 +373,7 @@ class PersonalStatementBuilder:
             academic_background=academic_bg,
             research_interests=interests,
             practical_projects=projects[:4],
-            academic_achievements=achievements[:3],
+            academic_achievements=achievements[:3] if achievements else [],
             graduate_study_plan=study_plan,
             word_count=len(full_text),
             warnings=warnings,
