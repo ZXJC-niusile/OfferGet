@@ -139,25 +139,26 @@ class TestArchitectureNegative(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             db_path = Path(tmp_dir) / "test_mig.db"
             store = ApplicationStore(db_path)
+            try:
+                # Check user_version set to CURRENT_SCHEMA_VERSION (schema v2)
+                with store._get_connection() as conn:
+                    cur = conn.execute("PRAGMA user_version")
+                    version = cur.fetchone()[0]
+                    self.assertEqual(version, ApplicationStore.CURRENT_SCHEMA_VERSION)
 
-            # Check user_version set to 1
-            with store._get_connection() as conn:
-                cur = conn.execute("PRAGMA user_version")
-                version = cur.fetchone()[0]
-                self.assertEqual(version, 1)
-
-            # Check save and retrieve
-            rec = ApplicationRecord(
-                id="app-neg-01",
-                target_name="测试高校",
-                role_or_track="学术硕士",
-                status=AppStatus.INTERVIEW,
-            )
-            store.save(rec)
-            loaded = store.get("app-neg-01")
-            self.assertIsNotNone(loaded)
-            self.assertEqual(loaded.status, AppStatus.INTERVIEW)
-            store.close()
+                # Check save and retrieve
+                rec = ApplicationRecord(
+                    id="app-neg-01",
+                    target_name="测试高校",
+                    role_or_track="学术硕士",
+                    status=AppStatus.INTERVIEW,
+                )
+                store.save(rec)
+                loaded = store.get("app-neg-01")
+                self.assertIsNotNone(loaded)
+                self.assertEqual(loaded.status, AppStatus.INTERVIEW)
+            finally:
+                store.close()
 
         # Test AppStatus coercion
         self.assertEqual(AppStatus.from_string("面试中"), AppStatus.INTERVIEW)

@@ -1,0 +1,283 @@
+"""
+OfferGet Evidence Graph State Machine (core/evidence/graph.py)
+==============================================================
+Absorbs architectural patterns from applyr (ADR-011):
+1. Finite state machine governing atomic resume claim lifecycles:
+   DRAFT -> VERIFIED -> GROUNDED -> USED_IN_RESUME -> INTERVIEW_DEFENDED (or INVALIDATED)
+2. Immutable audit trails with state progression history.
+3. Strict application gate: any claim used in resume must be at least GROUNDED
+   and verified before candidate application can be marked READY_TO_APPLY.
+4. Exportable immutable evidence snapshots for persistent tracking.
+"""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import time
+from dataclasses import asdict, dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+
+class EvidenceNodeState(str, Enum):
+    """Lifecycle states of an evidence claim in the Evidence Graph."""
+    DRAFT = "draft"                         # 初始草稿/自述，未核实
+    VERIFIED = "verified"                   # 经真实性/抗夸大网关核对无虚构
+    GROUNDED = "grounded"                   # 经历级作用域锚定 (有明确公司/项目/角色上下文)
+    USED_IN_RESUME = "used_in_resume"       # 选入简历子弹点排版
+    INTERVIEW_DEFENDED = "interview_defended" # 答辩模拟追问验证通过
+    INVALIDATED = "invalidated"             # 证伪/存疑废弃，不可使用
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+# Valid linear forward transitions
+_VALID_TRANSITIONS: Dict[EvidenceNodeState, Set[EvidenceNodeState]] = {
+    EvidenceNodeState.DRAFT: {
+        EvidenceNodeState.VERIFIED,
+        EvidenceNodeState.INVALIDATED,
+    },
+    EvidenceNodeState.VERIFIED: {
+        EvidenceNodeState.GROUNDED,
+        EvidenceNodeState.INVALIDATED,
+    },
+    EvidenceNodeState.GROUNDED: {
+        EvidenceNodeState.USED_IN_RESUME,
+        EvidenceNodeState.INVALIDATED,
+    },
+    EvidenceNodeState.USED_IN_RESUME: {
+        EvidenceNodeState.INTERVIEW_DEFENDED,
+        EvidenceNodeState.INVALIDATED,
+    },
+    EvidenceNodeState.INTERVIEW_DEFENDED: {
+        EvidenceNodeState.INVALIDATED,
+    },
+    EvidenceNodeState.INVALIDATED: set(),
+}
+
+
+@dataclass
+class EvidenceNode:
+    """A tracked proposition or bullet point within the Evidence Graph."""
+    claim_id: str
+    text: str
+    state: EvidenceNodeState = EvidenceNodeState.DRAFT
+    scope: str = ""                         # e.g. "未来科技 / 算法实习生" or "开源项目 / 负责人"
+    source_ids: List[str] = field(default_factory=list)  # e.g. ["SRC-001", "GITHUB-REPO"]
+    defended_rounds: int = 0               # Number of adversarial defense rounds passed
+    history: List[Dict[str, Any]] = field(default_factory=list)
+    created_at: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+
+    def advance(self, to_state: Union[EvidenceNodeState, str], note: str = "") -> None:
+        """Transitions this node to a new state enforcing monotonic unidirectional progression."""
+        target = EvidenceNodeState(to_state) if isinstance(to_state, str) else to_state
+        if target == self.state:
+            return
+
+        allowed = _VALID_TRANSITIONS.get(self.state, set())
+        if target not in allowed:
+            raise ValueError(
+                f"Invalid evidence state transition: cannot advance from '{self.state}' to '{target}' "
+                f"for claim '{self.claim_id}'"
+            )
+
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        self.history.append({
+            "from_state": self.state.value,
+            "to_state": target.value,
+            "timestamp": now,
+            "note": note,
+        })
+        self.state = target
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "claim_id": self.claim_id,
+            "text": self.text,
+            "state": self.state.value,
+            "scope": self.scope,
+            "source_ids": list(self.source_ids),
+            "defended_rounds": self.defended_rounds,
+            "history": list(self.history),
+            "created_at": self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> EvidenceNode:
+        return cls(
+            claim_id=str(d.get("claim_id", "")),
+            text=str(d.get("text", "")),
+            state=EvidenceNodeState(d.get("state", EvidenceNodeState.DRAFT.value)),
+            scope=str(d.get("scope", "")),
+            source_ids=list(d.get("source_ids", [])),
+            defended_rounds=int(d.get("defended_rounds", 0)),
+            history=list(d.get("history", [])),
+            created_at=str(d.get("created_at", "")),
+        )
+
+
+class EvidenceGraph:
+    """
+    Evidence Graph coordinating verifiable fact validation, scoped grounding,
+    and interview defense progression.
+    """
+
+    def __init__(self, nodes: Optional[List[EvidenceNode]] = None):
+        self._nodes: Dict[str, EvidenceNode] = {}
+        if nodes:
+            for n in nodes:
+                self._nodes[n.claim_id] = copy.deepcopy(n)
+
+    @property
+    def nodes(self) -> Dict[str, EvidenceNode]:
+        return {k: copy.deepcopy(v) for k, v in self._nodes.items()}
+
+    def add_claim(
+        self,
+        text: str,
+        claim_id: Optional[str] = None,
+        state: EvidenceNodeState = EvidenceNodeState.DRAFT,
+        scope: str = "",
+        source_ids: Optional[List[str]] = None,
+    ) -> EvidenceNode:
+        """Adds a new claim node to the graph."""
+        if not claim_id:
+            h = hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:8]
+            claim_id = f"CLM-{h}"
+
+        node = EvidenceNode(
+            claim_id=claim_id,
+            text=text.strip(),
+            state=state,
+            scope=scope.strip(),
+            source_ids=list(source_ids) if source_ids else [],
+        )
+        self._nodes[claim_id] = node
+        return node
+
+    def get_node(self, claim_id: str) -> Optional[EvidenceNode]:
+        return self._nodes.get(claim_id)
+
+    def verify_claim(self, claim_id: str, source_ids: Optional[List[str]] = None, note: str = "") -> EvidenceNode:
+        """Advances a claim from DRAFT to VERIFIED."""
+        node = self._nodes.get(claim_id)
+        if not node:
+            raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
+        if source_ids:
+            for sid in source_ids:
+                if sid not in node.source_ids:
+                    node.source_ids.append(sid)
+        node.advance(EvidenceNodeState.VERIFIED, note=note or "Verified by factual evidence")
+        return node
+
+    def ground_claim(self, claim_id: str, scope: str, note: str = "") -> EvidenceNode:
+        """Grounds a claim to a concrete experience/project scope."""
+        node = self._nodes.get(claim_id)
+        if not node:
+            raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
+        if not scope.strip():
+            raise ValueError(f"Cannot ground claim '{claim_id}' without an explicit scope")
+        node.scope = scope.strip()
+        node.advance(EvidenceNodeState.GROUNDED, note=note or f"Grounded in scope '{scope}'")
+        return node
+
+    def use_in_resume(self, claim_id: str, note: str = "") -> EvidenceNode:
+        """Marks a grounded claim as selected and formatted for the final resume."""
+        node = self._nodes.get(claim_id)
+        if not node:
+            raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
+        node.advance(EvidenceNodeState.USED_IN_RESUME, note=note or "Selected for resume bullet point")
+        return node
+
+    def defend_claim(self, claim_id: str, rounds: int = 1, note: str = "") -> EvidenceNode:
+        """Marks a claim as successfully defended in mock interview / defense simulation."""
+        node = self._nodes.get(claim_id)
+        if not node:
+            raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
+        node.defended_rounds += max(1, rounds)
+        node.advance(
+            EvidenceNodeState.INTERVIEW_DEFENDED,
+            note=note or f"Passed {rounds} adversarial defense round(s)",
+        )
+        return node
+
+    def invalidate_claim(self, claim_id: str, reason: str = "") -> EvidenceNode:
+        """Marks a claim as invalidated/falsified so it cannot be used in application."""
+        node = self._nodes.get(claim_id)
+        if not node:
+            raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
+        node.advance(EvidenceNodeState.INVALIDATED, note=reason or "Claim invalidated during audit")
+        return node
+
+    def can_apply(self) -> Tuple[bool, List[str]]:
+        """
+        Determines whether the current set of resume claims meets the truth threshold.
+        Returns: (is_ready, list_of_blocking_reasons)
+        """
+        blocking_reasons: List[str] = []
+        used_nodes = [n for n in self._nodes.values() if n.state in {EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}]
+
+        if not used_nodes:
+            # Check if any nodes are even verified
+            verified_count = sum(1 for n in self._nodes.values() if n.state not in {EvidenceNodeState.DRAFT, EvidenceNodeState.INVALIDATED})
+            if verified_count == 0:
+                blocking_reasons.append("没有经过核验与锚定的有效经历主张")
+                return False, blocking_reasons
+
+        # Check for ungrounded or draft claims among active claims
+        for n in self._nodes.values():
+            if n.state == EvidenceNodeState.INVALIDATED:
+                blocking_reasons.append(f"主张 [{n.claim_id}] 已被判定存疑废弃: {n.text[:30]}")
+            elif n.state == EvidenceNodeState.DRAFT and n.scope:
+                blocking_reasons.append(f"主张 [{n.claim_id}] 仍处于未核实草稿状态: {n.text[:30]}")
+
+        is_ready = len(blocking_reasons) == 0
+        return is_ready, blocking_reasons
+
+    def get_readiness_report(self) -> Dict[str, Any]:
+        """Returns comprehensive readiness statistics and verdict."""
+        counts = {s.value: 0 for s in EvidenceNodeState}
+        for n in self._nodes.values():
+            counts[n.state.value] += 1
+
+        is_ready, blockers = self.can_apply()
+        verdict = "READY_TO_APPLY" if is_ready else ("UNVERIFIED_BLOCK" if counts[EvidenceNodeState.INVALIDATED.value] > 0 else "DEFENSE_PENDING")
+
+        return {
+            "total_claims": len(self._nodes),
+            "state_counts": counts,
+            "verdict": verdict,
+            "is_ready_to_apply": is_ready,
+            "blockers": blockers,
+        }
+
+    def audit_snapshot(self) -> Dict[str, Any]:
+        """
+        Creates an immutable, verifiable audit snapshot suitable for embedding
+        into an ApplicationRecord or persistent telemetry.
+        """
+        nodes_list = [n.to_dict() for n in sorted(self._nodes.values(), key=lambda x: x.claim_id)]
+        content_hash = hashlib.sha256(json.dumps(nodes_list, sort_keys=True).encode("utf-8")).hexdigest()
+
+        return {
+            "snapshot_type": "evidence_graph_audit",
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "graph_hash": content_hash,
+            "total_nodes": len(nodes_list),
+            "verified_count": sum(1 for n in self._nodes.values() if n.state in {EvidenceNodeState.VERIFIED, EvidenceNodeState.GROUNDED, EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}),
+            "readiness": self.get_readiness_report(),
+            "nodes": nodes_list,
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "nodes": [n.to_dict() for n in self._nodes.values()],
+        }
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> EvidenceGraph:
+        nodes = [EvidenceNode.from_dict(item) for item in d.get("nodes", [])]
+        return cls(nodes)

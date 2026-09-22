@@ -8,10 +8,12 @@ and offer compensation comparisons with SQLite/local persistent storage.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
-from dataclasses import asdict, dataclass, field
+import time
+from dataclasses import asdict, dataclass, field, fields
 from datetime import date, datetime
 from enum import Enum
 from pathlib import Path
@@ -88,6 +90,9 @@ class ApplicationRecord:
     evidence_snapshot: Dict[str, Any] = field(default_factory=dict)
     offer_details: Optional[Dict[str, Any]] = None
     collision_risk: Optional[str] = None
+    target_level: str = ""                         # 职级/阶段 (e.g. P6, P7, 校招, 实习, 学硕, 直博)
+    portal_url: str = ""                           # 网申链接/系统页面
+    recruiter_contact: str = ""                    # HR/猎头/导师联系方式
 
     def __post_init__(self):
         if isinstance(self.status, str):
@@ -142,7 +147,73 @@ class ApplicationRecord:
             except ValueError:
                 pass
         d["status"] = stat
-        return cls(**d)
+        valid_fields = {f.name for f in fields(cls)}
+        clean_d = {k: v for k, v in d.items() if k in valid_fields}
+        return cls(**clean_d)
+
+
+def create_evidence_snapshot(
+    profile: Union[Dict[str, Any], Any],
+    jd: Union[Any, Dict[str, Any], str],
+    matcher_result: Optional[Any] = None,
+    ats_score: Optional[float] = None,
+    evidence_graph: Optional[Any] = None,
+    notes: str = "",
+) -> Dict[str, Any]:
+    """Creates an immutable, verifiable application scoring & evidence snapshot.
+
+    Absorbs the immutable snapshot contract from applyr (ADR-011):
+    Captures exact profile fingerprint, JD fingerprint, match score, gap matrix,
+    and verified evidence claims at the time of evaluation or application submission.
+    """
+    from core.jd_compat import to_canonical
+    from core.profile_adapter import ProfileContext
+
+    ctx = ProfileContext.from_profile(profile)
+    canon_jd = to_canonical(jd)
+
+    prof_json = json.dumps(ctx.normalized_profile, sort_keys=True, ensure_ascii=False)
+    prof_hash = hashlib.sha256(prof_json.encode("utf-8")).hexdigest()[:16]
+
+    jd_text = canon_jd.raw_text or canon_jd.clean_text or canon_jd.job_title
+    jd_hash = hashlib.sha256(jd_text.encode("utf-8")).hexdigest()[:16]
+
+    match_score = None
+    gap_summary = []
+    if matcher_result is not None:
+        match_score = getattr(matcher_result, "overall_score", None)
+        if hasattr(matcher_result, "gap_matrix"):
+            for g in matcher_result.gap_matrix:
+                state_val = g.state.value if hasattr(g.state, "value") else str(g.state)
+                gap_summary.append({
+                    "requirement": g.requirement_name,
+                    "state": state_val,
+                    "score": round(getattr(g, "score", 0.0) * 100),
+                    "evidence": getattr(g, "candidate_evidence", ""),
+                })
+
+    graph_snapshot = None
+    if evidence_graph is not None and hasattr(evidence_graph, "audit_snapshot"):
+        graph_snapshot = evidence_graph.audit_snapshot()
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    snapshot_id = f"SNAP-{int(time.time())}-{prof_hash[:6]}"
+
+    return {
+        "snapshot_id": snapshot_id,
+        "created_at": now_str,
+        "profile_fingerprint": prof_hash,
+        "jd_fingerprint": jd_hash,
+        "job_title": canon_jd.job_title,
+        "company_or_dept": canon_jd.company_or_dept,
+        "candidate_name": ctx.normalized_profile.get("candidate", {}).get("name", "候选人"),
+        "match_score": match_score,
+        "ats_score": ats_score,
+        "verified_skills_count": len(ctx.skills),
+        "gap_matrix": gap_summary,
+        "evidence_graph": graph_snapshot,
+        "notes": notes,
+    }
 
 
 class ApplicationStore:
@@ -190,7 +261,7 @@ class ApplicationStore:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
-    CURRENT_SCHEMA_VERSION: int = 1
+    CURRENT_SCHEMA_VERSION: int = 2
 
     def _init_db(self) -> None:
         conn = self._get_connection()
@@ -227,6 +298,18 @@ class ApplicationStore:
             conn.execute("PRAGMA user_version = 1")
             conn.commit()
 
+        if from_version < 2:
+            cur = conn.execute("PRAGMA table_info(applications)")
+            existing_cols = {r[1] for r in cur.fetchall()}
+            if "target_level" not in existing_cols:
+                conn.execute("ALTER TABLE applications ADD COLUMN target_level TEXT DEFAULT ''")
+            if "portal_url" not in existing_cols:
+                conn.execute("ALTER TABLE applications ADD COLUMN portal_url TEXT DEFAULT ''")
+            if "recruiter_contact" not in existing_cols:
+                conn.execute("ALTER TABLE applications ADD COLUMN recruiter_contact TEXT DEFAULT ''")
+            conn.execute("PRAGMA user_version = 2")
+            conn.commit()
+
     def save(self, record: ApplicationRecord) -> None:
         """Inserts or updates an application record atomically."""
         stat_val = record.status.value if hasattr(record.status, "value") else str(record.status)
@@ -237,8 +320,9 @@ class ApplicationStore:
                     id, target_name, role_or_track, status, deadline,
                     exam_or_interview_time, channel, cooling_days_left, notes,
                     applied_date, updated_at, collision_risk,
-                    status_history_json, evidence_snapshot_json, offer_details_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status_history_json, evidence_snapshot_json, offer_details_json,
+                    target_level, portal_url, recruiter_contact
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     target_name=excluded.target_name,
                     role_or_track=excluded.role_or_track,
@@ -253,7 +337,10 @@ class ApplicationStore:
                     collision_risk=excluded.collision_risk,
                     status_history_json=excluded.status_history_json,
                     evidence_snapshot_json=excluded.evidence_snapshot_json,
-                    offer_details_json=excluded.offer_details_json
+                    offer_details_json=excluded.offer_details_json,
+                    target_level=excluded.target_level,
+                    portal_url=excluded.portal_url,
+                    recruiter_contact=excluded.recruiter_contact
                 """,
                 (
                     record.id,
@@ -271,6 +358,9 @@ class ApplicationStore:
                     json.dumps(record.status_history, ensure_ascii=False),
                     json.dumps(record.evidence_snapshot, ensure_ascii=False),
                     json.dumps(record.offer_details, ensure_ascii=False) if record.offer_details else None,
+                    record.target_level or "",
+                    record.portal_url or "",
+                    record.recruiter_contact or "",
                 ),
             )
             conn.commit()
@@ -310,11 +400,18 @@ class ApplicationStore:
         except ValueError:
             stat = stat_str
 
+        target_level = d.pop("target_level", "") or ""
+        portal_url = d.pop("portal_url", "") or ""
+        recruiter_contact = d.pop("recruiter_contact", "") or ""
+
         return ApplicationRecord(
             status=stat,
             status_history=history,
             evidence_snapshot=evidence,
             offer_details=offer,
+            target_level=target_level,
+            portal_url=portal_url,
+            recruiter_contact=recruiter_contact,
             **d,
         )
 

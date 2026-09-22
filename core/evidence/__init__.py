@@ -20,6 +20,11 @@ from core.evidence.models import (
     AuditTimelineItem,
     MetricCheck,
 )
+from core.evidence.graph import (
+    EvidenceGraph,
+    EvidenceNode,
+    EvidenceNodeState,
+)
 from core.evidence.schema import validate_report_data
 
 __all__ = [
@@ -34,6 +39,9 @@ __all__ = [
     "AuditTimelineItem",
     "ClaimExtractor",
     "EvidenceAuditor",
+    "EvidenceGraph",
+    "EvidenceNode",
+    "EvidenceNodeState",
     "MetricCheck",
     "MetricRecalculator",
     "MetricValidationResult",
