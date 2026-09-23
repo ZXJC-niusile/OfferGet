@@ -177,6 +177,19 @@ class TestArchitectureNegative(unittest.TestCase):
         """Verify DefenseSimulator in core.services directly points to core.defense.simulator."""
         self.assertIs(services.DefenseSimulator, UnifiedDefenseSimulator)
 
+    def test_6_future_application_schema_is_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = Path(tmp_dir) / "future.db"
+            store = ApplicationStore(db_path)
+            store.close()
+            import sqlite3
+            conn = sqlite3.connect(db_path)
+            conn.execute("PRAGMA user_version = 999")
+            conn.commit()
+            conn.close()
+            with self.assertRaises(RuntimeError):
+                ApplicationStore(db_path)
+
 
 if __name__ == "__main__":
     unittest.main()

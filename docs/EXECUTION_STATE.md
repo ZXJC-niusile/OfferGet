@@ -103,9 +103,9 @@
   - `tests/test_cn_rubrics.py`: 8/8 passed
   - `tests/test_baoyan_package.py`: 4/4 passed
   - `tests/test_architecture_convergence.py`: 6/6 passed
-  - `tests/test_architecture_negative.py`: 5/5 passed
-  - `tests/test_applyr_absorption.py`: 9/9 passed
-  - `tests/` (full OfferGet suite): **502/502 passed** (0 failed, exit code 0)
+   - `tests/test_architecture_negative.py`: 6/6 passed
+   - `tests/test_applyr_absorption.py`: 13/13 passed
+   - `tests/` (full OfferGet suite): **507/507 passed** (0 failed, exit code 0)
   - `ApexResume/tests/`: **34/34 passed** (0 failed, exit code 0)
   - `python cli.py selftest`: **11/11 passed** (0 failed, exit code 0)
   - `git diff --check`: **0 errors** (clean whitespace & line formatting)
@@ -115,4 +115,6 @@
 - **Evidence Graph State Machine**: Absorbed ADR-011 finite state machine from `applyr` into `core.evidence.graph` (`EvidenceNodeState`: DRAFT -> VERIFIED -> GROUNDED -> USED_IN_RESUME -> INTERVIEW_DEFENDED / INVALIDATED). Linear monotonic progression enforced; audit snapshot generation with content hash; `can_apply()` gate ensures zero ungrounded/invalidated claims reach the application phase.
 - **Immutable Evidence & Scoring Snapshot**: `create_evidence_snapshot()` in `core/application_tracker.py` captures exact profile & JD SHA-256 fingerprints, ATS score, match score, gap matrix, and evidence graph audit trails for zero-drift auditability.
 - **Persistent Application Schema v2**: `ApplicationStore` upgraded to `PRAGMA user_version = 2` with idempotent forward migration adding `target_level`, `portal_url`, `recruiter_contact`. `ApplicationRecord` models unified application targets across enterprise and academic tracks.
-- **Verification at this snapshot**: `tests/test_applyr_absorption.py` (9/9 passed), full `tests/` (502/502 passed, 100%), `ApexResume/tests/` (34/34 passed), `python cli.py selftest` (11/11 passed), `git diff --check` (0 errors).
+- **Verification before post-audit hardening**: `tests/test_applyr_absorption.py` (9/9 passed), full `tests/` (502/502 passed, 100%), `ApexResume/tests/` (34/34 passed), `python cli.py selftest` (11/11 passed), `git diff --check` (0 errors).
+- **Post-audit hardening**: EvidenceGraph now rejects empty/duplicate claims, exposes defensive node copies, blocks verified-but-ungrounded application claims, prevents failed defense mutations, normalizes canonical/legacy matcher score units, and closes SQLite connections when future schema versions are rejected.
+- **Post-audit verification**: `tests/test_applyr_absorption.py` 13/13, `tests/test_architecture_negative.py` 6/6, full `tests/` 507/507, `ApexResume/tests/` 34/34, and `python cli.py selftest` 11/11 passed; `git diff --check` clean.

@@ -76,15 +76,15 @@ class TestEvidenceGraphStateMachine(unittest.TestCase):
         graph.verify_claim(node.claim_id)
         # Cannot jump backwards from VERIFIED to DRAFT
         with self.assertRaises(ValueError):
-            node.advance(EvidenceNodeState.DRAFT)
+            graph.get_node(node.claim_id).advance(EvidenceNodeState.DRAFT)
 
         # Invalidate it
         graph.invalidate_claim(node.claim_id, reason="发现基线数据造假")
-        self.assertEqual(node.state, EvidenceNodeState.INVALIDATED)
+        self.assertEqual(graph.get_node(node.claim_id).state, EvidenceNodeState.INVALIDATED)
 
         # Terminal state: cannot advance from INVALIDATED to VERIFIED or GROUNDED
         with self.assertRaises(ValueError):
-            node.advance(EvidenceNodeState.VERIFIED)
+            graph.get_node(node.claim_id).advance(EvidenceNodeState.VERIFIED)
 
     def test_grounding_requires_explicit_scope(self):
         graph = EvidenceGraph()
@@ -96,6 +96,17 @@ class TestEvidenceGraphStateMachine(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             graph.ground_claim(node.claim_id, scope="   ")
+
+    def test_empty_claims_and_invalid_defense_rounds_are_rejected(self):
+        graph = EvidenceGraph()
+        with self.assertRaises(ValueError):
+            graph.add_claim("   ")
+        node = graph.add_claim("有效主张")
+        graph.verify_claim(node.claim_id)
+        graph.ground_claim(node.claim_id, scope="项目A")
+        graph.use_in_resume(node.claim_id)
+        with self.assertRaises(ValueError):
+            graph.defend_claim(node.claim_id, rounds=0)
 
     def test_can_apply_gate_and_readiness_report(self):
         graph = EvidenceGraph()
@@ -112,6 +123,9 @@ class TestEvidenceGraphStateMachine(unittest.TestCase):
 
         # Verify and ground c1, and use in resume
         graph.verify_claim(c1.claim_id)
+        verified_only_ready, verified_only_reasons = graph.can_apply()
+        self.assertFalse(verified_only_ready)
+        self.assertTrue(any("经历级锚定" in reason for reason in verified_only_reasons))
         graph.ground_claim(c1.claim_id, scope="项目A")
         graph.use_in_resume(c1.claim_id)
 
@@ -133,6 +147,26 @@ class TestEvidenceGraphStateMachine(unittest.TestCase):
 
         report2 = graph.get_readiness_report()
         self.assertEqual(report2["verdict"], "UNVERIFIED_BLOCK")
+
+    def test_graph_read_is_defensive_and_duplicate_ids_are_rejected(self):
+        graph = EvidenceGraph()
+        node = graph.add_claim("可审计主张", claim_id="CLM-IMMUTABLE")
+        exposed = graph.get_node(node.claim_id)
+        exposed.state = EvidenceNodeState.USED_IN_RESUME
+        self.assertEqual(graph.get_node(node.claim_id).state, EvidenceNodeState.DRAFT)
+        with self.assertRaises(ValueError):
+            graph.add_claim("重复主张", claim_id="CLM-IMMUTABLE")
+
+    def test_failed_transition_does_not_mutate_scope_or_defense_count(self):
+        graph = EvidenceGraph()
+        node = graph.add_claim("未核验主张")
+        with self.assertRaises(ValueError):
+            graph.ground_claim(node.claim_id, scope="项目A")
+        with self.assertRaises(ValueError):
+            graph.defend_claim(node.claim_id, rounds=3)
+        current = graph.get_node(node.claim_id)
+        self.assertEqual(current.scope, "")
+        self.assertEqual(current.defended_rounds, 0)
 
     def test_audit_snapshot_and_serialization(self):
         graph = EvidenceGraph()
@@ -215,6 +249,29 @@ class TestEvidenceSnapshotCreation(unittest.TestCase):
         self.assertIsNotNone(snap["evidence_graph"])
         self.assertEqual(snap["evidence_graph"]["total_nodes"], 1)
         self.assertTrue(snap["evidence_graph"]["readiness"]["is_ready_to_apply"])
+
+    def test_matcher_snapshot_keeps_canonical_score_and_gap_matrix(self):
+        snapshot = create_evidence_snapshot(
+            profile={"name": "张三", "skills": ["Python"]},
+            jd="Python 后端研发工程师",
+            matcher_result={
+                "final_match_score": 0.72,
+                "gap_matrix": [{"requirement_name": "Python", "state": "MATCHED", "score": 1.0}],
+            },
+        )
+        self.assertEqual(snapshot["match_score"], 0.72)
+        self.assertEqual(snapshot["gap_matrix"][0]["requirement"], "Python")
+
+        legacy_snapshot = create_evidence_snapshot(
+            profile={"name": "张三", "skills": ["Python"]},
+            jd="Python 后端研发工程师",
+            matcher_result={
+                "overall_match_score": 72,
+                "gap_matrix": [{"requirement_name": "Python", "state": "MATCHED", "score": 100}],
+            },
+        )
+        self.assertEqual(legacy_snapshot["match_score"], 0.72)
+        self.assertEqual(legacy_snapshot["gap_matrix"][0]["score"], 100)
 
 
 class TestApplicationStoreSchemaV2(unittest.TestCase):

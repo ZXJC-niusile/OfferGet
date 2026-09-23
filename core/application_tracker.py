@@ -96,10 +96,7 @@ class ApplicationRecord:
 
     def __post_init__(self):
         if isinstance(self.status, str):
-            try:
-                self.status = AppStatus(self.status)
-            except ValueError:
-                pass
+            self.status = AppStatus.from_string(self.status)
         if not self.status_history and self.status:
             self.status_history.append({
                 "timestamp": self.updated_at,
@@ -112,10 +109,7 @@ class ApplicationRecord:
         """Transitions to a new status and logs to the status history timeline."""
         old_val = str(self.status.value if hasattr(self.status, "value") else self.status)
         if isinstance(new_status, str):
-            try:
-                new_status = AppStatus(new_status)
-            except ValueError:
-                pass
+            new_status = AppStatus.from_string(new_status)
         new_val = str(new_status.value if hasattr(new_status, "value") else new_status)
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
         self.status = new_status
@@ -180,24 +174,55 @@ def create_evidence_snapshot(
 
     match_score = None
     gap_summary = []
+
+    def _ratio_score(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        numeric = float(value)
+        return numeric / 100.0 if abs(numeric) > 1.0 else numeric
+
+    def _percent_score(value: Any) -> int:
+        numeric = float(value)
+        return round(numeric * 100) if abs(numeric) <= 1.0 else round(numeric)
+
     if matcher_result is not None:
-        match_score = getattr(matcher_result, "overall_score", None)
-        if hasattr(matcher_result, "gap_matrix"):
-            for g in matcher_result.gap_matrix:
+        if isinstance(matcher_result, dict):
+            match_score = matcher_result.get("overall_score", matcher_result.get("overall_match_score"))
+            if match_score is None:
+                match_score = matcher_result.get("final_match_score", matcher_result.get("match_score"))
+            raw_gaps = matcher_result.get("gap_matrix", [])
+        else:
+            match_score = getattr(matcher_result, "overall_score", None)
+            if match_score is None:
+                match_score = getattr(matcher_result, "final_match_score", None)
+            raw_gaps = getattr(matcher_result, "gap_matrix", [])
+        for g in raw_gaps:
+            if isinstance(g, dict):
+                state_val = g.get("state", "")
+                if hasattr(state_val, "value"):
+                    state_val = state_val.value
+                gap_summary.append({
+                    "requirement": g.get("requirement_name", ""),
+                    "state": state_val,
+                    "score": _percent_score(g.get("score", 0.0)),
+                    "evidence": g.get("candidate_evidence", ""),
+                })
+            else:
                 state_val = g.state.value if hasattr(g.state, "value") else str(g.state)
                 gap_summary.append({
                     "requirement": g.requirement_name,
                     "state": state_val,
-                    "score": round(getattr(g, "score", 0.0) * 100),
+                    "score": _percent_score(getattr(g, "score", 0.0)),
                     "evidence": getattr(g, "candidate_evidence", ""),
                 })
+        match_score = _ratio_score(match_score)
 
     graph_snapshot = None
     if evidence_graph is not None and hasattr(evidence_graph, "audit_snapshot"):
         graph_snapshot = evidence_graph.audit_snapshot()
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    snapshot_id = f"SNAP-{int(time.time())}-{prof_hash[:6]}"
+    snapshot_id = f"SNAP-{time.time_ns()}-{prof_hash[:6]}"
 
     return {
         "snapshot_id": snapshot_id,
@@ -230,7 +255,11 @@ class ApplicationStore:
             self._shared_conn.row_factory = sqlite3.Row
         else:
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+        try:
+            self._init_db()
+        except Exception:
+            self.close()
+            raise
 
     def _get_connection(self) -> sqlite3.Connection:
         if self._shared_conn is not None:
@@ -268,6 +297,11 @@ class ApplicationStore:
         cur = conn.execute("PRAGMA user_version")
         row = cur.fetchone()
         current_v = row[0] if row else 0
+        if current_v > self.CURRENT_SCHEMA_VERSION:
+            raise RuntimeError(
+                f"Unsupported future application schema v{current_v}; "
+                f"current version is v{self.CURRENT_SCHEMA_VERSION}"
+            )
         if current_v < self.CURRENT_SCHEMA_VERSION:
             self._run_migrations(conn, current_v)
 
@@ -395,10 +429,7 @@ class ApplicationStore:
         offer = json.loads(offer_raw) if offer_raw else None
 
         stat_str = d.pop("status")
-        try:
-            stat = AppStatus(stat_str)
-        except ValueError:
-            stat = stat_str
+        stat = AppStatus.from_string(stat_str)
 
         target_level = d.pop("target_level", "") or ""
         portal_url = d.pop("portal_url", "") or ""

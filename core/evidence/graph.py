@@ -101,7 +101,7 @@ class EvidenceNode:
             "scope": self.scope,
             "source_ids": list(self.source_ids),
             "defended_rounds": self.defended_rounds,
-            "history": list(self.history),
+            "history": copy.deepcopy(self.history),
             "created_at": self.created_at,
         }
 
@@ -129,6 +129,10 @@ class EvidenceGraph:
         self._nodes: Dict[str, EvidenceNode] = {}
         if nodes:
             for n in nodes:
+                if not n.claim_id:
+                    raise ValueError("EvidenceNode claim_id must not be empty")
+                if n.claim_id in self._nodes:
+                    raise ValueError(f"Duplicate evidence claim_id: '{n.claim_id}'")
                 self._nodes[n.claim_id] = copy.deepcopy(n)
 
     @property
@@ -144,34 +148,44 @@ class EvidenceGraph:
         source_ids: Optional[List[str]] = None,
     ) -> EvidenceNode:
         """Adds a new claim node to the graph."""
+        clean_text = text.strip()
+        if not clean_text:
+            raise ValueError("Evidence claim text must not be empty")
         if not claim_id:
-            h = hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:8]
+            h = hashlib.sha256(clean_text.encode("utf-8")).hexdigest()[:8]
             claim_id = f"CLM-{h}"
+        if state != EvidenceNodeState.DRAFT:
+            raise ValueError("New evidence claims must start in DRAFT state")
+        if claim_id in self._nodes:
+            raise ValueError(f"Claim '{claim_id}' already exists in EvidenceGraph")
 
         node = EvidenceNode(
             claim_id=claim_id,
-            text=text.strip(),
+            text=clean_text,
             state=state,
             scope=scope.strip(),
             source_ids=list(source_ids) if source_ids else [],
         )
         self._nodes[claim_id] = node
-        return node
+        return copy.deepcopy(node)
 
     def get_node(self, claim_id: str) -> Optional[EvidenceNode]:
-        return self._nodes.get(claim_id)
+        node = self._nodes.get(claim_id)
+        return copy.deepcopy(node) if node is not None else None
 
     def verify_claim(self, claim_id: str, source_ids: Optional[List[str]] = None, note: str = "") -> EvidenceNode:
         """Advances a claim from DRAFT to VERIFIED."""
         node = self._nodes.get(claim_id)
         if not node:
             raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
+        if node.state != EvidenceNodeState.DRAFT:
+            raise ValueError(f"Claim '{claim_id}' is not in DRAFT state")
         if source_ids:
             for sid in source_ids:
                 if sid not in node.source_ids:
                     node.source_ids.append(sid)
         node.advance(EvidenceNodeState.VERIFIED, note=note or "Verified by factual evidence")
-        return node
+        return copy.deepcopy(node)
 
     def ground_claim(self, claim_id: str, scope: str, note: str = "") -> EvidenceNode:
         """Grounds a claim to a concrete experience/project scope."""
@@ -180,9 +194,11 @@ class EvidenceGraph:
             raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
         if not scope.strip():
             raise ValueError(f"Cannot ground claim '{claim_id}' without an explicit scope")
-        node.scope = scope.strip()
+        if node.state != EvidenceNodeState.VERIFIED:
+            raise ValueError(f"Claim '{claim_id}' must be VERIFIED before grounding")
         node.advance(EvidenceNodeState.GROUNDED, note=note or f"Grounded in scope '{scope}'")
-        return node
+        node.scope = scope.strip()
+        return copy.deepcopy(node)
 
     def use_in_resume(self, claim_id: str, note: str = "") -> EvidenceNode:
         """Marks a grounded claim as selected and formatted for the final resume."""
@@ -190,19 +206,27 @@ class EvidenceGraph:
         if not node:
             raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
         node.advance(EvidenceNodeState.USED_IN_RESUME, note=note or "Selected for resume bullet point")
-        return node
+        return copy.deepcopy(node)
 
     def defend_claim(self, claim_id: str, rounds: int = 1, note: str = "") -> EvidenceNode:
         """Marks a claim as successfully defended in mock interview / defense simulation."""
+        try:
+            round_count = int(rounds)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Defense rounds must be a positive integer") from exc
+        if round_count < 1:
+            raise ValueError("Defense rounds must be a positive integer")
         node = self._nodes.get(claim_id)
         if not node:
             raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
-        node.defended_rounds += max(1, rounds)
+        if node.state != EvidenceNodeState.USED_IN_RESUME:
+            raise ValueError(f"Claim '{claim_id}' must be USED_IN_RESUME before defense")
         node.advance(
             EvidenceNodeState.INTERVIEW_DEFENDED,
-            note=note or f"Passed {rounds} adversarial defense round(s)",
+            note=note or f"Passed {round_count} adversarial defense round(s)",
         )
-        return node
+        node.defended_rounds += round_count
+        return copy.deepcopy(node)
 
     def invalidate_claim(self, claim_id: str, reason: str = "") -> EvidenceNode:
         """Marks a claim as invalidated/falsified so it cannot be used in application."""
@@ -210,7 +234,7 @@ class EvidenceGraph:
         if not node:
             raise KeyError(f"Claim '{claim_id}' not found in EvidenceGraph")
         node.advance(EvidenceNodeState.INVALIDATED, note=reason or "Claim invalidated during audit")
-        return node
+        return copy.deepcopy(node)
 
     def can_apply(self) -> Tuple[bool, List[str]]:
         """
@@ -218,21 +242,22 @@ class EvidenceGraph:
         Returns: (is_ready, list_of_blocking_reasons)
         """
         blocking_reasons: List[str] = []
-        used_nodes = [n for n in self._nodes.values() if n.state in {EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}]
+        active_nodes = [n for n in self._nodes.values() if n.state != EvidenceNodeState.INVALIDATED]
+        used_nodes = [n for n in active_nodes if n.state in {EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}]
 
         if not used_nodes:
-            # Check if any nodes are even verified
-            verified_count = sum(1 for n in self._nodes.values() if n.state not in {EvidenceNodeState.DRAFT, EvidenceNodeState.INVALIDATED})
-            if verified_count == 0:
-                blocking_reasons.append("没有经过核验与锚定的有效经历主张")
-                return False, blocking_reasons
+            blocking_reasons.append("没有经过核验与锚定的有效经历主张，且没有选入简历的主张")
 
-        # Check for ungrounded or draft claims among active claims
+        # Every non-invalidated claim must be grounded before application.
         for n in self._nodes.values():
             if n.state == EvidenceNodeState.INVALIDATED:
                 blocking_reasons.append(f"主张 [{n.claim_id}] 已被判定存疑废弃: {n.text[:30]}")
-            elif n.state == EvidenceNodeState.DRAFT and n.scope:
+            elif n.state == EvidenceNodeState.DRAFT:
                 blocking_reasons.append(f"主张 [{n.claim_id}] 仍处于未核实草稿状态: {n.text[:30]}")
+            elif n.state == EvidenceNodeState.VERIFIED:
+                blocking_reasons.append(f"主张 [{n.claim_id}] 尚未完成经历级锚定: {n.text[:30]}")
+            elif not n.scope:
+                blocking_reasons.append(f"主张 [{n.claim_id}] 缺少经历级作用域: {n.text[:30]}")
 
         is_ready = len(blocking_reasons) == 0
         return is_ready, blocking_reasons
