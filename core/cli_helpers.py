@@ -210,6 +210,11 @@ def exit_cli_error(
     sys.exit(exit_code)
 
 
+def fail_cli(args: Any, error_type: str, message: str, exit_code: int = 1) -> None:
+    """Exit a command with the repository-wide JSON/text error contract."""
+    exit_cli_error(error_type, message, exit_code=exit_code, as_json=bool(getattr(args, "json", False)))
+
+
 def open_application_store(args_or_path: Any = None):
     """Create the shared SQLite store used by application-related commands."""
     from core.application_tracker import ApplicationStore
@@ -231,5 +236,6 @@ __all__ = [
     "emit_stderr",
     "format_cli_error",
     "exit_cli_error",
+    "fail_cli",
     "open_application_store",
 ]

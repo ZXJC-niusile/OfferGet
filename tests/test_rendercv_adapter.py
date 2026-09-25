@@ -102,6 +102,17 @@ class TestRenderCVAdapter(unittest.TestCase):
             self.assertTrue(exported.exists())
             self.assertIn("Experience", json.loads(exported.read_text(encoding="utf-8"))["cv"]["sections"])
 
+    def test_cli_json_error_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp) / "profile.json"
+            proc = subprocess.run(
+                [sys.executable, str(PROJECT_ROOT / "cli.py"), "rendercv", "import", str(Path(tmp) / "missing.json"), "--output", str(output), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(json.loads(proc.stdout)["error_type"], "rendercv_import_error")
+            self.assertEqual(proc.stderr, "")
+
 
 if __name__ == "__main__":
     unittest.main()

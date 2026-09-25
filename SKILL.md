@@ -269,7 +269,7 @@ python cli.py resume audit --claims ApexResume/examples/claims.json --html ApexR
 # 13. 调用 ApexResume 简历子系统：AutoFit 像素级单页压页与 PDF 导出
 python cli.py resume autofit ApexResume/examples/sample-resume.html output_fit.html --pdf my_resume.pdf
 
-# 14. 全局统一环境与自动化测试套件自检（OfferGet 540 项 + ApexResume 34 项，共 574 项）
+# 14. 全局统一环境与自动化测试套件自检（OfferGet 542 项 + ApexResume 34 项，共 576 项）
 python cli.py selftest
 
 # 15. 持久化投递管理：创建投递记录，跟踪状态与证据快照

@@ -199,6 +199,7 @@ python cli.py rendercv export profile.json --output rendercv.json --json
 - ResumeVersion 当前保存 Profile/JD hash 和输出产物路径，不保存完整 Profile 快照；因此 `version-diff` 只报告元数据差异，不声称内容级差异。
 - ResumeVersion 同时保存产物存在状态与 SHA-256；`proposal accept` 只有在 Profile/HTML/PDF 产物均可读时才登记为 completed。
 - 外部简历项目只作为规则和架构参考，OfferGet 不直接依赖其运行时、数据库或 Web 基础设施。
+- CLI 的 `--json` 失败输出统一为 `{status, error_type, message, exit_code}`；文本模式继续输出面向终端的错误信息。
 
 ---
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from core.application_tracker import ApplicationStore, ResumeVersion
 from core.artifact import inspect_artifacts
-from core.cli_helpers import emit_json, emit_stderr, load_json, open_application_store, read_text, write_json
+from core.cli_helpers import emit_json, emit_stderr, fail_cli, load_json, open_application_store, read_text, write_json
 from core.material_proposal import apply_material_proposal, jd_fingerprint, profile_fingerprint
 
 
@@ -19,8 +19,7 @@ def cmd_proposal_show(args) -> None:
     with _store(args) as store:
         proposal = store.get_material_proposal(args.proposal_id)
     if proposal is None:
-        emit_stderr(f"[-] Proposal not found: {args.proposal_id}")
-        raise SystemExit(1)
+        fail_cli(args, "proposal_not_found", f"Proposal not found: {args.proposal_id}")
     payload = proposal.to_dict()
     emit_json(payload) if args.json else print(json.dumps(payload, ensure_ascii=False, indent=2))
 
@@ -37,8 +36,7 @@ def cmd_proposal_reject(args) -> None:
     with _store(args) as store:
         proposal = store.get_material_proposal(args.proposal_id)
         if proposal is None:
-            emit_stderr(f"[-] Proposal not found: {args.proposal_id}")
-            raise SystemExit(1)
+            fail_cli(args, "proposal_not_found", f"Proposal not found: {args.proposal_id}")
         proposal.reject()
         store.save_material_proposal(proposal)
         payload = proposal.to_dict()
@@ -49,8 +47,7 @@ def cmd_proposal_accept(args) -> None:
     profile_path = Path(args.profile)
     jd_path = Path(args.jd)
     if not profile_path.exists() or not jd_path.exists():
-        emit_stderr("[-] Profile or JD file not found")
-        raise SystemExit(1)
+        fail_cli(args, "input_not_found", "Profile or JD file not found")
     profile = load_json(str(profile_path))
     jd_text = read_text(str(jd_path))
     patch_ids = None
@@ -58,19 +55,16 @@ def cmd_proposal_accept(args) -> None:
         try:
             patch_ids = [int(item) for item in args.patch_ids.split(",") if item.strip()]
         except ValueError:
-            emit_stderr("[-] --patch-ids must be comma-separated integers")
-            raise SystemExit(1)
+            fail_cli(args, "invalid_patch_ids", "--patch-ids must be comma-separated integers")
     with _store(args) as store:
         proposal = store.get_material_proposal(args.proposal_id)
         if proposal is None:
-            emit_stderr(f"[-] Proposal not found: {args.proposal_id}")
-            raise SystemExit(1)
+            fail_cli(args, "proposal_not_found", f"Proposal not found: {args.proposal_id}")
         try:
             updated_profile = apply_material_proposal(proposal, profile, jd_text, patch_ids=patch_ids)
         except ValueError as exc:
             store.save_material_proposal(proposal)
-            emit_stderr(f"[-] Proposal cannot be accepted: {exc}")
-            raise SystemExit(1)
+            fail_cli(args, "proposal_accept_error", str(exc))
         store.save_material_proposal(proposal)
     accept_phase = "profile_written"
     write_json(updated_profile, args.output)
@@ -88,13 +82,7 @@ def cmd_proposal_accept(args) -> None:
     artifact_status, artifact_hashes = inspect_artifacts(output_paths)
     missing = [name for name, status in artifact_status.items() if status != "present"]
     if missing:
-        payload["accept_phase"] = "artifact_validation_failed"
-        payload["artifact_status"] = artifact_status
-        if args.json:
-            emit_json(payload)
-        else:
-            emit_stderr(f"[-] Generated artifacts unavailable: {', '.join(missing)}")
-        raise SystemExit(1)
+        fail_cli(args, "artifact_validation_failed", f"Generated artifacts unavailable: {', '.join(missing)}")
     accept_phase = "completed"
     payload["accept_phase"] = accept_phase
     payload["artifact_status"] = artifact_status

@@ -10,7 +10,7 @@ from core.application_tracker import (
     FEEDBACK_TAGS,
     OutcomeRecord,
 )
-from core.cli_helpers import emit_json, emit_stderr, open_application_store
+from core.cli_helpers import emit_json, emit_stderr, fail_cli, open_application_store
 
 
 def _store(args) -> ApplicationStore:
@@ -48,8 +48,7 @@ def cmd_application_show(args) -> None:
     with _store(args) as store:
         detail = store.get_application_detail(args.application_id)
     if detail is None:
-        emit_stderr(f"[-] Application not found: {args.application_id}")
-        raise SystemExit(1)
+        fail_cli(args, "application_not_found", f"Application not found: {args.application_id}")
     payload = detail
     emit_json(payload) if args.json else print(json.dumps(payload, ensure_ascii=False, indent=2))
 
@@ -58,8 +57,7 @@ def cmd_application_status(args) -> None:
     with _store(args) as store:
         record = store.get(args.application_id)
         if record is None:
-            emit_stderr(f"[-] Application not found: {args.application_id}")
-            raise SystemExit(1)
+            fail_cli(args, "application_not_found", f"Application not found: {args.application_id}")
         record.transition_status(args.status, note=args.note or "CLI status update")
         store.save(record)
     emit_json(record.to_dict()) if args.json else print(f"Application {record.id}: {record.status.value}")
@@ -69,8 +67,7 @@ def cmd_application_snapshot(args) -> None:
     with _store(args) as store:
         record = store.get(args.application_id)
     if record is None:
-        emit_stderr(f"[-] Application not found: {args.application_id}")
-        raise SystemExit(1)
+        fail_cli(args, "application_not_found", f"Application not found: {args.application_id}")
     emit_json(record.evidence_snapshot) if args.json else print(json.dumps(record.evidence_snapshot, ensure_ascii=False, indent=2))
 
 
@@ -78,8 +75,9 @@ def _parse_feedback_tags(raw: str) -> list:
     tags = [item.strip().lower() for item in (raw or "").split(",") if item.strip()]
     unknown = sorted({t for t in tags if t not in FEEDBACK_TAGS})
     if unknown:
-        emit_stderr(f"[-] Unknown feedback tag(s): {', '.join(unknown)}; allowed: {', '.join(sorted(FEEDBACK_TAGS))}")
-        raise SystemExit(1)
+        raise ValueError(
+            f"Unknown feedback tag(s): {', '.join(unknown)}; allowed: {', '.join(sorted(FEEDBACK_TAGS))}"
+        )
     return tags
 
 
@@ -97,14 +95,12 @@ def cmd_application_outcome(args) -> None:
             occurred_at=args.occurred_at or None,
         )
     except ValueError as exc:
-        emit_stderr(f"[-] Invalid outcome: {exc}")
-        raise SystemExit(1)
+        fail_cli(args, "invalid_outcome", str(exc))
     with _store(args) as store:
         try:
             result = store.record_outcome(outcome)
         except ValueError as exc:
-            emit_stderr(f"[-] {exc}")
-            raise SystemExit(1)
+            fail_cli(args, "outcome_persistence_error", str(exc))
     payload = {"replayed": result["replayed"], "outcome": result["outcome"]}
     emit_json(payload) if args.json else print(
         f"Outcome recorded: {outcome.application_id} [{outcome.stage.value} -> {outcome.result.value}]"
@@ -139,7 +135,6 @@ def cmd_application_version_diff(args) -> None:
         after = store.get_resume_version(args.after_version_id)
     if before is None or after is None:
         missing = args.before_version_id if before is None else args.after_version_id
-        emit_stderr(f"[-] Resume version not found: {missing}")
-        raise SystemExit(1)
+        fail_cli(args, "resume_version_not_found", f"Resume version not found: {missing}")
     payload = compare_resume_versions(before, after)
     emit_json(payload) if args.json else print(json.dumps(payload, ensure_ascii=False, indent=2))

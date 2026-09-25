@@ -231,6 +231,13 @@
 - **Migration**: v6→v7 handles both existing `resume_versions` tables and legacy databases where that table is absent.
 - **Tests**: added artifact hash/status and migration coverage; full `tests/` 540/540, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
 
+## 1.19 Stage 19 CLI Error Contract Convergence (2026-09-25)
+- **Shared helper**: added `fail_cli`, a thin adapter over `exit_cli_error` that selects JSON or terminal output from command arguments.
+- **Coverage**: Proposal, Application, and RenderCV command error paths now use stable `error_type` values and the same JSON envelope; text-mode behavior remains compatible.
+- **Error types**: standardized not-found, invalid input, persistence, render/import/export, version lookup, and artifact validation failures.
+- **Tests**: added JSON error assertions for Application and RenderCV commands.
+- **Verification**: full `tests/` 542/542, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+
 ## 1.11 Stage 11 Application Outcome Feedback Loop (2026-09-24)
 - **Source pattern**: adapted offerPilot's controlled outcome stages/results/feedback tags, outcome reflection fields, and aggregate feedback insights to OfferGet's SQLite `ApplicationStore`; no SQLAlchemy or source files were copied.
 - **Schema v5**: added `application_outcomes` with deterministic content-derived idempotency keys and indexed application/time lookup.

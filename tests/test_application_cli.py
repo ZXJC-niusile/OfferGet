@@ -60,6 +60,25 @@ class TestApplicationCli(unittest.TestCase):
             self.assertEqual(insight_payload["total_outcomes"], 1)
             self.assertEqual(insight_payload["by_result"]["rejected"], 1)
 
+    def test_json_errors_use_standard_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "applications.db"
+            base = [sys.executable, str(PROJECT_ROOT / "cli.py")]
+            missing = subprocess.run(
+                base + ["application", "show", "MISSING", "--db", str(db), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(missing.returncode, 1)
+            self.assertEqual(json.loads(missing.stdout)["error_type"], "application_not_found")
+            self.assertEqual(missing.stderr, "")
+
+            invalid_tags = subprocess.run(
+                base + ["application", "outcome", "MISSING", "--stage", "interview", "--result", "rejected", "--tags", "bad_tag", "--db", str(db), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(invalid_tags.returncode, 1)
+            self.assertEqual(json.loads(invalid_tags.stdout)["error_type"], "invalid_outcome")
+
 
 if __name__ == "__main__":
     unittest.main()
