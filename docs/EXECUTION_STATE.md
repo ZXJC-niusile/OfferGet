@@ -218,6 +218,12 @@
 - **Isolation**: all acceptance artifacts were written under a temporary directory and no repository fixture or external resume project was modified.
 - **Verification**: post-commit `tests/` 538/538 and the real CLI flow passed; working tree remained clean before this ledger-only update.
 
+## 1.17 Stage 17 Application Detail Feedback View (2026-09-25)
+- **Application detail**: `application show` now returns linked outcome feedback alongside Proposals and ResumeVersions.
+- **Workflow**: the detail view can now expose the full local loop for one application: generated material, immutable output metadata, interview result, reflection, next action, and feedback tags.
+- **Tests**: extended the end-to-end application smoke flow to record an outcome and verify it appears in `application show`.
+- **Verification**: full `tests/` 538/538, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+
 ## 1.11 Stage 11 Application Outcome Feedback Loop (2026-09-24)
 - **Source pattern**: adapted offerPilot's controlled outcome stages/results/feedback tags, outcome reflection fields, and aggregate feedback insights to OfferGet's SQLite `ApplicationStore`; no SQLAlchemy or source files were copied.
 - **Schema v5**: added `application_outcomes` with deterministic content-derived idempotency keys and indexed application/time lookup.

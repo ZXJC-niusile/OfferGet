@@ -81,6 +81,21 @@ class TestApplicationReviewSmoke(unittest.TestCase):
             self.assertEqual(versions.returncode, 0, versions.stderr)
             self.assertEqual(len(json.loads(versions.stdout)), 1)
 
+            outcome = subprocess.run(
+                base + [
+                    "application", "outcome", "APP-SMOKE", "--stage", "interview",
+                    "--result", "rejected", "--tags", "system_design",
+                    "--db", str(db), "--json",
+                ], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(outcome.returncode, 0, outcome.stderr)
+            detail_with_outcome = subprocess.run(
+                base + ["application", "show", "APP-SMOKE", "--db", str(db), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
+            )
+            self.assertEqual(detail_with_outcome.returncode, 0, detail_with_outcome.stderr)
+            self.assertEqual(len(json.loads(detail_with_outcome.stdout)["outcomes"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -795,6 +795,7 @@ class ApplicationStore:
             return None
         proposals = self.list_material_proposals(application_id=record_id)
         versions = self.list_resume_versions(application_id=record_id)
+        outcomes = self.list_outcomes(record_id)
         return {
             "application": record.to_dict(),
             "proposals": [
@@ -809,6 +810,7 @@ class ApplicationStore:
                 for proposal in proposals
             ],
             "resume_versions": [version.to_dict() for version in versions],
+            "outcomes": [outcome.to_dict() for outcome in outcomes],
         }
 
     def list_all(self) -> List[ApplicationRecord]:
