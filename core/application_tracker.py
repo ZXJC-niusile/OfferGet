@@ -238,6 +238,9 @@ class ResumeVersion:
     jd_hash: str = ""
     theme: str = ""
     output_paths: Dict[str, str] = field(default_factory=dict)
+    artifact_status: Dict[str, str] = field(default_factory=dict)
+    artifact_hashes: Dict[str, str] = field(default_factory=dict)
+    accept_phase: str = "completed"
     label: str = ""
     created_at: str = field(default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     version_id: str = ""
@@ -253,6 +256,9 @@ class ResumeVersion:
                 "jd_hash": self.jd_hash,
                 "theme": self.theme,
                 "output_paths": self.output_paths,
+                "artifact_status": self.artifact_status,
+                "artifact_hashes": self.artifact_hashes,
+                "accept_phase": self.accept_phase,
             })
 
     def to_dict(self) -> Dict[str, Any]:
@@ -267,6 +273,9 @@ class ResumeVersion:
             jd_hash=str(data.get("jd_hash", "")),
             theme=str(data.get("theme", "")),
             output_paths=dict(data.get("output_paths", {})),
+            artifact_status=dict(data.get("artifact_status", {})),
+            artifact_hashes=dict(data.get("artifact_hashes", {})),
+            accept_phase=str(data.get("accept_phase", "completed")),
             label=str(data.get("label", "")),
             created_at=str(data.get("created_at", "")) or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             version_id=str(data.get("version_id", "")),
@@ -491,7 +500,7 @@ class ApplicationStore:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
-    CURRENT_SCHEMA_VERSION: int = 6
+    CURRENT_SCHEMA_VERSION: int = 7
 
     def _init_db(self) -> None:
         conn = self._get_connection()
@@ -615,6 +624,43 @@ class ApplicationStore:
                 "CREATE INDEX IF NOT EXISTS idx_resume_versions_application ON resume_versions(application_id, created_at DESC)"
             )
             conn.execute("PRAGMA user_version = 6")
+            conn.commit()
+
+        if from_version < 7:
+            table_exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'resume_versions'"
+            ).fetchone()
+            if table_exists is None:
+                conn.execute(
+                    """
+                    CREATE TABLE resume_versions (
+                        version_id TEXT PRIMARY KEY,
+                        application_id TEXT,
+                        proposal_id TEXT,
+                        profile_hash TEXT NOT NULL,
+                        jd_hash TEXT NOT NULL DEFAULT '',
+                        theme TEXT NOT NULL DEFAULT '',
+                        output_paths_json TEXT NOT NULL DEFAULT '{}',
+                        artifact_status_json TEXT NOT NULL DEFAULT '{}',
+                        artifact_hashes_json TEXT NOT NULL DEFAULT '{}',
+                        accept_phase TEXT NOT NULL DEFAULT 'completed',
+                        label TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL
+                    )
+                    """
+                )
+            else:
+                existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(resume_versions)").fetchall()}
+                if "artifact_status_json" not in existing_cols:
+                    conn.execute("ALTER TABLE resume_versions ADD COLUMN artifact_status_json TEXT NOT NULL DEFAULT '{}' ")
+                if "artifact_hashes_json" not in existing_cols:
+                    conn.execute("ALTER TABLE resume_versions ADD COLUMN artifact_hashes_json TEXT NOT NULL DEFAULT '{}' ")
+                if "accept_phase" not in existing_cols:
+                    conn.execute("ALTER TABLE resume_versions ADD COLUMN accept_phase TEXT NOT NULL DEFAULT 'completed'")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_resume_versions_application ON resume_versions(application_id, created_at DESC)"
+            )
+            conn.execute("PRAGMA user_version = 7")
             conn.commit()
 
     def save(self, record: ApplicationRecord) -> None:
@@ -917,13 +963,17 @@ class ApplicationStore:
                     """
                     INSERT INTO resume_versions (
                         version_id, application_id, proposal_id, profile_hash, jd_hash,
-                        theme, output_paths_json, label, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        theme, output_paths_json, artifact_status_json, artifact_hashes_json,
+                        accept_phase, label, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         version.version_id, version.application_id, version.proposal_id,
                         version.profile_hash, version.jd_hash, version.theme,
                         json.dumps(version.output_paths, ensure_ascii=False, sort_keys=True),
+                        json.dumps(version.artifact_status, ensure_ascii=False, sort_keys=True),
+                        json.dumps(version.artifact_hashes, ensure_ascii=False, sort_keys=True),
+                        version.accept_phase,
                         version.label, version.created_at,
                     ),
                 )
@@ -934,8 +984,8 @@ class ApplicationStore:
             if existing is not None and self._row_to_resume_version(existing).to_dict() != version.to_dict():
                 raise ValueError("version_id collision: existing version content differs")
             conn.execute(
-                "INSERT OR IGNORE INTO resume_versions (version_id, application_id, proposal_id, profile_hash, jd_hash, theme, output_paths_json, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (version.version_id, None, version.proposal_id, version.profile_hash, version.jd_hash, version.theme, json.dumps(version.output_paths, ensure_ascii=False, sort_keys=True), version.label, version.created_at),
+                "INSERT OR IGNORE INTO resume_versions (version_id, application_id, proposal_id, profile_hash, jd_hash, theme, output_paths_json, artifact_status_json, artifact_hashes_json, accept_phase, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (version.version_id, None, version.proposal_id, version.profile_hash, version.jd_hash, version.theme, json.dumps(version.output_paths, ensure_ascii=False, sort_keys=True), json.dumps(version.artifact_status, ensure_ascii=False, sort_keys=True), json.dumps(version.artifact_hashes, ensure_ascii=False, sort_keys=True), version.accept_phase, version.label, version.created_at),
             )
             conn.commit()
 
@@ -978,6 +1028,9 @@ class ApplicationStore:
             "jd_hash": data["jd_hash"],
             "theme": data["theme"],
             "output_paths": json.loads(data["output_paths_json"] or "{}"),
+            "artifact_status": json.loads(data.get("artifact_status_json") or "{}"),
+            "artifact_hashes": json.loads(data.get("artifact_hashes_json") or "{}"),
+            "accept_phase": data.get("accept_phase") or "completed",
             "label": data["label"],
             "created_at": data["created_at"],
         })

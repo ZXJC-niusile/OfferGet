@@ -224,6 +224,13 @@
 - **Tests**: extended the end-to-end application smoke flow to record an outcome and verify it appears in `application show`.
 - **Verification**: full `tests/` 538/538, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
 
+## 1.18 Stage 18 Proposal Artifact Integrity (2026-09-25)
+- **Schema v7**: ResumeVersion now records `artifact_status`, `artifact_hashes`, and `accept_phase`.
+- **Accept boundary**: `proposal accept` writes the Profile, renders optional outputs, inspects every registered artifact, and only registers a completed ResumeVersion when every artifact is present and readable.
+- **Integrity**: artifact hashes use streaming SHA-256; missing/unreadable outputs are reported before ResumeVersion persistence.
+- **Migration**: v6→v7 handles both existing `resume_versions` tables and legacy databases where that table is absent.
+- **Tests**: added artifact hash/status and migration coverage; full `tests/` 540/540, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+
 ## 1.11 Stage 11 Application Outcome Feedback Loop (2026-09-24)
 - **Source pattern**: adapted offerPilot's controlled outcome stages/results/feedback tags, outcome reflection fields, and aggregate feedback insights to OfferGet's SQLite `ApplicationStore`; no SQLAlchemy or source files were copied.
 - **Schema v5**: added `application_outcomes` with deterministic content-derived idempotency keys and indexed application/time lookup.

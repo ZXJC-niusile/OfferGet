@@ -197,6 +197,7 @@ python cli.py rendercv export profile.json --output rendercv.json --json
 - `EvidenceGraph` 与 `FactVerificationGuard` 负责事实边界；Proposal 是人工确认边界。
 - `ApplicationStore` 负责投递生命周期、结果反馈和简历版本元数据。
 - ResumeVersion 当前保存 Profile/JD hash 和输出产物路径，不保存完整 Profile 快照；因此 `version-diff` 只报告元数据差异，不声称内容级差异。
+- ResumeVersion 同时保存产物存在状态与 SHA-256；`proposal accept` 只有在 Profile/HTML/PDF 产物均可读时才登记为 completed。
 - 外部简历项目只作为规则和架构参考，OfferGet 不直接依赖其运行时、数据库或 Web 基础设施。
 
 ---

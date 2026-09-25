@@ -80,7 +80,7 @@ class TestApplicationOutcomes(unittest.TestCase):
     def test_schema_v4_migrates_to_v6(self):
         with ApplicationStore(self.db_path) as store:
             with store._get_connection() as conn:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 6)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
                 columns = {row[1] for row in conn.execute("PRAGMA table_info(application_outcomes)")}
                 self.assertIn("outcome_id", columns)
                 self.assertIn("feedback_tags_json", columns)
@@ -90,7 +90,7 @@ class TestApplicationOutcomes(unittest.TestCase):
                 conn.commit()
         with ApplicationStore(self.db_path) as migrated:
             with migrated._get_connection() as conn:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 6)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
                 self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='application_outcomes'").fetchone())
                 self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='resume_versions'").fetchone())
 

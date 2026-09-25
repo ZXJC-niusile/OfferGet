@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from core.application_tracker import ApplicationStore, ResumeVersion
+from core.artifact import inspect_artifacts
 from core.cli_helpers import emit_json, emit_stderr, load_json, open_application_store, read_text, write_json
 from core.material_proposal import apply_material_proposal, jd_fingerprint, profile_fingerprint
 
@@ -71,6 +72,7 @@ def cmd_proposal_accept(args) -> None:
             emit_stderr(f"[-] Proposal cannot be accepted: {exc}")
             raise SystemExit(1)
         store.save_material_proposal(proposal)
+    accept_phase = "profile_written"
     write_json(updated_profile, args.output)
     payload = {"proposal": proposal.to_dict(), "profile_output": str(args.output)}
     generated_resumes = {}
@@ -81,6 +83,22 @@ def cmd_proposal_accept(args) -> None:
         built = ResumeBuilder(updated_profile).build_theme(args.resume_theme, output_dir)
         generated_resumes = {key: str(value) for key, value in built.items()}
         payload["generated_resumes"] = generated_resumes
+        accept_phase = "render_completed"
+    output_paths = {"profile": str(args.output), **generated_resumes}
+    artifact_status, artifact_hashes = inspect_artifacts(output_paths)
+    missing = [name for name, status in artifact_status.items() if status != "present"]
+    if missing:
+        payload["accept_phase"] = "artifact_validation_failed"
+        payload["artifact_status"] = artifact_status
+        if args.json:
+            emit_json(payload)
+        else:
+            emit_stderr(f"[-] Generated artifacts unavailable: {', '.join(missing)}")
+        raise SystemExit(1)
+    accept_phase = "completed"
+    payload["accept_phase"] = accept_phase
+    payload["artifact_status"] = artifact_status
+    payload["artifact_hashes"] = artifact_hashes
     if proposal.application_id:
         version = ResumeVersion(
             application_id=proposal.application_id,
@@ -88,7 +106,10 @@ def cmd_proposal_accept(args) -> None:
             profile_hash=profile_fingerprint(updated_profile),
             jd_hash=jd_fingerprint(jd_text),
             theme=args.resume_theme if args.build_resume else "profile-only",
-            output_paths={"profile": str(args.output), **generated_resumes},
+            output_paths=output_paths,
+            artifact_status=artifact_status,
+            artifact_hashes=artifact_hashes,
+            accept_phase=accept_phase,
             label=f"Proposal {proposal.proposal_id}",
         )
         with _store(args) as store:

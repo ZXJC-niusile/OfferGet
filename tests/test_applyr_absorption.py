@@ -324,7 +324,7 @@ class TestApplicationStoreSchemaV2(unittest.TestCase):
             try:
                 with store._get_connection() as c:
                     ver = c.execute("PRAGMA user_version").fetchone()[0]
-                    self.assertEqual(ver, 6)
+                    self.assertEqual(ver, 7)
                     cols = [r[1] for r in c.execute("PRAGMA table_info(applications)").fetchall()]
                     self.assertIn("target_level", cols)
                     self.assertIn("portal_url", cols)

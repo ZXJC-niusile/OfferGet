@@ -96,6 +96,31 @@ class TestApplicationReviewSmoke(unittest.TestCase):
             self.assertEqual(detail_with_outcome.returncode, 0, detail_with_outcome.stderr)
             self.assertEqual(len(json.loads(detail_with_outcome.stdout)["outcomes"]), 1)
 
+    def test_resume_version_records_artifact_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "applications.db"
+            profile_out = Path(tmp) / "profile.json"
+            resume_dir = Path(tmp) / "resume"
+            base = [sys.executable, str(PROJECT_ROOT / "cli.py")]
+            subprocess.run(
+                base + ["application", "add", "APP-HASH", "--db", str(db), "--company", "验收公司", "--role", "工程师"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT, check=True,
+            )
+            review = Path(tmp) / "review.json"
+            subprocess.run(
+                base + ["review", "examples/sample_ai_jd.txt", "--profile", "examples/candidate_profile.json", "--proposal-db", str(db), "--application-id", "APP-HASH", "--output", str(review), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT, check=True,
+            )
+            proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
+            accepted = subprocess.run(
+                base + ["proposal", "accept", proposal_id, "--db", str(db), "--profile", "examples/candidate_profile.json", "--jd", "examples/sample_ai_jd.txt", "--output", str(profile_out), "--build-resume", "--resume-output-dir", str(resume_dir), "--json"],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT, check=True,
+            )
+            payload = json.loads(accepted.stdout)
+            self.assertEqual(payload["accept_phase"], "completed")
+            self.assertEqual(set(payload["artifact_status"].values()), {"present"})
+            self.assertEqual(len(payload["artifact_hashes"]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

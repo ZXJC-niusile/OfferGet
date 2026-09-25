@@ -39,18 +39,18 @@ class TestResumeVersions(unittest.TestCase):
                         profile_hash="profile-hash",
                     ))
 
-    def test_schema_v6_migration(self):
+    def test_schema_v7_migration(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "versions.db"
             with ApplicationStore(path) as store:
                 with store._get_connection() as conn:
-                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 6)
+                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
                     conn.execute("DROP TABLE resume_versions")
-                    conn.execute("PRAGMA user_version = 5")
+                    conn.execute("PRAGMA user_version = 6")
                     conn.commit()
             with ApplicationStore(path) as migrated:
                 with migrated._get_connection() as conn:
-                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 6)
+                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
                     self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='resume_versions'").fetchone())
 
     def test_metadata_diff_is_deterministic_and_does_not_claim_content_diff(self):
@@ -71,6 +71,15 @@ class TestResumeVersions(unittest.TestCase):
         self.assertEqual(diff["outputs"]["removed"], ["pdf"])
         self.assertEqual(diff["outputs"]["changed"], ["profile"])
         self.assertFalse(diff["content_diff_available"])
+
+    def test_artifact_metadata_is_persisted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = Path(tmp) / "profile.json"
+            artifact.write_text("{}", encoding="utf-8")
+            from core.artifact import inspect_artifacts, sha256_file
+            statuses, hashes = inspect_artifacts({"profile": str(artifact), "pdf": str(Path(tmp) / "missing.pdf")})
+            self.assertEqual(statuses, {"profile": "present", "pdf": "missing"})
+            self.assertEqual(hashes["profile"], sha256_file(artifact))
 
 
 if __name__ == "__main__":
