@@ -212,6 +212,12 @@
 - **Verification**: full `tests/` 538/538, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
 - **Known next work**: only add content-level Profile diffs if the user explicitly wants snapshot retention; otherwise keep hash-only comparison to avoid silently expanding personal-data persistence.
 
+## 1.16 Stage 16 Real CLI End-to-End Acceptance (2026-09-25)
+- **Temporary database flow**: verified `application add` → `review --proposal-db --application-id` → `proposal list` → `proposal accept --build-resume` → `application show` → `application versions` → `application outcome` → `application insights`.
+- **Observed artifacts**: Proposal transitioned to `accepted`; tailored Profile, HTML, and PDF were written; one application-linked ResumeVersion was registered; one interview rejection outcome and two feedback tags were aggregated.
+- **Isolation**: all acceptance artifacts were written under a temporary directory and no repository fixture or external resume project was modified.
+- **Verification**: post-commit `tests/` 538/538 and the real CLI flow passed; working tree remained clean before this ledger-only update.
+
 ## 1.11 Stage 11 Application Outcome Feedback Loop (2026-09-24)
 - **Source pattern**: adapted offerPilot's controlled outcome stages/results/feedback tags, outcome reflection fields, and aggregate feedback insights to OfferGet's SQLite `ApplicationStore`; no SQLAlchemy or source files were copied.
 - **Schema v5**: added `application_outcomes` with deterministic content-derived idempotency keys and indexed application/time lookup.
