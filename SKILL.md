@@ -269,8 +269,38 @@ python cli.py resume audit --claims ApexResume/examples/claims.json --html ApexR
 # 13. 调用 ApexResume 简历子系统：AutoFit 像素级单页压页与 PDF 导出
 python cli.py resume autofit ApexResume/examples/sample-resume.html output_fit.html --pdf my_resume.pdf
 
-# 14. 全局统一环境与自动化测试套件自检（OfferGet 169 项 + ApexResume 34 项，共 203 项）
+# 14. 全局统一环境与自动化测试套件自检（OfferGet 538 项 + ApexResume 34 项，共 572 项）
 python cli.py selftest
+
+# 15. 持久化投递管理：创建投递记录，跟踪状态与证据快照
+python cli.py application add "APP-001" --company "示例科技" --role "后端工程师"
+python cli.py application list --status pending
+python cli.py application show "APP-001"
+python cli.py application status "APP-001" interview --note "已进入一面"
+
+# 16. 证据门禁材料提案（HITL）：review 生成草稿，人工确认后才可落地改写
+python cli.py review examples/sample_ai_jd.txt --profile examples/candidate_profile.json \
+  --proposal-db offers.db --application-id "APP-001" --output review.json --json
+python cli.py proposal list --status draft --application-id "APP-001"
+python cli.py proposal accept "MP-xxxx" --profile examples/candidate_profile.json \
+  --jd examples/sample_ai_jd.txt --output tailored_profile.json --build-resume
+python cli.py proposal reject "MP-xxxx"
+
+# 17. 投递结果反馈闭环：受控阶段/结果/标签、复盘和下一步行动，并聚合跨申请洞察
+python cli.py application outcome "APP-001" --stage interview --result rejected \
+  --feedback "系统设计深度不足" --reflection "容量估算不充分" \
+  --next-action "练习缓存与分片设计" --tags system_design,technical_depth
+python cli.py application outcomes "APP-001" --json
+python cli.py application insights --json
+
+# 18. RenderCV JSON 互通：导入为 OfferGet Profile，或导出为 RenderCV JSON
+python cli.py rendercv import rendercv.json --output profile.json
+python cli.py rendercv export profile.json --output rendercv.json
+
+# 19. 记录不可变的岗位关联简历版本元数据
+python cli.py application show APP-001 --json
+python cli.py application versions APP-001 --json
+python cli.py application version-diff VERSION_A VERSION_B --json
 ```
 
 ---

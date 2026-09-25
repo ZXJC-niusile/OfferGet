@@ -56,7 +56,7 @@
 
 ## 💡 核心借鉴与技术资产吸收全景说明 (Absorption Catalog)
 
-OfferGet 在演进过程中，系统性研读了开源社区中 30 余个知名开源项目，坚决摒弃了“爬虫轰炸、海外黑客工具、商业引流营销号、代码提示词副本”等违规/同质化陷阱，**将 10 大标杆开源项目的精髓进行深度重构、代码化吸收并编写了全量单元测试**：
+OfferGet 在演进过程中，系统性研读了本地简历生态中的 26 个开源项目，坚决摒弃了“爬虫轰炸、海外黑客工具、商业引流营销号、代码提示词副本”等违规/同质化陷阱，**将经筛选的标杆能力进行边界清晰的重构与测试**：
 
 ### 1. 企业求职与大厂岗位画像类
 | 借鉴项目 | 原始项目核心价值 | OfferGet 的具体重构与吸收方式 | 落地代码模块 |
@@ -146,6 +146,58 @@ python cli.py baoyan checklist examples/academic_profile.json --stage 夏令营 
 # 5. 项目答辩红蓝对抗模拟 (生成 Claim-Evidence 矩阵与追问速查卡)
 python cli.py baoyan defense examples/candidate_profile.json --intensity 严刑拷打
 ```
+
+### 5. 投递、人工确认与版本追踪
+
+OfferGet 将“分析建议”和“修改事实档案”分开：`review` 只生成可审计的
+`MaterialProposal` 草稿，只有显式执行 `proposal accept` 才会写出新 Profile。
+所有投递、提案、结果反馈和简历产物元数据都保存在本地 SQLite 中。
+
+```bash
+# 创建投递记录
+python cli.py application add APP-001 --company "示例科技" --role "后端工程师" --db applications.db
+
+# 生成并持久化待确认 Proposal
+python cli.py review examples/sample_ai_jd.txt \
+  --profile examples/candidate_profile.json \
+  --proposal-db applications.db --application-id APP-001 \
+  --output review.json --json
+
+# 查看并人工确认
+python cli.py proposal list --application-id APP-001 --db applications.db --json
+python cli.py proposal accept PROPOSAL_ID \
+  --profile examples/candidate_profile.json \
+  --jd examples/sample_ai_jd.txt \
+  --output tailored_profile.json --build-resume \
+  --db applications.db --json
+
+# 查看投递、简历版本和结果反馈
+python cli.py application show APP-001 --db applications.db --json
+python cli.py application versions APP-001 --db applications.db --json
+python cli.py application outcome APP-001 --stage interview --result rejected \
+  --feedback "系统设计深度不足" --reflection "容量估算不充分" \
+  --next-action "练习缓存与分片设计" --tags system_design,technical_depth \
+  --db applications.db
+python cli.py application insights --db applications.db --json
+```
+
+### 6. RenderCV JSON 互通
+
+RenderCV 负责自己的 YAML 解析和渲染；OfferGet 只提供无额外依赖的 JSON 数据互通。
+未知 section 会保存在 `rendercv_import_metadata` 并通过 warnings 报告，不会静默丢弃。
+
+```bash
+python cli.py rendercv import rendercv.json --output profile.json --json
+python cli.py rendercv export profile.json --output rendercv.json --json
+```
+
+### 7. 当前核心边界
+
+- `ProfileContext` 是事实单一来源；渲染器、JD 分析和证据图都是派生视图。
+- `EvidenceGraph` 与 `FactVerificationGuard` 负责事实边界；Proposal 是人工确认边界。
+- `ApplicationStore` 负责投递生命周期、结果反馈和简历版本元数据。
+- ResumeVersion 当前保存 Profile/JD hash 和输出产物路径，不保存完整 Profile 快照；因此 `version-diff` 只报告元数据差异，不声称内容级差异。
+- 外部简历项目只作为规则和架构参考，OfferGet 不直接依赖其运行时、数据库或 Web 基础设施。
 
 ---
 

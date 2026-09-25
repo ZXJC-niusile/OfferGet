@@ -17,6 +17,7 @@ from core.cli_helpers import (
     write_json,
     emit_json,
     emit_stderr,
+    open_application_store,
 )
 from core.services import (
     run_career_review,
@@ -25,6 +26,7 @@ from core.services import (
     load_review_session,
     validate_session_answers,
 )
+from core.material_proposal import MaterialProposal
 
 
 def cmd_career_review(args):
@@ -96,6 +98,20 @@ def cmd_career_review(args):
             emit_stderr(f"[+] Review session saved to {save_session_path}")
         else:
             print(f"[+] Review session saved to {save_session_path}")
+
+    proposal_db = getattr(args, "proposal_db", None)
+    if proposal_db:
+        proposal_data = dict(review_result["material_proposal"])
+        proposal_data["application_id"] = getattr(args, "application_id", None)
+        proposal = MaterialProposal.from_dict(proposal_data)
+        with open_application_store(proposal_db) as store:
+            store.save_material_proposal(proposal)
+            application_id = getattr(args, "application_id", None)
+            if application_id:
+                if not store.attach_evidence_snapshot(application_id, review_result["evidence_snapshot"]):
+                    emit_stderr(f"[-] Application not found for proposal link: {application_id}")
+                    sys.exit(1)
+        emit_stderr(f"[+] Material proposal saved to {proposal_db}: {proposal.proposal_id}")
 
     if args.output:
         write_json(review_result, args.output)

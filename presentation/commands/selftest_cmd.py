@@ -40,10 +40,10 @@ def cmd_selftest(args=None):
     print("=" * 68)
     print("              OfferGet Unified Environment Self-Test             ")
     print("=" * 68)
-    print(f"[1/6] Python Runtime: {sys.version.split()[0]} ({sys.platform})")
+    print(f"[1/11] Python Runtime: {sys.version.split()[0]} ({sys.platform})")
 
     # 1. Test JD Decoder
-    print("[2/6] Testing JD Decoder on sample_ai_jd.txt ...")
+    print("[2/11] Testing JD Decoder on sample_ai_jd.txt ...")
     sample_jd_path = PROJECT_ROOT / "examples" / "sample_ai_jd.txt"
     if not sample_jd_path.exists():
         emit_stderr("[-] Error: sample_ai_jd.txt missing!")
@@ -54,7 +54,7 @@ def cmd_selftest(args=None):
     print(f"      ✓ 5-Layer decomposition verified ({len(decoded['detected_signals'])} hidden signals detected)")
 
     # 2. Test JD Matcher
-    print("[3/6] Testing JD Matcher against candidate_profile.json ...")
+    print("[3/11] Testing JD Matcher against candidate_profile.json ...")
     sample_profile_path = PROJECT_ROOT / "examples" / "candidate_profile.json"
     if not sample_profile_path.exists():
         emit_stderr("[-] Error: candidate_profile.json missing!")
@@ -65,7 +65,7 @@ def cmd_selftest(args=None):
     print(f"      ✓ Match Matrix verified (Overall: {match_result['overall_match_score']}%, Interview Prob: {match_result['interview_prob']}%)")
 
     # 3. Test Report Generator & Bilingual Validator
-    print("[4/6] Testing Report Generator & Bilingual Twin Validator ...")
+    print("[4/11] Testing Report Generator & Bilingual Twin Validator ...")
     template_path = PROJECT_ROOT / "templates" / "offer_strategy.html"
     test_out = PROJECT_ROOT / "tests" / "test_output_report.html"
     generate_report(decoded, match_result, str(template_path), str(test_out))
@@ -88,7 +88,7 @@ def cmd_selftest(args=None):
         test_out.unlink()
 
     # 4. Test ATS Auditor & Three-State Skill Ledger
-    print("[5/6] Testing ATS Auditor & Three-State Skill Ledger ...")
+    print("[5/11] Testing ATS Auditor & Three-State Skill Ledger ...")
     ats_result = audit_resume_ats(str(sample_profile_path), str(sample_jd_path))
     assert ats_result["overall_score"] >= 75.0, f"ATS overall score should be >= 75, got {ats_result['overall_score']}"
     assert ats_result["verdict"] == "READY_TO_SEND", f"Verdict should be READY_TO_SEND, got {ats_result['verdict']}"
@@ -101,7 +101,7 @@ def cmd_selftest(args=None):
     print(f"      ✓ ATS Auditor verified (Score: {ats_res['overall_score']}, Verdict: {ats_res['verdict']}, Ledger: {ats_res['skill_ledger']['summary']['present_count']} verified)")
 
     # 5. Test Privacy Anonymizer
-    print("[6/8] Testing Privacy Anonymizer (Standard & Strict) ...")
+    print("[6/11] Testing Privacy Anonymizer (Standard & Strict) ...")
     anon_p, deanon_m = anonymize_profile(profile_data, level="strict")
     assert anon_p["candidate"]["name"] == "Dr. Alex Chen", "Candidate name must be pseudonymized"
     restored_p = deanonymize_text(anon_p, deanon_m)
@@ -109,7 +109,7 @@ def cmd_selftest(args=None):
     print(f"      ✓ Privacy Anonymizer verified: Reversible pseudonymization confirmed")
 
     # 6. Test Fact Verification Guard
-    print("[7/8] Testing Fact Verification Guard ...")
+    print("[7/11] Testing Fact Verification Guard ...")
     guard = FactVerificationGuard(profile_data)
     v_res = guard.verify_facts("主导 1024 卡 H800 集群预训练，端到端 MFU 优化至 54.2%，提前 3 周交付。")
     assert v_res["passed"] is True, "Grounded bullet must pass"

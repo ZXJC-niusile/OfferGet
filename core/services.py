@@ -9,6 +9,7 @@ without terminal prints, CLI interactions, or side-effects.
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import re
 from pathlib import Path
@@ -456,6 +457,114 @@ class ApplicationGuardService:
         return DuplicateApplicationGuard.check_application(*args, **kwargs)
 
 
+class ProposalService:
+    """Human-confirmed material proposal service backed by ApplicationStore."""
+
+    def __init__(self, db_path: Union[str, Path] = "offerget_applications.db"):
+        from core.application_tracker import ApplicationStore
+
+        self.store = ApplicationStore(db_path)
+
+    def __enter__(self) -> "ProposalService":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self.store.close()
+
+    def save(self, proposal: Any) -> None:
+        self.store.save_material_proposal(proposal)
+
+    def get(self, proposal_id: str) -> Any:
+        return self.store.get_material_proposal(proposal_id)
+
+    def list(self, **filters: Any) -> List[Any]:
+        return self.store.list_material_proposals(**filters)
+
+    def reject(self, proposal_id: str) -> Any:
+        proposal = self.get(proposal_id)
+        if proposal is None:
+            raise KeyError(proposal_id)
+        proposal.reject()
+        self.save(proposal)
+        return proposal
+
+    def accept(self, proposal_id: str, profile: Dict[str, Any], jd_text: str, output_path: Union[str, Path], patch_ids: Optional[List[int]] = None) -> Dict[str, Any]:
+        from core.material_proposal import apply_material_proposal
+        proposal = self.get(proposal_id)
+        if proposal is None:
+            raise KeyError(proposal_id)
+        try:
+            updated = apply_material_proposal(proposal, profile, jd_text, patch_ids=patch_ids)
+        except ValueError:
+            self.save(proposal)
+            raise
+        self.save(proposal)
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(output_path).write_text(json.dumps(updated, ensure_ascii=False, indent=2), encoding="utf-8")
+        return {"proposal": proposal.to_dict(), "profile_output": str(output_path)}
+
+
+class ApplicationOutcomeService:
+    """Records and aggregates evidence-backed application outcome feedback."""
+
+    def __init__(self, db_path: Union[str, Path] = "offerget_applications.db"):
+        from core.application_tracker import ApplicationStore
+
+        self.store = ApplicationStore(db_path)
+
+    def __enter__(self) -> "ApplicationOutcomeService":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    def close(self) -> None:
+        self.store.close()
+
+    def record(self, outcome: Any) -> Dict[str, Any]:
+        return self.store.record_outcome(outcome)
+
+    def list(self, application_id: Optional[str] = None) -> List[Any]:
+        return self.store.list_outcomes(application_id)
+
+    def insights(self) -> Dict[str, Any]:
+        return self.store.outcome_insights()
+
+
+class ResumeVersionService:
+    """Queries immutable application-linked resume version metadata."""
+
+    def __init__(self, db_path: Union[str, Path] = "offerget_applications.db"):
+        from core.application_tracker import ApplicationStore
+
+        self.store = ApplicationStore(db_path)
+
+    def __enter__(self) -> "ResumeVersionService":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.store.close()
+
+    def list(self, application_id: Optional[str] = None) -> List[Any]:
+        return self.store.list_resume_versions(application_id)
+
+    def get(self, version_id: str) -> Any:
+        return self.store.get_resume_version(version_id)
+
+    def compare(self, before_id: str, after_id: str) -> Dict[str, Any]:
+        from core.resume_version_diff import compare_resume_versions
+
+        before = self.get(before_id)
+        after = self.get(after_id)
+        if before is None or after is None:
+            missing = before_id if before is None else after_id
+            raise KeyError(missing)
+        return compare_resume_versions(before, after)
+
+
 class ReportService:
     """Domain service for generating and validating strategy reports across dual tracks."""
 
@@ -596,6 +705,9 @@ __all__ = [
     "CommunicationService",
     "AcademicService",
     "ApplicationGuardService",
+    "ProposalService",
+    "ApplicationOutcomeService",
+    "ResumeVersionService",
     "ReportService",
     "decode_jd",
     "match_profile_to_jd",

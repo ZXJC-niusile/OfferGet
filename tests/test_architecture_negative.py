@@ -140,7 +140,7 @@ class TestArchitectureNegative(unittest.TestCase):
             db_path = Path(tmp_dir) / "test_mig.db"
             store = ApplicationStore(db_path)
             try:
-                # Check user_version set to CURRENT_SCHEMA_VERSION (schema v2)
+                # Check user_version reaches the current migration target.
                 with store._get_connection() as conn:
                     cur = conn.execute("PRAGMA user_version")
                     version = cur.fetchone()[0]

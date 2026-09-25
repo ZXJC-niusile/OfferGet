@@ -324,11 +324,14 @@ class TestApplicationStoreSchemaV2(unittest.TestCase):
             try:
                 with store._get_connection() as c:
                     ver = c.execute("PRAGMA user_version").fetchone()[0]
-                    self.assertEqual(ver, 2)
+                    self.assertEqual(ver, 6)
                     cols = [r[1] for r in c.execute("PRAGMA table_info(applications)").fetchall()]
                     self.assertIn("target_level", cols)
                     self.assertIn("portal_url", cols)
                     self.assertIn("recruiter_contact", cols)
+                    self.assertIsNotNone(c.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name='material_proposals'"
+                    ).fetchone())
 
                 # 3. Read legacy record: new fields should gracefully default to empty string
                 rec = store.get("v1-app-01")
@@ -338,6 +341,16 @@ class TestApplicationStoreSchemaV2(unittest.TestCase):
                 self.assertEqual(rec.target_level, "")
                 self.assertEqual(rec.portal_url, "")
                 self.assertEqual(rec.recruiter_contact, "")
+
+                evidence_snapshot = {
+                    "snapshot_id": "SNAP-TEST-001",
+                    "profile_fingerprint": "profile-hash",
+                    "jd_fingerprint": "jd-hash",
+                    "evidence_graph": {"readiness": {"is_ready_to_apply": True}},
+                }
+                self.assertTrue(store.attach_evidence_snapshot("v1-app-01", evidence_snapshot))
+                attached = store.get("v1-app-01")
+                self.assertEqual(attached.evidence_snapshot["snapshot_id"], "SNAP-TEST-001")
 
                 # 4. Update with v2 fields and save
                 rec.target_level = "T9"

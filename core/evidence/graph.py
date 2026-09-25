@@ -135,6 +135,56 @@ class EvidenceGraph:
                     raise ValueError(f"Duplicate evidence claim_id: '{n.claim_id}'")
                 self._nodes[n.claim_id] = copy.deepcopy(n)
 
+    @classmethod
+    def from_profile_context(cls, profile_context: Any) -> "EvidenceGraph":
+        """Build an evidence graph from the shared ProfileContext claim index.
+
+        Claims carrying explicit verified metrics become VERIFIED. Experience and
+        project claims with a declared role scope are then GROUNDED. Other claims
+        remain DRAFT until a caller supplies stronger evidence.
+        """
+        context = profile_context
+        if not hasattr(context, "claims"):
+            from core.profile_adapter import build_profile_context
+
+            context = build_profile_context(profile_context)
+
+        graph = cls()
+        grouped: Dict[str, Dict[str, Any]] = {}
+        for claim in context.claims:
+            claim_id = str(claim.claim_id or claim.source_path)
+            if not claim_id:
+                continue
+            item = grouped.setdefault(
+                claim_id,
+                {
+                    "text": claim.text,
+                    "scope": claim.role_scope.strip(),
+                    "source_ids": [],
+                    "verified": False,
+                },
+            )
+            if claim.text and len(claim.text) > len(item["text"]):
+                item["text"] = claim.text
+            if claim.role_scope and not item["scope"]:
+                item["scope"] = claim.role_scope.strip()
+            if claim.source_path not in item["source_ids"]:
+                item["source_ids"].append(claim.source_path)
+            item["verified"] = item["verified"] or claim.verification == "verified"
+
+        for claim_id, item in grouped.items():
+            graph.add_claim(
+                item["text"],
+                claim_id=claim_id,
+                scope=item["scope"],
+                source_ids=item["source_ids"],
+            )
+            if item["verified"]:
+                graph.verify_claim(claim_id, note="ProfileEvidenceIndex verified_metrics")
+                if item["scope"]:
+                    graph.ground_claim(claim_id, item["scope"], note="ProfileEvidenceIndex role scope")
+        return graph
+
     @property
     def nodes(self) -> Dict[str, EvidenceNode]:
         return {k: copy.deepcopy(v) for k, v in self._nodes.items()}
@@ -208,6 +258,23 @@ class EvidenceGraph:
         node.advance(EvidenceNodeState.USED_IN_RESUME, note=note or "Selected for resume bullet point")
         return copy.deepcopy(node)
 
+    def mark_used_for_resume(self, claim_ids: List[str]) -> Tuple[List[str], Dict[str, str]]:
+        """Promote grounded claims to USED_IN_RESUME and report rejected claims."""
+        accepted: List[str] = []
+        rejected: Dict[str, str] = {}
+        for claim_id in dict.fromkeys(claim_ids):
+            node = self._nodes.get(claim_id)
+            if node is None:
+                rejected[claim_id] = "claim_not_found"
+            elif node.state in {EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}:
+                accepted.append(claim_id)
+            elif node.state != EvidenceNodeState.GROUNDED:
+                rejected[claim_id] = f"state_{node.state.value}"
+            else:
+                self.use_in_resume(claim_id)
+                accepted.append(claim_id)
+        return accepted, rejected
+
     def defend_claim(self, claim_id: str, rounds: int = 1, note: str = "") -> EvidenceNode:
         """Marks a claim as successfully defended in mock interview / defense simulation."""
         try:
@@ -236,20 +303,33 @@ class EvidenceGraph:
         node.advance(EvidenceNodeState.INVALIDATED, note=reason or "Claim invalidated during audit")
         return copy.deepcopy(node)
 
-    def can_apply(self) -> Tuple[bool, List[str]]:
+    def can_apply(self, claim_ids: Optional[List[str]] = None) -> Tuple[bool, List[str]]:
         """
         Determines whether the current set of resume claims meets the truth threshold.
         Returns: (is_ready, list_of_blocking_reasons)
         """
         blocking_reasons: List[str] = []
-        active_nodes = [n for n in self._nodes.values() if n.state != EvidenceNodeState.INVALIDATED]
+        selected = set(claim_ids) if claim_ids is not None else None
+        selected_nodes = [
+            n for n in self._nodes.values()
+            if selected is None or n.claim_id in selected
+        ]
+        active_nodes = [
+            n for n in selected_nodes
+            if n.state != EvidenceNodeState.INVALIDATED
+        ]
         used_nodes = [n for n in active_nodes if n.state in {EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}]
 
         if not used_nodes:
             blocking_reasons.append("没有经过核验与锚定的有效经历主张，且没有选入简历的主张")
 
+        if selected is not None:
+            for claim_id in sorted(selected):
+                if claim_id not in self._nodes:
+                    blocking_reasons.append(f"主张 [{claim_id}] 不存在于 EvidenceGraph")
+
         # Every non-invalidated claim must be grounded before application.
-        for n in self._nodes.values():
+        for n in selected_nodes:
             if n.state == EvidenceNodeState.INVALIDATED:
                 blocking_reasons.append(f"主张 [{n.claim_id}] 已被判定存疑废弃: {n.text[:30]}")
             elif n.state == EvidenceNodeState.DRAFT:
@@ -262,13 +342,13 @@ class EvidenceGraph:
         is_ready = len(blocking_reasons) == 0
         return is_ready, blocking_reasons
 
-    def get_readiness_report(self) -> Dict[str, Any]:
+    def get_readiness_report(self, claim_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """Returns comprehensive readiness statistics and verdict."""
         counts = {s.value: 0 for s in EvidenceNodeState}
         for n in self._nodes.values():
             counts[n.state.value] += 1
 
-        is_ready, blockers = self.can_apply()
+        is_ready, blockers = self.can_apply(claim_ids=claim_ids)
         verdict = "READY_TO_APPLY" if is_ready else ("UNVERIFIED_BLOCK" if counts[EvidenceNodeState.INVALIDATED.value] > 0 else "DEFENSE_PENDING")
 
         return {
@@ -277,9 +357,10 @@ class EvidenceGraph:
             "verdict": verdict,
             "is_ready_to_apply": is_ready,
             "blockers": blockers,
+            "selected_claim_ids": list(claim_ids) if claim_ids is not None else None,
         }
 
-    def audit_snapshot(self) -> Dict[str, Any]:
+    def audit_snapshot(self, claim_ids: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Creates an immutable, verifiable audit snapshot suitable for embedding
         into an ApplicationRecord or persistent telemetry.
@@ -293,7 +374,7 @@ class EvidenceGraph:
             "graph_hash": content_hash,
             "total_nodes": len(nodes_list),
             "verified_count": sum(1 for n in self._nodes.values() if n.state in {EvidenceNodeState.VERIFIED, EvidenceNodeState.GROUNDED, EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}),
-            "readiness": self.get_readiness_report(),
+            "readiness": self.get_readiness_report(claim_ids=claim_ids),
             "nodes": nodes_list,
         }
 

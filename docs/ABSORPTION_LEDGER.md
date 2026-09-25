@@ -92,6 +92,33 @@
 | `sigmacv` | 是 | 否 | 是 | 否 | 否 | 否 | `retained` | `461227a` | `CLEAN` | AGPL-3.0 |
 | `vanceling-skills` | 是 | 是 | 是 | 否 | 否 | 否 | `archive-candidate` | `5f4f042` | `CLEAN` | MIT |
 
+### offerPilot outcome-feedback pattern absorption (2026-09-24)
+- **Source**: `D:\User Hub\GitHub\简历\offerPilot\src\offerpilot\repositories\application_outcomes.py` (GPL-3.0 project; adapted the domain pattern, did not copy source code).
+- **Absorbed pattern**: controlled outcome stages/results/feedback tags, replay-safe outcome writes, reflection and next-action fields, and cross-application feedback aggregation.
+- **OfferGet implementation**: `core/application_tracker.py` (`OutcomeStage`, `OutcomeResult`, `FEEDBACK_TAGS`, `OutcomeRecord`, `ApplicationStore` schema v5) and `tests/test_application_outcomes.py`.
+- **Boundary**: no SQLAlchemy dependency; outcomes are local SQLite records and require an existing application ID.
+
+### offerPilot interview-review proposal contract absorption (2026-09-24)
+- **Source**: `D:\User Hub\GitHub\简历\offerPilot\src\offerpilot\ai\interview_review_proposals.py` (GPL-3.0 project; adapted the evidence-validation pattern, no source copied).
+- **Existing overlap**: OfferGet already had interview diagnosis, conservative answer revision, transcript analysis, and claim references in `core/interview_debrief.py` and `core/post_interview.py`.
+- **Gap absorbed**: strict review payload shape, globally unique item IDs, bounded collection sizes, evidence-source/path allowlisting, frozen-note excerpt verification, and safe-empty fallback.
+- **OfferGet implementation**: `core/interview_review_contract.py`; validation is deterministic and provider-independent.
+- **Tests**: `tests/test_interview_review_contract.py` covers forged evidence, invalid paths, duplicate IDs, unexpected fields, size bounds, snapshot whitelisting, and empty-note fallback.
+
+### RenderCV JSON interoperability absorption (2026-09-24)
+- **Source**: `D:\User Hub\GitHub\简历\rendercv` (MIT; adapted the public data-model boundary, no renderer source copied).
+- **OfferGet implementation**: `core/rendercv_adapter.py` plus `presentation/commands/rendercv_cmd.py`.
+- **Supported mapping**: identity/social links, experience, education, projects, skills, and publications between RenderCV JSON and the canonical OfferGet Profile.
+- **Boundary**: unsupported sections are retained in `rendercv_import_metadata` with warnings; YAML parsing and rendering remain owned by RenderCV and are not duplicated.
+- **Tests**: `tests/test_rendercv_adapter.py`; full suite verified at 534 tests.
+
+### SigmaCV frozen resume-version pattern absorption (2026-09-24)
+- **Source**: `D:\User Hub\GitHub\简历\sigmacv\src\lib\cv\snapshotHash.ts` and `snapshots.ts` (AGPL-3.0 project; adapted the content-hash and immutable metadata pattern, no source copied).
+- **OfferGet implementation**: `ResumeVersion` and `ApplicationStore` Schema v6 `resume_versions` table; Proposal acceptance registers generated Profile/render outputs against the application.
+- **Boundary**: only local metadata and deterministic hashes are absorbed; SigmaCV's account, public-page, database, research, and web infrastructure are not imported.
+- **Tests**: `tests/test_resume_versions.py` and end-to-end application review smoke coverage.
+- **Follow-up**: added metadata-only version listing and diff (`core/resume_version_diff.py`, `application versions`, `application version-diff`); content-level Profile diff remains intentionally unavailable without explicit snapshot-retention scope.
+
 ---
 ## 四、 核心候选项目文件级清单与资产拆分 (Candidate Project Dossiers)
 
@@ -576,16 +603,16 @@ skills\baoyan-taocixin-outreach\scripts\create_taocixin_docx.py (   3,971 bytes)
 ### 步骤 1: 生成并校验 Git Bundle
 ```powershell
 # 以 ASu-resume-skills 为例
-git -C "E:\github\简历\ASu-resume-skills" bundle create "E:\github\OfferGet\archives\ASu-resume-skills_f460582.bundle" --all
-git bundle verify "E:\github\OfferGet\archives\ASu-resume-skills_f460582.bundle"
-git bundle list-heads "E:\github\OfferGet\archives\ASu-resume-skills_f460582.bundle"
+git -C "D:\User Hub\GitHub\简历\ASu-resume-skills" bundle create "D:\User Hub\GitHub\OfferGet\archives\ASu-resume-skills_f460582.bundle" --all
+git bundle verify "D:\User Hub\GitHub\OfferGet\archives\ASu-resume-skills_f460582.bundle"
+git bundle list-heads "D:\User Hub\GitHub\OfferGet\archives\ASu-resume-skills_f460582.bundle"
 ```
 
 ### 步骤 2: 移入归档观察区
 ```powershell
 # 建立归档目录并移动，进入为期不少于 14 天的零依赖观察期
-New-Item -ItemType Directory -Force "E:\github\简历归档"
-Move-Item "E:\github\简历\ASu-resume-skills" "E:\github\简历归档\ASu-resume-skills"
+New-Item -ItemType Directory -Force "D:\User Hub\GitHub\简历归档"
+Move-Item "D:\User Hub\GitHub\简历\ASu-resume-skills" "D:\User Hub\GitHub\简历归档\ASu-resume-skills"
 ```
 
 ### 步骤 3: 最终物理删除（必须用户显式批准）

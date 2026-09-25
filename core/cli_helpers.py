@@ -210,6 +210,17 @@ def exit_cli_error(
     sys.exit(exit_code)
 
 
+def open_application_store(args_or_path: Any = None):
+    """Create the shared SQLite store used by application-related commands."""
+    from core.application_tracker import ApplicationStore
+
+    if isinstance(args_or_path, (str, Path)):
+        db_path = str(args_or_path)
+    else:
+        db_path = getattr(args_or_path, "db", None) or "offerget_applications.db"
+    return ApplicationStore(db_path)
+
+
 __all__ = [
     "read_text",
     "load_json",
@@ -220,4 +231,5 @@ __all__ = [
     "emit_stderr",
     "format_cli_error",
     "exit_cli_error",
+    "open_application_store",
 ]

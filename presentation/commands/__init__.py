@@ -45,6 +45,28 @@ from presentation.commands.fact_cmd import (
 from presentation.commands.selftest_cmd import (
     cmd_selftest,
 )
+from presentation.commands.proposal_cmd import (
+    cmd_proposal_show,
+    cmd_proposal_list,
+    cmd_proposal_accept,
+    cmd_proposal_reject,
+)
+from presentation.commands.application_cmd import (
+    cmd_application_add,
+    cmd_application_list,
+    cmd_application_show,
+    cmd_application_status,
+    cmd_application_snapshot,
+    cmd_application_outcome,
+    cmd_application_outcomes,
+    cmd_application_insights,
+    cmd_application_versions,
+    cmd_application_version_diff,
+)
+from presentation.commands.rendercv_cmd import (
+    cmd_rendercv_import,
+    cmd_rendercv_export,
+)
 
 __all__ = [
     "cmd_jd_decode",
@@ -71,4 +93,20 @@ __all__ = [
     "cmd_anon_unmask",
     "cmd_anon_profile",
     "cmd_selftest",
+    "cmd_proposal_show",
+    "cmd_proposal_list",
+    "cmd_proposal_accept",
+    "cmd_proposal_reject",
+    "cmd_application_add",
+    "cmd_application_list",
+    "cmd_application_show",
+    "cmd_application_status",
+    "cmd_application_snapshot",
+    "cmd_application_outcome",
+    "cmd_application_outcomes",
+    "cmd_application_insights",
+    "cmd_application_versions",
+    "cmd_application_version_diff",
+    "cmd_rendercv_import",
+    "cmd_rendercv_export",
 ]

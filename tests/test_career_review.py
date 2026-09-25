@@ -829,6 +829,26 @@ class TestCareerReviewPipeline(unittest.TestCase):
         q2_short = qs_short[1]
         self.assertIn("SQLite", q2_short["question_zh"], "Short real experience should be anchored in Q2")
 
+    def test_27_evidence_graph_is_integrated_into_review_and_snapshot(self):
+        result = run_career_review(self.jd_text, self.profile_data)
+
+        self.assertIn("evidence_graph", result)
+        self.assertIn("evidence_gate", result)
+        self.assertIn("evidence_snapshot", result)
+        self.assertTrue(result["evidence_gate"]["is_ready"])
+        self.assertEqual(
+            result["evidence_snapshot"]["evidence_graph"]["graph_hash"],
+            result["evidence_graph"]["graph_hash"],
+        )
+        self.assertTrue(result["evidence_gate"]["selected_claim_ids"])
+        self.assertTrue(
+            all(
+                patch.get("validation_status") != "applied"
+                or patch.get("source_claim_id") in result["evidence_gate"]["selected_claim_ids"]
+                for patch in result["tailored_profile"].get("applied_patches", [])
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

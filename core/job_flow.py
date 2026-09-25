@@ -37,6 +37,9 @@ from core.profile_adapter import (
     find_evidence,
     iter_profile_claims,
 )
+from core.evidence.graph import EvidenceGraph, EvidenceNodeState
+from core.application_tracker import create_evidence_snapshot
+from core.material_proposal import create_material_proposal
 from modules.jd_analyst.decoder import JDDecoder
 from modules.jd_analyst.matcher import JDMatcher
 from modules.jd_analyst.models import (
@@ -288,6 +291,7 @@ def generate_tailored_profile_from_review(
     review_result: Dict[str, Any],
     base_profile: Union[Dict[str, Any], ProfileContext],
     fact_guard: Optional[FactVerificationGuard] = None,
+    evidence_graph: Optional[EvidenceGraph] = None,
 ) -> Dict[str, Any]:
     """Derive targeted tailored candidate profile from career review advice.
 
@@ -410,6 +414,14 @@ def generate_tailored_profile_from_review(
         requirement = advice.get("requirement", "")
         evidence_refs = advice.get("evidence_refs", [])
         risk_flags = advice.get("risk_flags", [])
+        matched_claim_id = next(
+            (
+                str(ref.get("claim_id"))
+                for ref in evidence_refs
+                if isinstance(ref, dict) and ref.get("claim_id")
+            ),
+            "",
+        )
 
         # Fact Guard Verification on safe_bullet
         if guard is not None and safe_bullet:
@@ -453,10 +465,38 @@ def generate_tailored_profile_from_review(
         if category == "threshold" and any(k in requirement for k in ("学历", "学位", "年限", "工作经验", "专业")):
             continue
 
+        if evidence_graph is not None:
+                graph_claim_ids = [
+                    str(ref.get("claim_id")) for ref in evidence_refs
+                    if isinstance(ref, dict) and ref.get("claim_id")
+                ]
+                eligible_claim_id = next(
+                    (
+                        claim_id for claim_id in graph_claim_ids
+                        if (node := evidence_graph.get_node(claim_id)) is not None
+                        and node.state in {EvidenceNodeState.USED_IN_RESUME, EvidenceNodeState.INTERVIEW_DEFENDED}
+                    ),
+                    "",
+                )
+                if not eligible_claim_id:
+                    patch = ResumePatch(
+                        source_claim_id=matched_claim_id or requirement,
+                    target_path="evidence_graph_blocked",
+                    before="",
+                    after=safe_bullet,
+                    evidence_refs=evidence_refs,
+                    validation_status="rejected",
+                    reason="evidence_graph_blocked: claim is not verified, grounded, and selected for resume",
+                    unresolved_risks=risk_flags,
+                )
+                    applied_patches.append(patch.to_dict())
+                    unresolved_risks.extend(risk_flags)
+                    continue
+                matched_claim_id = eligible_claim_id
+
         target_exp_indices: List[int] = []
         target_proj_indices: List[int] = []
         excerpts: List[str] = []
-        matched_claim_id = ""
 
         for ref in evidence_refs:
             sp = ref.get("source_path", "")
@@ -952,6 +992,17 @@ def run_career_review(
     fact_guard = FactVerificationGuard(profile_ctx)
     resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard)
 
+    evidence_graph = EvidenceGraph.from_profile_context(profile_ctx)
+    referenced_claim_ids: List[str] = []
+    for advice in resume_advices:
+        if not advice.get("safe_bullet"):
+            continue
+        for ref in advice.get("evidence_refs", []):
+            if isinstance(ref, dict) and ref.get("claim_id"):
+                referenced_claim_ids.append(str(ref["claim_id"]))
+    selected_claim_ids, blocked_claims = evidence_graph.mark_used_for_resume(referenced_claim_ids)
+    evidence_gate, evidence_blockers = evidence_graph.can_apply(selected_claim_ids)
+
     debrief_engine = InterviewDebriefEngine()
     feedback_items: List[Dict[str, Any]] = []
     invalid_answers: List[Dict[str, Any]] = []
@@ -1095,6 +1146,21 @@ def run_career_review(
         {"resume_advice": resume_advices, "match_summary": matcher_result},
         profile_ctx,
         fact_guard=fact_guard,
+        evidence_graph=evidence_graph,
+    )
+
+    evidence_snapshot = create_evidence_snapshot(
+        profile=profile_ctx,
+        jd=decoded_jd,
+        matcher_result=matcher_result,
+        evidence_graph=evidence_graph,
+        notes="career-review evidence snapshot",
+    )
+    material_proposal = create_material_proposal(
+        {"tailored_profile": tailored_profile},
+        profile_ctx,
+        jd_text,
+        proposal_id=f"PROP-{profile_hash}-{jd_hash}",
     )
 
     # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
@@ -1180,6 +1246,15 @@ def run_career_review(
             ],
         },
         "tailored_profile": tailored_profile,
+        "evidence_graph": evidence_graph.audit_snapshot(claim_ids=selected_claim_ids),
+        "evidence_gate": {
+            "is_ready": evidence_gate,
+            "selected_claim_ids": selected_claim_ids,
+            "blocked_claims": blocked_claims,
+            "blockers": evidence_blockers,
+        },
+        "evidence_snapshot": evidence_snapshot,
+        "material_proposal": material_proposal.to_dict(),
         "resume_patches": [
             adv["patch"] for adv in resume_advices if adv.get("patch")
         ],

@@ -118,3 +118,104 @@
 - **Verification before post-audit hardening**: `tests/test_applyr_absorption.py` (9/9 passed), full `tests/` (502/502 passed, 100%), `ApexResume/tests/` (34/34 passed), `python cli.py selftest` (11/11 passed), `git diff --check` (0 errors).
 - **Post-audit hardening**: EvidenceGraph now rejects empty/duplicate claims, exposes defensive node copies, blocks verified-but-ungrounded application claims, prevents failed defense mutations, normalizes canonical/legacy matcher score units, and closes SQLite connections when future schema versions are rejected.
 - **Post-audit verification**: `tests/test_applyr_absorption.py` 13/13, `tests/test_architecture_negative.py` 6/6, full `tests/` 507/507, `ApexResume/tests/` 34/34, and `python cli.py selftest` 11/11 passed; `git diff --check` clean.
+
+## 1.3 Stage 3 Evidence-Graph Mainline Integration (2026-09-23)
+- **Profile projection**: `EvidenceGraph.from_profile_context()` converts the shared `ProfileContext.claims` index into a scoped graph. Claims with verified metrics become `VERIFIED`; claims with an explicit experience/project role scope become `GROUNDED`.
+- **Career Review integration**: `run_career_review()` now emits `evidence_graph`, `evidence_gate`, and `evidence_snapshot`. Resume advice references are promoted only when the corresponding graph claim is verified, grounded, and selected for the resume.
+- **ResumePatch gate**: `generate_tailored_profile_from_review()` accepts an optional `EvidenceGraph` and rejects patches without a selected `USED_IN_RESUME`/`INTERVIEW_DEFENDED` claim, while preserving the legacy standalone API when no graph is supplied.
+- **Application persistence**: `ApplicationStore.attach_evidence_snapshot()` persists the career-review snapshot into the application record for later audit/export.
+- **Verification at this snapshot**: `tests/test_career_review.py` 27/27, `tests/test_applyr_absorption.py` 13/13, `tests/test_architecture_negative.py` 6/6, full `tests/` 508/508, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: expose an explicit CLI command to attach a review snapshot to an application ID; add proposal/HITL semantics before accepting any generated material mutation; do not treat `evidence_gate` as a replacement for user confirmation.
+
+## 1.4 Stage 4 Material Proposal / HITL Boundary (2026-09-23)
+- **Proposal contract**: `core/material_proposal.py` adds `MaterialProposal` with `DRAFT`, `ACCEPTED`, `REJECTED`, and `CONFLICTED` states, deterministic source fingerprints, proposal hash, partial patch acceptance, and source drift detection.
+- **Career Review output**: `run_career_review()` now emits a draft `material_proposal`; rejected or evidence-blocked patches are excluded from the proposal.
+- **Confirmed application**: `apply_material_proposal()` validates source fingerprints and the previous target text, then returns a new profile copy without modifying the original profile.
+- **Verification**: `tests/test_material_proposal.py` 4/4 passed; full `tests/` 512/512 passed; `git diff --check` clean.
+- **Known next work**: expose proposal accept/reject through a CLI/service command and persist proposal records with idempotency before connecting them to automatic resume rendering.
+
+## 1.5 Stage 5 Proposal Persistence and CLI HITL (2026-09-23)
+- **Persistent proposals**: `ApplicationStore` schema v3 adds `material_proposals`; proposal records retain source fingerprints, patch payloads, status, accepted patch indexes, and conflict reason.
+- **CLI**: added `offerget proposal show|accept|reject`. `review --proposal-db <db>` persists a generated draft. `proposal accept` requires current `--profile` and `--jd`, checks drift, and writes a new profile via `--output`.
+- **Safety**: accepting a proposal never overwrites the source profile; rejected/conflicted proposals cannot be silently applied; partial patch acceptance is supported.
+- **Verification**: full `tests/` 514/514, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: add an application-id relation and proposal listing/filtering, then add service-level API support before any automatic resume rendering integration.
+
+## 1.6 Stage 6 Proposal Tracking and Confirmed Rendering (2026-09-23)
+- **Application relation**: Proposal persistence upgraded to Schema v4 with optional `application_id`; proposals can be filtered by application and status.
+- **CLI**: added `offerget proposal list`; `review --application-id` attaches a proposal to an application; `proposal accept` can optionally run `--build-resume --resume-theme ...` after writing the new profile.
+- **Safety**: rendering occurs only after explicit proposal acceptance and uses the newly generated profile copy; source profile remains untouched.
+- **Verification**: full `tests/` suite and proposal persistence tests pass; CLI parser exposes `show/list/accept/reject`.
+- **Known next work**: add a higher-level application command to create/link records and service-layer proposal APIs for non-CLI callers.
+
+## 1.7 Stage 7 Persistent Application Workbench CLI (2026-09-23)
+- **Application CLI**: added `offerget application add|list|show|status|snapshot`, backed by `ApplicationStore`, with lifecycle history and evidence snapshot output.
+- **Workflow**: Proposal `application_id` can now point to a record created by the application CLI, completing the local flow from application intake to material confirmation.
+- **Verification**: added `tests/test_application_cli.py`; full `tests/` suite passes, CLI help and a real temporary SQLite lifecycle were exercised successfully.
+- **Known next work**: add service-level APIs for the same operations and enforce proposal/application existence checks when attaching an ID.
+
+## 1.8 Stage 8 Strong Proposal/Application Association (2026-09-23)
+- **Association validation**: persisting a Proposal with an `application_id` now fails if the application record does not exist.
+- **Filtering**: `proposal list` supports `--status`, `--application-id`, `--company`, and `--role` filters.
+- **Service layer**: added `ProposalService` for non-CLI callers to save, list, accept, reject, and persist new profile output.
+- **Verification**: full `tests/` 515/515, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: add application-linked proposal summaries to the application detail output and build a small end-to-end smoke fixture for proposal accept plus resume rendering.
+
+## 1.9 Stage 9 End-to-End Application Review Smoke (2026-09-23)
+- **Application detail**: `application show` now includes linked Proposal summaries (`get_application_detail`).
+- **Review flow**: `review` validates `--application-id` and writes the evidence snapshot to the linked application.
+- **End-to-end smoke**: added `tests/test_application_review_smoke.py` covering application creation, proposal persistence, linked detail lookup, explicit Proposal acceptance, new Profile output, resume PDF rendering, and evidence snapshot persistence.
+- **Fix**: `apply_material_proposal` now supports append patches (`bullets[i]` with i == len) and marks stale targets as CONFLICTED instead of raising.
+- **Verification**: full `tests/` 516/516, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: consolidate the uncommitted work into a reviewed commit, then continue absorbing `offerPilot` interview-review proposal patterns and re-evaluate external project deletion.
+
+## 1.10 Stage 10 In-Repo Consistency & Service Hardening (2026-09-24)
+- **Selftest**: normalized stage counters to a single `[n/11]` denominator (previously `/6`, `/8`, `/11` mixed).
+- **Service layer**: `ProposalService` now persists `CONFLICTED` state when acceptance fails (matching CLI behavior) and supports `with ProposalService(...)` context usage.
+- **Docs**: `SKILL.md` CLI Quickstart documents `application` and `proposal` command groups and refreshes test counts (516→518, 203→552 stale values fixed).
+- **Import order**: `cli.py` and `core/__init__.py` new symbols placed in alphabetical order.
+- **Tests**: added `TestProposalService` covering service roundtrip, context manager, `KeyError` on unknown IDs, and conflict persistence.
+- **Verification**: full `tests/` 518/518, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Source path correction**: the external repository directory is available at `D:\User Hub\GitHub\简历\` (26 repositories). The earlier E: drive check was correct, but the conclusion that the source was unavailable was mistaken; the folder's garbled name in terminal output was `简历`. External projects remain unmodified.
+- **Known next work**: obtain explicit commit authorization to consolidate the uncommitted work; continue with offerPilot interview-review proposal patterns; optionally extend `application show` with lifecycle history timeline rendering.
+
+## 1.12 Stage 12 Evidence-Grounded Interview Review Contract (2026-09-24)
+- **Codebase comparison**: OfferGet already has interview diagnosis/revision (`core/interview_debrief.py`), transcript review (`core/post_interview.py`), and fact guard. The non-duplicate gap was strict structured review payload validation and proof that evidence excerpts exist in the frozen interview note.
+- **Absorbed pattern**: adapted offerPilot's evidence-ref contract: exact payload fields, unique IDs, bounded list/reference counts, whitelisted note paths, source labels, excerpt matching, and a fixed safe-empty fallback. No model/provider or SQLAlchemy dependency was added.
+- **Implementation**: added `core/interview_review_contract.py` with snapshot construction and deterministic proposal validation.
+- **Tests**: `tests/test_interview_review_contract.py` covers snapshot whitelisting, valid evidence, forged excerpts/paths, duplicate IDs, unexpected fields, collection bounds, and safe fallback behavior.
+- **Verification**: full `tests/` 529/529, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+
+## 1.13 Stage 13 RenderCV JSON Interoperability (2026-09-24)
+- **Source comparison**: RenderCV (MIT) uses a typed root model (`cv`, `design`, `locale`, `settings`) with section entries; OfferGet already owns the canonical Profile and rendering pipeline.
+- **Implementation**: added dependency-free `core/rendercv_adapter.py` for common identity, social links, experience, education, projects, skills, and publications mappings.
+- **Loss boundary**: unsupported RenderCV sections are preserved under `rendercv_import_metadata` and reported as warnings; YAML is intentionally rejected by the adapter unless converted to JSON by RenderCV, avoiding an extra parser dependency.
+- **CLI**: added `rendercv import` and `rendercv export`; this is a data interchange layer, not a second resume renderer.
+- **Tests**: added adapter round-trip, unsupported-section, invalid-shape, JSON path, file-write, and CLI smoke coverage.
+- **Verification**: full `tests/` 534/534, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: compare SigmaCV's application-facing schema and decide whether its job-specific resume version metadata adds value beyond current MaterialProposal/ApplicationStore.
+
+## 1.14 Stage 14 Application-Linked Resume Versions (2026-09-24)
+- **Source comparison**: SigmaCV's strongest reusable pattern is freeze-time content hashing and immutable snapshot metadata, not its web/publication infrastructure.
+- **Implementation**: added `ResumeVersion` and SQLite Schema v6 `resume_versions` table. Metadata includes application/proposal links, Profile/JD hashes, theme, output paths, label, creation time, and deterministic version ID.
+- **Workflow integration**: `proposal accept` now registers a version after writing the new Profile and optional rendered files; `application show` includes `resume_versions`.
+- **Integrity boundary**: linked versions require an existing application; duplicate exact writes replay; same ID with different content is rejected. The Profile document remains outside the database and is never mutated in place.
+- **Tests**: added schema migration, round-trip, orphan-link, collision, and end-to-end detail assertions.
+- **Verification**: full `tests/` 537/537, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: add a human-readable `application versions` CLI view and compare SigmaCV's provenance/diff semantics before expanding the version model.
+
+## 1.15 Stage 15 Resume Version Query and Metadata Diff (2026-09-24)
+- **CLI**: added `application versions [APPLICATION_ID]` and `application version-diff BEFORE_VERSION_ID AFTER_VERSION_ID`.
+- **Diff boundary**: compares only persisted metadata, Profile/JD hashes, theme, labels, and output-path changes. It explicitly returns `content_diff_available: false` because the current store does not retain Profile snapshots.
+- **Service**: added `ResumeVersionService` for list/get/compare operations.
+- **Tests**: added deterministic metadata diff assertions and CLI list coverage.
+- **Verification**: full `tests/` 538/538, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+- **Known next work**: only add content-level Profile diffs if the user explicitly wants snapshot retention; otherwise keep hash-only comparison to avoid silently expanding personal-data persistence.
+
+## 1.11 Stage 11 Application Outcome Feedback Loop (2026-09-24)
+- **Source pattern**: adapted offerPilot's controlled outcome stages/results/feedback tags, outcome reflection fields, and aggregate feedback insights to OfferGet's SQLite `ApplicationStore`; no SQLAlchemy or source files were copied.
+- **Schema v5**: added `application_outcomes` with deterministic content-derived idempotency keys and indexed application/time lookup.
+- **Domain contract**: `OutcomeStage`, `OutcomeResult`, `FEEDBACK_TAGS`, and `OutcomeRecord` validate canonical values, accept documented Chinese aliases, deduplicate tags, and reject forged outcome IDs. Existing outcomes are immutable; exact replays are idempotent.
+- **Store/service/CLI**: added record/list/insights operations and `ApplicationOutcomeService`; CLI commands are `application outcome`, `application outcomes`, and `application insights`.
+- **Tests**: added migration, vocabulary, validation, orphan, idempotency, immutability, insight aggregation, service facade, and CLI coverage.
+- **Verification**: full `tests/` 523/523, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
