@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OfferGet 简历主张真实性审计报告</title>
+<style>
+:root {
+  --ivory: #FAF9F5;     /* page background */
+  --slate: #141413;     /* primary text */
+  --clay: #D97757;      /* warm accent - CTAs, danger, highlights */
+  --oat: #E3DACC;       /* secondary fill - chips, soft panels */
+  --olive: #788C5D;     /* success, positive deltas */
+  --gray-100: #F0EEE6;  /* subtle background */
+  --gray-300: #D1CFC5;  /* borders, dividers */
+  --gray-500: #87867F;  /* meta text, captions */
+  --gray-700: #3D3D3A;  /* secondary body text */
+  --white: #FFFFFF;     /* card surface */
+
+  --serif: ui-serif, Georgia, "Songti SC", serif;
+  --sans: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-panel: 12px;
+  --radius-row: 8px;
+  --border: 1.5px solid var(--gray-300);
+  --rust: #B04A3F;
+  --warning: #C78E3F;
+  --info: #5C7CA3;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 56px 24px 96px;
+  background: var(--ivory);
+  color: var(--slate);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 980px; margin: 0 auto; }
+header { margin-bottom: 44px; }
+.eyebrow, .label, .chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.eyebrow { color: var(--clay); margin-bottom: 10px; }
+h1, h2, h3 { font-family: var(--serif); font-weight: 500; letter-spacing: -.01em; }
+h1 { font-size: clamp(32px, 6vw, 46px); line-height: 1.12; margin: 0 0 14px; }
+h2 { font-size: 27px; margin: 0 0 8px; }
+h3 { font-size: 20px; margin: 0 0 8px; }
+.subtitle { color: var(--gray-700); font-size: 16px; max-width: 760px; }
+.meta { color: var(--gray-500); font-size: 13px; margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; }
+section { margin: 0 0 58px; }
+.section-head { border-bottom: 1px solid var(--gray-300); padding-bottom: 12px; margin-bottom: 22px; }
+.section-note { color: var(--gray-500); font-size: 13px; }
+.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.card, .panel {
+  background: var(--white);
+  border: var(--border);
+  border-radius: var(--radius-panel);
+}
+.card { padding: 18px; }
+.metric-value { font-family: var(--serif); font-size: 38px; line-height: 1; margin-bottom: 8px; }
+.metric-label { color: var(--gray-500); font-size: 12px; }
+.status-corroborated { border-left: 4px solid var(--olive); }
+.status-partially_corroborated { border-left: 4px solid var(--info); }
+.status-contradicted { border-left: 4px solid var(--rust); }
+.status-unsupported { border-left: 4px solid var(--warning); }
+.status-unverifiable { border-left: 4px solid var(--gray-500); }
+.callout { padding: 22px 24px; border-left: 4px solid var(--clay); background: var(--white); border-radius: var(--radius-panel); }
+.callout p { margin: 0; color: var(--gray-700); font-size: 16px; }
+.limitations { margin-top: 14px; color: var(--gray-700); }
+.limitations li { margin: 6px 0; }
+.flow { padding: 24px; overflow-x: auto; }
+.flow svg { min-width: 760px; width: 100%; height: auto; display: block; }
+.table-wrap { overflow-x: auto; border: var(--border); border-radius: var(--radius-panel); background: var(--white); }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 850px; }
+th { text-align: left; background: var(--gray-100); color: var(--gray-500); padding: 12px 14px; border-bottom: 1px solid var(--gray-300); font-family: var(--mono); font-size: 11px; letter-spacing: .04em; }
+td { padding: 14px; border-bottom: 1px solid var(--gray-100); vertical-align: top; font-size: 13px; }
+tr:last-child td { border-bottom: 0; }
+.claim-id { font-family: var(--mono); color: var(--gray-500); white-space: nowrap; }
+.badge, .risk-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.badge { background: var(--gray-100); }
+.badge.corroborated { color: #52663D; background: rgba(120,140,93,.14); }
+.badge.partially_corroborated { color: #3D5E7C; background: rgba(92,124,163,.14); }
+.badge.contradicted { color: var(--rust); background: rgba(176,74,63,.10); }
+.badge.unsupported { color: #8B6328; background: rgba(199,142,63,.14); }
+.badge.unverifiable { color: var(--gray-700); background: var(--gray-100); }
+.risk-pill { border: 1px solid var(--gray-300); color: var(--gray-700); }
+.risk-pill.critical { border-color: var(--rust); color: var(--rust); }
+.risk-pill.high { border-color: var(--clay); color: var(--clay); }
+.pattern-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.pattern { padding: 20px; }
+.pattern p { color: var(--gray-700); margin: 0 0 12px; }
+.pattern ul { margin: 0; padding-left: 20px; color: var(--gray-700); }
+.counter { margin-top: 14px; border-left: 3px solid var(--olive); padding: 8px 0 8px 12px; color: var(--gray-700); font-size: 13px; }
+.timeline { position: relative; margin-left: 8px; }
+.timeline:before { content: ""; position: absolute; left: 5px; top: 8px; bottom: 8px; width: 1px; background: var(--gray-300); }
+.event { position: relative; padding: 0 0 24px 30px; }
+.event:before { content: ""; position: absolute; left: 0; top: 7px; width: 11px; height: 11px; border-radius: 50%; background: var(--clay); border: 3px solid var(--ivory); }
+.event-date { font-family: var(--mono); font-size: 11px; color: var(--gray-500); }
+.event-title { font-weight: 620; margin: 3px 0; }
+.event-detail { color: var(--gray-700); }
+.steps { display: grid; gap: 10px; counter-reset: steps; }
+.step { counter-increment: steps; display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; background: var(--white); border: var(--border); border-radius: var(--radius-row); padding: 14px 16px; }
+.step:before { content: counter(steps); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--slate); color: var(--white); font-family: var(--mono); font-size: 11px; }
+.source { padding: 14px 0; border-bottom: 1px solid var(--gray-300); }
+.source:last-child { border-bottom: 0; }
+.source-top { display: flex; justify-content: space-between; gap: 16px; }
+.source a { color: var(--clay); text-decoration: none; border-bottom: 1px dotted var(--clay); }
+.source-meta { color: var(--gray-500); font-family: var(--mono); font-size: 11px; margin-top: 5px; }
+.source-note { color: var(--gray-700); font-size: 13px; margin-top: 6px; }
+footer { margin-top: 72px; padding-top: 20px; border-top: 1px solid var(--gray-300); color: var(--gray-500); font-family: var(--mono); font-size: 11px; }
+.empty { color: var(--gray-500); font-style: italic; }
+@media (max-width: 780px) {
+  body { padding: 32px 16px 72px; }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pattern-grid { grid-template-columns: 1fr; }
+  .source-top { display: block; }
+}
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body { padding: 0; background: #fff; font-size: 11px; }
+  .page { max-width: none; }
+  section { margin-bottom: 32px; break-inside: auto; }
+  .card, .panel, .pattern, .step, .event { break-inside: avoid; }
+  a { color: var(--slate) !important; border: 0 !important; word-break: break-all; }
+  .flow { overflow: visible; }
+}
+</style>
+</head>
+<body>
+<div class="page" id="report"></div>
+<script id="report-data" type="application/json">__REPORT_JSON__</script>
+<script>
+(function () {
+  "use strict";
+  const data = JSON.parse(document.getElementById("report-data").textContent);
+  const root = document.getElementById("report");
+  const statuses = {
+    corroborated: "已证实",
+    partially_corroborated: "部分证实",
+    contradicted: "存在直接矛盾",
+    unsupported: "缺乏支持",
+    unverifiable: "暂不可核验"
+  };
+  const risks = { low: "低", medium: "中", high: "高", critical: "严重" };
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = String(text);
+    return node;
+  }
+  function safeUrl(value) {
+    try {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+    } catch (_) {
+      return null;
+    }
+  }
+  function section(title, note) {
+    const s = el("section");
+    const head = el("div", "section-head");
+    head.appendChild(el("h2", "", title));
+    if (note) head.appendChild(el("div", "section-note", note));
+    s.appendChild(head);
+    return s;
+  }
+  function appendList(parent, items, cls) {
+    if (!items || !items.length) return;
+    const ul = el("ul", cls || "");
+    items.forEach(item => ul.appendChild(el("li", "", item)));
+    parent.appendChild(ul);
+  }
+  const m = data.metadata || {};
+  const summary = data.summary || {};
+  const claims = data.claims || [];
+  const sources = data.sources || [];
+  document.title = (m.title || "OfferGet 简历主张真实性审计报告") + " - " + (m.subject || "");
+
+  const header = el("header");
+  header.appendChild(el("div", "eyebrow", "证据优先 / OfferGet 简历主张审计"));
+  header.appendChild(el("h1", "", m.title || "简历真实性审计报告"));
+  header.appendChild(el("div", "subtitle", m.subject || "未命名审计对象"));
+  const meta = el("div", "meta");
+  ["范围：" + (m.scope || "未说明"), "生成时间：" + (m.generated_at || "未说明"), "分析引擎：" + (m.analyst || "OfferGet Evidence Auditor")].forEach(x => meta.appendChild(el("span", "", x)));
+  header.appendChild(meta);
+  root.appendChild(header);
+
+  const counts = {};
+  Object.keys(statuses).forEach(k => counts[k] = claims.filter(c => c.status === k).length);
+  const overview = section("证据结论总览", "每个数字代表一条原子化简历主张，而不是对人的评分。");
+  const grid = el("div", "summary-grid");
+  Object.keys(statuses).forEach(k => {
+    const c = el("div", "card status-" + k);
+    c.appendChild(el("div", "metric-value", counts[k]));
+    c.appendChild(el("div", "metric-label", statuses[k]));
+    grid.appendChild(c);
+  });
+  overview.appendChild(grid);
+  const callout = el("div", "callout");
+  callout.style.marginTop = "18px";
+  callout.appendChild(el("p", "", summary.conclusion || "尚未形成结论。"));
+  overview.appendChild(callout);
+  if (m.disclaimer) overview.appendChild(el("div", "section-note", m.disclaimer));
+  if (summary.limitations && summary.limitations.length) {
+    const lim = el("div", "limitations");
+    lim.appendChild(el("strong", "", "已知限制"));
+    appendList(lim, summary.limitations);
+    overview.appendChild(lim);
+  }
+  root.appendChild(overview);
+
+  const flow = section("审计流程", "从简历文本到可复核结论，所有不确定性都保留在证据账本中。");
+  const flowPanel = el("div", "panel flow");
+  flowPanel.innerHTML = '<svg viewBox="0 0 880 150" role="img" aria-label="审计流程：解析简历、拆分主张、检索证据、交叉核验、生成报告">' +
+    '<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#87867F"/></marker></defs>' +
+    '<g font-family="system-ui, sans-serif" text-anchor="middle">' +
+    '<g><rect x="10" y="36" width="140" height="70" rx="12" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/><text x="80" y="66" font-size="14" fill="#141413">解析简历</text><text x="80" y="87" font-size="11" fill="#87867F">文本 / 底稿 / SSOT</text></g>' +
+    '<g><rect x="190" y="36" width="140" height="70" rx="12" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/><text x="260" y="66" font-size="14" fill="#141413">拆分原子主张</text><text x="260" y="87" font-size="11" fill="#87867F">角色 / 范围 / 开源 / 指标</text></g>' +
+    '<g><rect x="370" y="36" width="140" height="70" rx="12" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/><text x="440" y="66" font-size="14" fill="#141413">检索证据</text><text x="440" y="87" font-size="11" fill="#87867F">官方档案 / GitHub / 指标基线</text></g>' +
+    '<g><rect x="550" y="36" width="140" height="70" rx="12" fill="#FFFFFF" stroke="#D1CFC5" stroke-width="1.5"/><text x="620" y="66" font-size="14" fill="#141413">交叉核验</text><text x="620" y="87" font-size="11" fill="#87867F">支持 / 矛盾 / 模式判定</text></g>' +
+    '<g><rect x="730" y="36" width="140" height="70" rx="12" fill="#E3DACC" stroke="#D97757" stroke-width="1.5"/><text x="800" y="66" font-size="14" fill="#141413">生成报告</text><text x="800" y="87" font-size="11" fill="#3D3D3A">JSON / HTML / PDF</text></g>' +
+    '<path d="M150 71 L185 71" stroke="#87867F" marker-end="url(#arrow)"/><path d="M330 71 L365 71" stroke="#87867F" marker-end="url(#arrow)"/><path d="M510 71 L545 71" stroke="#87867F" marker-end="url(#arrow)"/><path d="M690 71 L725 71" stroke="#87867F" marker-end="url(#arrow)"/>' +
+    '</g></svg>';
+  flow.appendChild(flowPanel);
+  root.appendChild(flow);
+
+  const highIds = new Set(summary.highest_risk || []);
+  const highClaims = claims.filter(c => highIds.has(c.id) || c.risk === "critical");
+  const high = section("最高风险主张", "只展示最可能影响招聘判断、且证据差距最大的项目。");
+  const highTable = el("div", "table-wrap");
+  const table = document.createElement("table");
+  table.innerHTML = "<thead><tr><th>编号</th><th>简历主张</th><th>结论</th><th>风险</th><th>核心分析</th></tr></thead>";
+  const tbody = document.createElement("tbody");
+  (highClaims.length ? highClaims : claims.slice(0, 5)).forEach(c => {
+    const tr = document.createElement("tr");
+    const id = el("td", "claim-id", c.id);
+    const text = el("td", "", c.resume_text || c.normalized_claim);
+    const status = el("td"); status.appendChild(el("span", "badge " + c.status, statuses[c.status] || c.status));
+    const risk = el("td"); risk.appendChild(el("span", "risk-pill " + c.risk, risks[c.risk] || c.risk));
+    const analysis = el("td", "", c.analysis);
+    [id, text, status, risk, analysis].forEach(x => tr.appendChild(x));
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); highTable.appendChild(table); high.appendChild(highTable); root.appendChild(high);
+
+  const matrix = section("完整主张与证据矩阵", "每一条结论均保留支持证据、反向证据和下一步核验方式。");
+  const matrixWrap = el("div", "table-wrap");
+  const matrixTable = document.createElement("table");
+  matrixTable.innerHTML = "<thead><tr><th>编号</th><th>原子主张</th><th>状态</th><th>置信度</th><th>证据</th><th>下一步</th></tr></thead>";
+  const matrixBody = document.createElement("tbody");
+  claims.forEach(c => {
+    const tr = document.createElement("tr");
+    tr.appendChild(el("td", "claim-id", c.id));
+    tr.appendChild(el("td", "", c.normalized_claim));
+    const st = el("td"); st.appendChild(el("span", "badge " + c.status, statuses[c.status] || c.status)); tr.appendChild(st);
+    tr.appendChild(el("td", "", c.confidence === "high" ? "高" : c.confidence === "medium" ? "中" : "低"));
+    const ev = el("td");
+    ev.appendChild(el("div", "", "支持：" + ((c.evidence_for || []).join("、") || "无")));
+    ev.appendChild(el("div", "", "反向：" + ((c.evidence_against || []).join("、") || "无")));
+    tr.appendChild(ev);
+    const next = el("td"); appendList(next, c.verification_steps || []); tr.appendChild(next);
+    matrixBody.appendChild(tr);
+  });
+  matrixTable.appendChild(matrixBody); matrixWrap.appendChild(matrixTable); matrix.appendChild(matrixWrap); root.appendChild(matrix);
+
+  const patternSection = section("识别到的包装与夸大模式", "模式仅是对证据结构的客观描述；每项同时展示可能的合理解释。");
+  const pg = el("div", "pattern-grid");
+  (data.patterns || []).forEach(p => {
+    const card = el("article", "panel pattern");
+    card.appendChild(el("div", "eyebrow", "置信度 " + (p.confidence === "high" ? "高" : p.confidence === "medium" ? "中" : "低")));
+    card.appendChild(el("h3", "", p.name));
+    card.appendChild(el("p", "", p.description));
+    appendList(card, p.signals || []);
+    if (p.counter_evidence) card.appendChild(el("div", "counter", "反向证据/合理解释：" + p.counter_evidence));
+    pg.appendChild(card);
+  });
+  if (!pg.children.length) pg.appendChild(el("div", "empty", "未记录异常夸大模式。"));
+  patternSection.appendChild(pg); root.appendChild(patternSection);
+
+  const time = section("时间线", "时间顺序用于识别角色跃迁、版本先后和可能的时间压缩。");
+  const tl = el("div", "timeline");
+  (data.timeline || []).forEach(item => {
+    const event = el("div", "event");
+    event.appendChild(el("div", "event-date", item.date));
+    event.appendChild(el("div", "event-title", item.title));
+    event.appendChild(el("div", "event-detail", item.detail));
+    tl.appendChild(event);
+  });
+  time.appendChild(tl); root.appendChild(time);
+
+  const nextSection = section("下一步核验", "把争议转化为可以回答的具体技术问题，而非主观评判。");
+  const steps = el("div", "steps");
+  (data.next_steps || []).forEach(x => steps.appendChild(el("div", "step", x)));
+  nextSection.appendChild(steps); root.appendChild(nextSection);
+
+  const sourceSection = section("来源与证据等级", "A 为官方/直接记录；B 为一手公开自述/代码库；C/D 仅作为线索或外部参考。");
+  sources.forEach(s => {
+    const item = el("div", "source");
+    const top = el("div", "source-top");
+    const sourceUrl = safeUrl(s.url);
+    const title = sourceUrl ? el("a", "", s.id + " · " + s.title) : el("strong", "", s.id + " · " + s.title);
+    if (sourceUrl) { title.href = sourceUrl; title.target = "_blank"; title.rel = "noopener noreferrer"; }
+    top.appendChild(title);
+    top.appendChild(el("span", "badge", "等级 " + (s.reliability || "?")));
+    item.appendChild(top);
+    item.appendChild(el("div", "source-meta", [s.type, s.publisher, s.accessed_at].filter(Boolean).join(" · ")));
+    if (s.notes) item.appendChild(el("div", "source-note", s.notes));
+    sourceSection.appendChild(item);
+  });
+  root.appendChild(sourceSection);
+
+  const footer = el("footer", "", "由 OfferGet Evidence Auditor 生成 · 结论仅反映报告时间点的证据快照 · " + (m.generated_at || ""));
+  root.appendChild(footer);
+})();
+</script>
+</body>
+</html>

@@ -6,9 +6,10 @@ import json
 from pathlib import Path
 
 from core.application_tracker import ApplicationStore, ResumeVersion
-from core.artifact import inspect_artifacts
+from core.artifacts import inspect_artifacts
 from core.cli_helpers import emit_json, emit_stderr, fail_cli, load_json, open_application_store, read_text, write_json
 from core.material_proposal import apply_material_proposal, jd_fingerprint, profile_fingerprint
+from services.resume_service import ResumeService
 
 
 def _store(args) -> ApplicationStore:
@@ -71,10 +72,8 @@ def cmd_proposal_accept(args) -> None:
     payload = {"proposal": proposal.to_dict(), "profile_output": str(args.output)}
     generated_resumes = {}
     if args.build_resume:
-        from core.resume_builder import ResumeBuilder
-
         output_dir = Path(args.resume_output_dir or Path(args.output).parent / "proposal_resume")
-        built = ResumeBuilder(updated_profile).build_theme(args.resume_theme, output_dir)
+        built = ResumeService().build_resume(updated_profile, theme=args.resume_theme, output_dir=output_dir)
         generated_resumes = {key: str(value) for key, value in built.items()}
         payload["generated_resumes"] = generated_resumes
         accept_phase = "render_completed"

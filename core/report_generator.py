@@ -34,8 +34,9 @@ from modules.jd_analyst.models import (
 from modules.jd_analyst.predictor import JDPredictor
 from modules.jd_analyst.redflags import RedFlagDetector
 from modules.jd_analyst.reporter import OfferStrategyReporter
+from core.paths import get_project_root, get_template_path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = get_project_root()
 
 
 def _to_float_score(val: Any, default: float = 0.0) -> float:
@@ -534,12 +535,11 @@ def generate_report(
     if sec_risks:
         raise ValueError(f"Generated report failed security audit: {sec_risks}")
 
-    # 6. Write to output destination
-    out_path = Path(output_path).resolve()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(html)
+    # 6. Write to output destination atomically
+    from core.artifacts import write_text_atomic
 
+    out_path = Path(output_path).resolve()
+    write_text_atomic(html, out_path)
     return str(out_path)
 
 

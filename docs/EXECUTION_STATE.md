@@ -245,3 +245,28 @@
 - **Store/service/CLI**: added record/list/insights operations and `ApplicationOutcomeService`; CLI commands are `application outcome`, `application outcomes`, and `application insights`.
 - **Tests**: added migration, vocabulary, validation, orphan, idempotency, immutability, insight aggregation, service facade, and CLI coverage.
 - **Verification**: full `tests/` 523/523, `ApexResume/tests/` 34/34, `python cli.py selftest` 11/11, `git diff --check` clean.
+
+## 1.20 Stage 20 Architecture Convergence & Service Facade Modularization (2026-09-27)
+- **Architecture Blueprints**: added `docs/ARCHITECTURE.md` defining five-layer architecture, canonical data flows, and strict boundary rules (`ProfileContext` as profile SSOT, `to_canonical()` as JD canonical ingress, external repos read-only).
+- **I/O, Path & Fingerprint Convergence**:
+  - Added `core/artifacts.py`: Atomic write helpers (`write_text_atomic`, `write_json_atomic`), parent directory creation (`ensure_parent`), input verification (`require_file`), and artifact manifest tracking (`ArtifactManifest`).
+  - Added `core/paths.py`: Centralized path resolution (`get_project_root`, `get_template_path`, `get_theme_dir`, `get_theme_path`, `get_example_path`, `get_output_dir`).
+  - Added `core/fingerprints.py`: Deterministic SHA-256 fingerprinting (`content_fingerprint`, `profile_fingerprint`, `jd_fingerprint`, `cache_key`).
+  - Converged `core/application_tracker.py`, `core/cli_helpers.py`, `core/report_generator.py`, and `core/resume_builder.py` onto atomic writes and centralized paths.
+- **Legacy Ingress Isolation**:
+  - Created `adapters/` package isolating legacy conversion logic: `adapters/jd_legacy.py`, `adapters/profile_legacy.py`, `adapters/rendercv_adapter.py`.
+  - Refactored `core/jd_compat.py` into a canonical ingress entrypoint while keeping backward compatibility.
+- **Modular Domain Services Layer**:
+  - Extracted 13 domain services from monolithic `core/services.py` (750 lines) into focused modules under `services/`:
+    - `services/jd_service.py` (`JDService`)
+    - `services/profile_service.py` (`ProfileService`)
+    - `services/match_service.py` (`MatchService`)
+    - `services/review_service.py` (`CareerReviewService`)
+    - `services/resume_service.py` (`ResumeService`, `ResumeVersionService`)
+    - `services/offer_service.py` (`OfferService`, `ProposalService`, `ApplicationOutcomeService`)
+    - `services/report_service.py` (`ReportService`)
+    - `services/academic_service.py` (`AcademicService`, `CommunicationService`, `ApplicationGuardService`)
+  - Refactored `core/services.py` into a thin backward-compatible facade (156 lines) re-exporting domain services and handling lazy module loading.
+- **Tests & Verification**:
+  - Added `tests/test_artifacts_and_paths.py` (5 tests) and `tests/test_services_package.py` (3 tests).
+  - Total test matrix: `pytest tests -q` 550/550 passed, `pytest ApexResume/tests -q` 34/34 passed, `python cli.py selftest` 11/11 passed, `compileall -q .` 0 errors, `git diff --check` 0 errors.

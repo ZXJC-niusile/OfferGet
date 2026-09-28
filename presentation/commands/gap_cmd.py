@@ -14,9 +14,7 @@ from core.cli_helpers import (
     emit_json,
     emit_stderr,
 )
-from core.services import (
-    calculate_gap_roi,
-)
+from services.match_service import MatchService
 
 
 def cmd_gap_roi(args):
@@ -34,7 +32,7 @@ def cmd_gap_roi(args):
             emit_stderr(f"[-] Error: JD file not found: {p}")
             sys.exit(1)
 
-    result = calculate_gap_roi(profile_data, jd_files)
+    result = MatchService().calculate_gap_roi(profile_data, jd_files)
 
     if args.json:
         emit_json(result)

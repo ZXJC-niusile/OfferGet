@@ -22,7 +22,10 @@ import tempfile
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from core.artifacts import write_json_atomic
+from core.paths import get_project_root
+
+PROJECT_ROOT = get_project_root()
 
 from core.interview_debrief import InterviewDebriefEngine, QuestionDiagnosis
 from core.jd_compat import profile_to_canonical
@@ -1356,21 +1359,8 @@ def create_review_session(
 
 
 def save_review_session(session: Dict[str, Any], output_path: Union[str, Path]) -> None:
-    """Atomically save review session JSON to disk using a unique temporary file."""
-    out = Path(output_path).resolve()
-    out.parent.mkdir(parents=True, exist_ok=True)
-    temp_fd, temp_path_str = tempfile.mkstemp(prefix="sess_", suffix=".tmp", dir=str(out.parent))
-    try:
-        with open(temp_fd, "w", encoding="utf-8") as f:
-            json.dump(session, f, ensure_ascii=False, indent=2)
-        os.replace(temp_path_str, str(out))
-    except Exception:
-        if os.path.exists(temp_path_str):
-            try:
-                os.remove(temp_path_str)
-            except OSError:
-                pass
-        raise
+    """Atomically save review session JSON to disk using write_json_atomic."""
+    write_json_atomic(session, output_path)
 
 
 def load_review_session(session_path: Union[str, Path]) -> Dict[str, Any]:

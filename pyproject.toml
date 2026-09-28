@@ -26,7 +26,7 @@ py-modules = ["cli"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "modules*", "presentation*", "ApexResume*", "templates*"]
+include = ["core*", "modules*", "presentation*", "ApexResume*", "templates*", "adapters*", "services*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.html", "*.css", "*.md"]

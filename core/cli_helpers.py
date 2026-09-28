@@ -12,6 +12,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
+from core.artifacts import require_file
+
 # Common extensions that indicate path_or_str is expected to be a file
 COMMON_FILE_EXTENSIONS = {
     ".txt", ".json", ".md", ".html", ".htm", ".yaml", ".yml",
@@ -132,30 +134,26 @@ def load_json_or_text(path_or_str: str) -> Tuple[Optional[Dict[str, Any]], str]:
 
 def write_json(data: Any, path: Union[str, Path]) -> str:
     """
-    Write data as formatted JSON to path, automatically creating parent directories recursively.
+    Write data as formatted JSON to path atomically, automatically creating parent directories recursively.
 
     Returns:
         Normalized string path of the written file.
     """
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    return str(p)
+    from core.artifacts import write_json_atomic
+
+    return write_json_atomic(data, path)
 
 
 def write_text(content: str, path: Union[str, Path]) -> str:
     """
-    Write text content to path, automatically creating parent directories recursively.
+    Write text content to path atomically, automatically creating parent directories recursively.
 
     Returns:
         Normalized string path of the written file.
     """
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
-        f.write(content)
-    return str(p)
+    from core.artifacts import write_text_atomic
+
+    return write_text_atomic(content, path)
 
 
 def emit_json(data: Any) -> None:
@@ -238,4 +236,5 @@ __all__ = [
     "exit_cli_error",
     "fail_cli",
     "open_application_store",
+    "require_file",
 ]

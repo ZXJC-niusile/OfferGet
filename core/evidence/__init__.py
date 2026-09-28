@@ -25,6 +25,14 @@ from core.evidence.graph import (
     EvidenceNode,
     EvidenceNodeState,
 )
+from core.evidence.open_source import (
+    OpenSourceAuditor,
+    OpenSourceContributionLevel,
+)
+from core.evidence.report_renderer import (
+    render_audit_report_html,
+    save_audit_report_html,
+)
 from core.evidence.schema import validate_report_data
 
 __all__ = [
@@ -45,5 +53,9 @@ __all__ = [
     "MetricCheck",
     "MetricRecalculator",
     "MetricValidationResult",
+    "OpenSourceAuditor",
+    "OpenSourceContributionLevel",
+    "render_audit_report_html",
+    "save_audit_report_html",
     "validate_report_data",
 ]

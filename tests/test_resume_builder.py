@@ -118,7 +118,7 @@ class TestResumeBuilder(unittest.TestCase):
     def test_build_all(self):
         builder = ResumeBuilder(self.minimal_profile)
         results = builder.build_all(self.test_dir, photo=True, autofit=True)
-        self.assertEqual(len(results), 6)
+        self.assertEqual(len(results), len(builder.PDF_THEMES))
         for theme_name, files in results.items():
             self.assertTrue(files["pdf"].exists(), f"{theme_name} PDF must exist")
 

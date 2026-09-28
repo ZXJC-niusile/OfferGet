@@ -23,8 +23,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 # Ensure OfferGet and ApexResume are in sys.path
-CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parent
+from core.paths import get_project_root, get_theme_path
+
+PROJECT_ROOT = get_project_root()
 
 from core.profile_adapter import extract_education_grid, normalize_candidate_profile
 from core.security_gate import (
@@ -343,8 +344,7 @@ def resolve_theme_template(
     candidates = []
     if template_dir:
         candidates.append(Path(template_dir).resolve() / f"{theme_normalized}.html")
-    candidates.append(PROJECT_ROOT / "ApexResume" / "themes" / f"{theme_normalized}.html")
-    candidates.append(Path(__file__).resolve().parent.parent / "ApexResume" / "themes" / f"{theme_normalized}.html")
+    candidates.append(get_theme_path(theme_normalized))
 
     for p in candidates:
         if p.is_file():
@@ -365,9 +365,18 @@ def resolve_theme_template(
 
 
 class HtmlThemeRenderer:
-    """Renders HTML-based themes (modern-navy, silicon-clean, classic-tech) from ResumeViewModel."""
+    """Renders HTML-based themes from ResumeViewModel."""
 
-    THEMES = ("modern-navy", "silicon-clean", "classic-tech")
+    THEMES = (
+        "modern-navy",
+        "silicon-clean",
+        "classic-tech",
+        "asu-dense",
+        "sidebar-clean",
+        "academic-postgraduate",
+        "engineering-sb2nov",
+        "modern-corporate",
+    )
 
     def render_header(self, vm: ResumeViewModel, theme_name: str = "modern-navy") -> str:
         """Renders header markup with optional photo placeholder."""

@@ -233,7 +233,20 @@ Examples:
     review_parser.add_argument(
         "--resume-theme",
         default="modern-navy",
-        choices=["all", "modern-navy", "silicon-clean", "classic-tech", "ats-plain", "academic-latex", "academic-typst"],
+        choices=[
+            "all",
+            "modern-navy",
+            "silicon-clean",
+            "classic-tech",
+            "asu-dense",
+            "sidebar-clean",
+            "academic-postgraduate",
+            "engineering-sb2nov",
+            "modern-corporate",
+            "ats-plain",
+            "academic-latex",
+            "academic-typst",
+        ],
         help="Theme for tailored resume (default: modern-navy)",
     )
     review_parser.add_argument("--resume-output-dir", default=None, help="Custom output directory for tailored resumes")
@@ -264,7 +277,24 @@ Examples:
     proposal_accept.add_argument("--db", help="ApplicationStore SQLite path")
     proposal_accept.add_argument("--json", action="store_true")
     proposal_accept.add_argument("--build-resume", action="store_true")
-    proposal_accept.add_argument("--resume-theme", default="modern-navy", choices=["modern-navy", "silicon-clean", "classic-tech", "ats-plain", "academic-latex", "academic-typst", "ats-docx"])
+    proposal_accept.add_argument(
+        "--resume-theme",
+        default="modern-navy",
+        choices=[
+            "modern-navy",
+            "silicon-clean",
+            "classic-tech",
+            "asu-dense",
+            "sidebar-clean",
+            "academic-postgraduate",
+            "engineering-sb2nov",
+            "modern-corporate",
+            "ats-plain",
+            "academic-latex",
+            "academic-typst",
+            "ats-docx",
+        ],
+    )
     proposal_accept.add_argument("--resume-output-dir")
     proposal_reject = proposal_subparsers.add_parser("reject", help="Reject a persisted material proposal")
     proposal_reject.add_argument("proposal_id")

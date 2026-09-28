@@ -138,11 +138,13 @@
 - **自包含审计报告规范**: 与 ASu `report-schema.md` 兼容的 JSON 结构与字段引用校验 (`core/evidence/schema.py`)
 - **测试套件**: 移植并扩展 ASu 全部校验反例与单元测试 (`tests/test_evidence_models.py`, `tests/test_evidence_metrics.py`, `tests/test_evidence_auditor.py`)
 
+- **简历排版风格与设计**: 已完整吸收重构为 OfferGet 原生主题 ApexResume/themes/asu-dense.html
+- **真实性审计报告 HTML 渲染器**: 已吸收为原生模板 core/evidence/templates/audit_report.html 与渲染器 core/evidence/report_renderer.py
+- **开源贡献深度分级 (0~4 级) 与夸大审计**: 已吸收为 core/evidence/open_source.py 并深度接入提取与审计链路
+
 #### 未吸收资产 (待收纳 / Pending Assets)
-- **报告与简历 HTML/CSS 模板**: `skills/asu-resume-audit-skill/assets/report_template.html`, `skills/asu-resume-skill/assets/resume_template.html`
-- **静态资源与样例**: `assets/asu-circle.png`, `assets/hr-intro-example.jpg`, `examples/asu-resume-audit-example.html`, `examples/asu-resume-example.html`
-- **案例与文案参考**: `skills/asu-resume-audit-skill/references/asu-case-study.md`, `skills/asu-resume-audit-skill/references/education-branding-audit.md`
-- **处置状态**: 核心代码与规则已吸收完毕；外部模板与示例资产标记为待收纳，进入归档观察期，保持 `delete-approved = 0`。
+- 无高价值未吸收资产。中外合作教育审计规范 (education-branding-audit.md) 已依令直接删除；原 Codex/OpenAI 配置文件无吸收价值。
+- **处置状态**: 核心代码、规则、模板与资产已 100% 吸收完毕，已生成 Git Bundle 备份 (archives/ASu-resume-skills_f460582.bundle)，就绪移入归档观察区。
 
 
 #### 文件级清单 (File-level Inventory)

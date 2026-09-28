@@ -1686,6 +1686,35 @@ class FactVerificationGuard:
         report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
         return report.to_dict()
 
+    def generate_audit_report_html(
+        self,
+        tailored_text_or_dict: Union[str, dict, list],
+        subject_name: Optional[str] = None,
+        template_path: Optional[Union[str, Path]] = None,
+    ) -> str:
+        """
+        Audits resume text or dictionary and returns an interactive, styled HTML audit report string.
+        """
+        from core.evidence.report_renderer import render_audit_report_html
+
+        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
+        return render_audit_report_html(report, template_path=template_path)
+
+    def save_audit_report_html(
+        self,
+        tailored_text_or_dict: Union[str, dict, list],
+        output_path: Union[str, Path],
+        subject_name: Optional[str] = None,
+        template_path: Optional[Union[str, Path]] = None,
+    ) -> Path:
+        """
+        Audits resume text or dictionary, renders HTML, and saves to output_path.
+        """
+        from core.evidence.report_renderer import save_audit_report_html
+
+        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
+        return save_audit_report_html(report, output_path=output_path, template_path=template_path)
+
 
 # ---------------------------------------------------------------------------
 # Top-Level Convenience Functions

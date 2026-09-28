@@ -31,7 +31,11 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+from core.artifacts import write_text_atomic
+from core.fingerprints import content_fingerprint
+from core.paths import get_project_root, get_theme_dir
+
+PROJECT_ROOT = get_project_root()
 
 from core.profile_adapter import normalize_candidate_profile
 from core.academic_exporter import AcademicExporter
@@ -66,36 +70,39 @@ from core.resume_view_model import (
 )
 
 
-
 def _compute_profile_fingerprint(profile_data: Any) -> str:
     """Computes a deterministic SHA-256 fingerprint from profile data for caching."""
-    if hasattr(profile_data, "normalized_profile"):
-        payload = profile_data.normalized_profile
-    else:
-        payload = profile_data
+    payload = getattr(profile_data, "normalized_profile", profile_data)
     try:
-        encoded = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
-        return hashlib.sha256(encoded).hexdigest()[:16]
-    except Exception:
+        # This is a render-cache key, not the persistent evidence-snapshot hash.
+        # Hash the supplied projection directly; rebuilding a ProfileContext here
+        # would re-normalize and re-index it on every lookup, including hits.
+        serialized = json.dumps(payload, sort_keys=True, default=str)
+        return content_fingerprint(serialized, length=16)
+    except (TypeError, ValueError):
         return str(id(payload))
 
 
 class ResumeBuilder:
     """Unified engine for building all 6 resume variants from candidate profile data."""
 
-    THEMES = [
+    HTML_THEMES = [
         "modern-navy",
         "silicon-clean",
         "classic-tech",
+        "asu-dense",
+        "sidebar-clean",
+        "academic-postgraduate",
+        "engineering-sb2nov",
+        "modern-corporate",
+    ]
+    THEMES = HTML_THEMES + [
         "ats-plain",
         "academic-latex",
         "academic-typst",
         "ats-docx",
     ]
-    PDF_THEMES = [
-        "modern-navy",
-        "silicon-clean",
-        "classic-tech",
+    PDF_THEMES = HTML_THEMES + [
         "ats-plain",
         "academic-latex",
         "academic-typst",
@@ -138,7 +145,7 @@ class ResumeBuilder:
             self.profile = self._resolve_profile(anonymize=self.anonymize)
         self.academic_exporter = AcademicExporter()
 
-        self.template_dir = Path(template_dir).resolve() if template_dir else (PROJECT_ROOT / "ApexResume" / "themes")
+        self.template_dir = Path(template_dir).resolve() if template_dir else get_theme_dir()
 
         self.renderer = renderer or BrowserRenderer()
         self.autofit_engine = autofit_engine or AutoFitEngine(self.renderer)
@@ -258,7 +265,7 @@ class ResumeBuilder:
                 )
                 if not success:
                     # Fallback write and render
-                    html_path.write_text(populated_html, encoding="utf-8")
+                    write_text_atomic(populated_html, html_path)
                     self.renderer.render_pdf(html_path, pdf_path)
             finally:
                 if tmp_path.exists():
@@ -267,7 +274,7 @@ class ResumeBuilder:
                     except Exception:
                         pass
         else:
-            html_path.write_text(populated_html, encoding="utf-8")
+            write_text_atomic(populated_html, html_path)
             self.renderer.render_pdf(html_path, pdf_path)
 
         return {"html": html_path, "pdf": pdf_path}
@@ -291,10 +298,10 @@ class ResumeBuilder:
         html_content = self.ats_renderer.render_html(vm)
 
         md_path = out_dir / "resume_ats_plain.md"
-        md_path.write_text(md_content, encoding="utf-8")
+        write_text_atomic(md_content, md_path)
 
         html_path = out_dir / "resume_ats_plain.html"
-        html_path.write_text(html_content, encoding="utf-8")
+        write_text_atomic(html_content, html_path)
 
         pdf_path = out_dir / "resume_ats_plain.pdf"
         self.renderer.render_pdf(html_path, pdf_path)
@@ -318,11 +325,11 @@ class ResumeBuilder:
 
         tex_src = self.academic_exporter.generate_latex(vm, reserve_photo=photo, photo_path=eff_photo_path)
         tex_path = out_dir / "resume_academic_latex.tex"
-        tex_path.write_text(tex_src, encoding="utf-8")
+        write_text_atomic(tex_src, tex_path)
 
         html_src = self.academic_exporter.generate_latex_html_preview(vm, reserve_photo=photo, photo_path=eff_photo_path)
         html_path = out_dir / "resume_academic_latex.html"
-        html_path.write_text(html_src, encoding="utf-8")
+        write_text_atomic(html_src, html_path)
 
         pdf_path = out_dir / "resume_academic_latex.pdf"
         # Try native LaTeX compile first; if unavailable, render the LaTeX-style HTML
@@ -358,7 +365,7 @@ class ResumeBuilder:
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
         typ_src = self.academic_exporter.generate_typst(vm, reserve_photo=photo, photo_path=typ_photo)
         typ_path = out_dir / "resume_academic_typst.typ"
-        typ_path.write_text(typ_src, encoding="utf-8")
+        write_text_atomic(typ_src, typ_path)
 
         pdf_path = out_dir / "resume_academic_typst.pdf"
         self.academic_exporter.compile_typst(typ_path, pdf_path)
@@ -377,7 +384,7 @@ class ResumeBuilder:
         """Builds a specific theme by name."""
         theme_normalized = theme.lower().replace("_", "-")
         eff_photo_path = photo_path or self.photo_path
-        if theme_normalized in ("modern-navy", "silicon-clean", "classic-tech"):
+        if theme_normalized in self.HTML_THEMES:
             return self.build_html_theme(
                 theme_normalized,
                 output_dir,

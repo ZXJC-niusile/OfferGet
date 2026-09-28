@@ -12,6 +12,8 @@ htmlcov/
 venv/
 env/
 *.egg-info/
+build/
+dist/
 
 # Generated reports and exports
 report.html
@@ -19,6 +21,8 @@ report.html
 *_report.md
 test_*_report.*
 *_defense_report.*
+!core/evidence/templates/*
+!tests/test_*.py
 review*.json
 *_review.json
 *.pdf

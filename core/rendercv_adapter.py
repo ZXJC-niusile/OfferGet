@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
+from core.artifacts import write_json_atomic
 from core.profile_adapter import normalize_candidate_profile
 
 
@@ -189,10 +190,8 @@ def export_rendercv(profile: Dict[str, Any]) -> Dict[str, Any]:
 
 def write_rendercv_json(profile: Dict[str, Any], path: Union[str, Path]) -> Path:
     """Write supported RenderCV JSON; parent directories are created as needed."""
-    output = Path(path)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(export_rendercv(profile), ensure_ascii=False, indent=2), encoding="utf-8")
-    return output
+    target_path = write_json_atomic(export_rendercv(profile), path)
+    return Path(target_path)
 
 
 def _load_mapping(data: Union[Dict[str, Any], str, Path]) -> Dict[str, Any]:

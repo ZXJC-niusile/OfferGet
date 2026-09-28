@@ -21,13 +21,8 @@ from core.cli_helpers import (
     emit_json,
     emit_stderr,
 )
-from core.services import (
-    DefenseSimulator,
-    audit_baoyan_entry,
-    compress_baoyan_entry,
-    match_advisor_and_draft_email,
-    generate_camp_checklist,
-)
+from services.academic_service import AcademicService
+from core.defense.simulator import DefenseSimulator
 
 
 def cmd_defense_simulate(args):
@@ -107,7 +102,7 @@ def cmd_baoyan_audit(args):
     entry_text = read_text(args.entry)
     material_text = read_text(args.material) if args.material else None
 
-    result = audit_baoyan_entry(
+    result = AcademicService().audit_entry(
         entry=entry_text,
         role=args.role,
         target_tier=args.tier or "简历版",
@@ -171,7 +166,7 @@ def cmd_baoyan_audit(args):
 def cmd_baoyan_compress(args):
     """Handler for `offerget baoyan compress <entry_or_file> --tier <摘要版|简历版|陈述版>`."""
     entry_text = read_text(args.entry)
-    result = compress_baoyan_entry(entry_text, target_tier=args.tier)
+    result = AcademicService().compress_entry(entry_text, target_tier=args.tier)
 
     if args.json:
         emit_json(result)
@@ -202,7 +197,7 @@ def cmd_baoyan_advisor(args):
     adv_data = load_json(args.advisor)
     prof_data = load_json(args.profile)
 
-    result = match_advisor_and_draft_email(
+    result = AcademicService().match_advisor(
         advisor_data=adv_data,
         candidate_data=prof_data,
         email_scenario=args.scenario or "summer_camp"
@@ -264,7 +259,7 @@ def cmd_baoyan_checklist(args):
 
     stage = args.stage or "夏令营"
     track = args.track or "直博"
-    checklist = generate_camp_checklist(prof_data, stage=stage, track=track)
+    checklist = AcademicService().generate_checklist(prof_data, stage=stage, track=track)
 
     if args.json:
         emit_json(checklist)

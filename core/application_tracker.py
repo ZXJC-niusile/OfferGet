@@ -20,6 +20,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
+from core.artifacts import write_json_atomic
+
 
 class AppStatus(str, Enum):
     PENDING = "pending"             # 待投递
@@ -376,11 +378,10 @@ def create_evidence_snapshot(
     ctx = ProfileContext.from_profile(profile)
     canon_jd = to_canonical(jd)
 
-    prof_json = json.dumps(ctx.normalized_profile, sort_keys=True, ensure_ascii=False)
-    prof_hash = hashlib.sha256(prof_json.encode("utf-8")).hexdigest()[:16]
+    from core.fingerprints import jd_fingerprint, profile_fingerprint
 
-    jd_text = canon_jd.raw_text or canon_jd.clean_text or canon_jd.job_title
-    jd_hash = hashlib.sha256(jd_text.encode("utf-8")).hexdigest()[:16]
+    prof_hash = profile_fingerprint(ctx)
+    jd_hash = jd_fingerprint(canon_jd)
 
     match_score = None
     gap_summary = []
@@ -1070,10 +1071,7 @@ class ApplicationStore:
     def export_json(self, file_path: Union[str, Path]) -> None:
         """Exports all records to a JSON file."""
         records = [r.to_dict() for r in self.list_all()]
-        p = Path(file_path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with open(p, "w", encoding="utf-8") as f:
-            json.dump(records, f, ensure_ascii=False, indent=2)
+        write_json_atomic(records, file_path)
 
     def import_json(self, file_path: Union[str, Path]) -> int:
         """Imports records from a JSON file, returning imported count."""
