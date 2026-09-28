@@ -688,6 +688,16 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
         if awards_list and "honors_awards" not in cand:
             cand["honors_awards"] = awards_list
 
+        raw_pg = (
+            raw_profile_copy.get("postgraduate_exam")
+            or raw_profile_copy.get("exam_score")
+            or cand.get("postgraduate_exam")
+            or cand.get("exam_score")
+        )
+        pg_exam = copy.deepcopy(raw_pg) if isinstance(raw_pg, dict) else None
+        if pg_exam and "postgraduate_exam" not in cand:
+            cand["postgraduate_exam"] = copy.deepcopy(pg_exam)
+
         norm_exp = _normalize_experiences(raw_profile_copy.get("experience", []), prefer_org_key=True)
         norm_proj = _normalize_projects(raw_profile_copy.get("projects", []))
 
@@ -702,6 +712,7 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
             "honors": awards_list,
             "honors_awards": awards_list,
             "narrative": raw_profile_copy.get("narrative", {}),
+            "postgraduate_exam": pg_exam,
         }
 
     # Case B: Minimal / Flat profile format (Track 2 / Career Review input)
@@ -787,6 +798,15 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
     if "target_degree" in raw_profile_copy:
         cand_dict["target_degree"] = raw_profile_copy["target_degree"]
 
+    raw_pg = (
+        raw_profile_copy.get("postgraduate_exam")
+        or raw_profile_copy.get("exam_score")
+        or cand_dict.get("postgraduate_exam")
+    )
+    pg_exam = copy.deepcopy(raw_pg) if isinstance(raw_pg, dict) else None
+    if pg_exam:
+        cand_dict["postgraduate_exam"] = copy.deepcopy(pg_exam)
+
     return {
         "candidate": cand_dict,
         "competencies": competencies,
@@ -798,6 +818,7 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
         "honors": awards_list,
         "honors_awards": awards_list,
         "narrative": raw_profile_copy.get("narrative", {}),
+        "postgraduate_exam": pg_exam,
     }
 
 

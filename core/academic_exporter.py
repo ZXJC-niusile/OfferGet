@@ -113,6 +113,7 @@ class AcademicExporter:
             r"\usepackage{xeCJK}",
             r"\usepackage[margin=1.5cm]{geometry}",
             r"\usepackage{hyperref}",
+            r"\usepackage{tabularx}",
             r"\usepackage{enumitem}",
             r"\usepackage{titlesec}",
             r"\usepackage{xcolor}",
@@ -172,6 +173,47 @@ class AcademicExporter:
                 r"\end{center}",
                 r"\vspace{-4pt}",
             ])
+
+        # Postgraduate Exam
+        if vm.postgraduate_exam:
+            pg = vm.postgraduate_exam
+            pg_school = escape_latex(pg.get("raw_target_school", pg.get("target_school", "")))
+            pg_major = escape_latex(pg.get("raw_target_major", pg.get("target_major", "")))
+            pg_dir = escape_latex(pg.get("raw_direction", pg.get("direction", "")))
+            target_items = []
+            if pg_school:
+                target_items.append(f"\\textbf{{报考院校：}}{pg_school}")
+            if pg_major:
+                target_items.append(f"\\textbf{{报考专业：}}{pg_major}")
+            if pg_dir:
+                target_items.append(f"\\textbf{{研究方向：}}{pg_dir}")
+
+            lines.extend([
+                r"\section*{报考信息}",
+            ])
+            if target_items:
+                target_str = " \\quad \\quad ".join(target_items)
+                lines.append(f"\\noindent {target_str} \\\\[3pt]")
+
+            subjects = pg.get("subjects", [])
+            total_score = escape_latex(pg.get("raw_total_score", pg.get("total_score", "")))
+            if subjects or total_score:
+                num_cols = 1 + len(subjects) + (1 if total_score else 0)
+                col_spec = "|" + "X|" * num_cols
+                lines.append(f"\\noindent \\begin{{tabularx}}{{\\textwidth}}{{{col_spec}}}")
+                lines.append(r"\hline")
+                head_row = [r"\textbf{初试成绩}"] + [escape_latex(s.get("raw_name", s.get("name", ""))) for s in subjects]
+                if total_score:
+                    head_row.append(r"\textbf{总分}")
+                lines.append(" & ".join(head_row) + r" \\")
+                lines.append(r"\hline")
+                score_row = ["得分"] + [escape_latex(s.get("raw_score", s.get("score", ""))) for s in subjects]
+                if total_score:
+                    score_row.append(f"\\textbf{{{total_score}}}")
+                lines.append(" & ".join(score_row) + r" \\")
+                lines.append(r"\hline")
+                lines.append(r"\end{tabularx}")
+                lines.append(r"\vspace{3pt}")
 
         # 1. Education
         grid = vm.education_grid_rows
@@ -389,6 +431,57 @@ class AcademicExporter:
                 else:
                     res.append(escape_typst(part))
             return "".join(res)
+
+        # Postgraduate Exam
+        if vm.postgraduate_exam:
+            pg = vm.postgraduate_exam
+            pg_school = escape_typst(pg.get("raw_target_school", pg.get("target_school", "")))
+            pg_major = escape_typst(pg.get("raw_target_major", pg.get("target_major", "")))
+            pg_dir = escape_typst(pg.get("raw_direction", pg.get("direction", "")))
+
+            lines.append("== 报考信息")
+            target_items = []
+            if pg_school:
+                target_items.append(f"[*报考院校：* {pg_school}]")
+            if pg_major:
+                target_items.append(f"[*报考专业：* {pg_major}]")
+            if pg_dir:
+                target_items.append(f"[*研究方向：* {pg_dir}]")
+
+            if target_items:
+                lines.extend([
+                    "#grid(",
+                    f"  columns: ({', '.join(['1fr'] * len(target_items))}),",
+                    f"  {', '.join(target_items)}",
+                    ")",
+                ])
+
+            subjects = pg.get("subjects", [])
+            total_score = escape_typst(pg.get("raw_total_score", pg.get("total_score", "")))
+            if subjects or total_score:
+                num_cols = 1 + len(subjects) + (1 if total_score else 0)
+                col_spec = f"({', '.join(['1fr'] * num_cols)})"
+                lines.extend([
+                    "#table(",
+                    f"  columns: {col_spec},",
+                    "  align: center + horizon,",
+                    '  stroke: 0.5pt + rgb("#D1D5DB"),',
+                    "  [*初试成绩*],",
+                ])
+                for s in subjects:
+                    s_name = escape_typst(s.get("raw_name", s.get("name", "")))
+                    lines.append(f"  [*{s_name}*],")
+                if total_score:
+                    lines.append("  [*总分*],")
+
+                lines.append("  [得分],")
+                for s in subjects:
+                    s_score = escape_typst(s.get("raw_score", s.get("score", "")))
+                    lines.append(f"  [{s_score}],")
+                if total_score:
+                    lines.append(f"  [*{total_score}*],")
+                lines.append(")")
+            lines.append("")
 
         # Education
         grid = vm.education_grid_rows
@@ -644,7 +737,48 @@ class AcademicExporter:
     </div>
     {photo_html}
   </div>
+"""
 
+        if vm.postgraduate_exam:
+            pg = vm.postgraduate_exam
+            pg_school = escape_html_text(pg.get("target_school", ""))
+            pg_major = escape_html_text(pg.get("target_major", ""))
+            pg_dir = escape_html_text(pg.get("direction", ""))
+            target_items = []
+            if pg_school:
+                target_items.append(f"<span><b>报考院校：</b>{pg_school}</span>")
+            if pg_major:
+                target_items.append(f"<span><b>报考专业：</b>{pg_major}</span>")
+            if pg_dir:
+                target_items.append(f"<span><b>研究方向：</b>{pg_dir}</span>")
+
+            target_bar = f"<div class='item-header' style='display:flex; justify-content:space-between; margin-bottom:3pt;'>{' '.join(target_items)}</div>\n" if target_items else ""
+
+            subjects = pg.get("subjects", [])
+            total_score = escape_html_text(pg.get("total_score", ""))
+            table_html = ""
+            if subjects or total_score:
+                th_cells = ['<th style="background:#F5EFEB; font-weight:bold; border:1px solid #D8CFC4; padding:3pt 5pt; width:16%;">初试成绩</th>']
+                td_cells = ['<td style="background:#FDFBF7; font-weight:bold; color:#555; border:1px solid #D8CFC4; padding:3pt 5pt;">得分</td>']
+                for s in subjects:
+                    th_cells.append(f'<th style="border:1px solid #D8CFC4; padding:3pt 5pt;">{s["name"]}</th>')
+                    td_cells.append(f'<td style="border:1px solid #D8CFC4; padding:3pt 5pt;">{s["score"]}</td>')
+                if total_score:
+                    th_cells.append('<th style="background:#F8ECE8; color:#1e3a8a; font-weight:bold; border:1px solid #D8CFC4; padding:3pt 5pt;">总分</th>')
+                    td_cells.append(f'<td style="font-weight:bold; color:#1e3a8a; background:#FCF6F4; border:1px solid #D8CFC4; padding:3pt 5pt;">{total_score}</td>')
+
+                table_html = f"""<table style="width:100%; border-collapse:collapse; margin-top:3pt; margin-bottom:5pt; text-align:center; font-size:10pt; border:1px solid #1e3a8a;">
+  <thead><tr style="background:#FDFBF7; border-bottom:1.5px solid #1e3a8a;">{''.join(th_cells)}</tr></thead>
+  <tbody><tr>{''.join(td_cells)}</tr></tbody>
+</table>
+"""
+
+            html += f"""  <h2>报考信息</h2>
+  {target_bar}
+  {table_html}
+"""
+
+        html += f"""
   <h2>教育背景</h2>
   <div class="item-header">
     <span>{school} &nbsp;&nbsp;&nbsp;&nbsp; {degree_clean}</span>
