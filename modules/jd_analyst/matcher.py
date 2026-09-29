@@ -60,6 +60,41 @@ class JDMatcher:
         "langchain": {"llamaindex", "langgraph", "autogen", "agent", "智能体"},
         "rag": {"向量检索", "milvus", "qdrant", "pinecone", "chroma", "graphrag", "知识库"},
         "awq": {"gptq", "smoothquant", "int4", "fp8", "量化", "模型压缩"},
+        # Backend & Distributed Messaging / Cache / Storage
+        "kafka": {"rocketmq", "rabbitmq", "pulsar", "mq", "消息队列"},
+        "rocketmq": {"kafka", "rabbitmq", "pulsar", "mq", "消息队列"},
+        "rabbitmq": {"kafka", "rocketmq", "pulsar", "mq", "消息队列"},
+        "redis": {"memcached", "tair", "kv存储", "分布式缓存", "缓存"},
+        "mysql": {"postgresql", "tidb", "oceanbase", "polardb", "关系型数据库"},
+        "postgresql": {"mysql", "tidb", "oceanbase", "pg", "关系型数据库"},
+        "grpc": {"thrift", "rpc", "dubbo", "brpc", "微服务通信"},
+        "springboot": {"spring", "spring boot", "springcloud", "spring cloud", "mybatis"},
+        "spring boot": {"spring", "springboot", "springcloud", "spring cloud", "mybatis"},
+        "fastapi": {"flask", "django", "tornado", "sanic", "python web"},
+        "django": {"fastapi", "flask", "python web"},
+        # Frontend & Engineering
+        "react": {"vue", "next.js", "angular", "前端框架"},
+        "vue": {"react", "nuxt.js", "vue3", "pinia"},
+        "webpack": {"vite", "rollup", "rspack", "turbopack", "前端工程化"},
+        "typescript": {"javascript", "ts", "js"},
+        # Big Data & Real-time OLAP
+        "flink": {"spark streaming", "storm", "实时计算", "流计算"},
+        "spark": {"flink", "hadoop", "hive", "mapreduce", "分布式计算"},
+        "clickhouse": {"starrocks", "doris", "druid", "olap", "实时数仓"},
+        "starrocks": {"clickhouse", "doris", "olap", "实时数仓"},
+        "doris": {"clickhouse", "starrocks", "olap", "实时数仓"},
+        "hive": {"spark", "hadoop", "离线计算", "数据仓库"},
+        # Cloud Native, DevOps & SRE
+        "k8s": {"kubernetes", "docker", "containerd", "helm", "容器编排"},
+        "kubernetes": {"k8s", "docker", "containerd", "helm", "容器编排"},
+        "docker": {"containerd", "podman", "容器化"},
+        "prometheus": {"grafana", "opentelemetry", "skywalking", "监控告警"},
+        # Data Analytics & BI
+        "tableau": {"powerbi", "looker", "finebi", "quickbi", "数据看板", "bi"},
+        "powerbi": {"tableau", "looker", "finebi", "quickbi", "数据看板", "bi"},
+        # Deep Learning Frameworks
+        "pytorch": {"tensorflow", "jax", "paddlepaddle", "深度学习框架"},
+        "tensorflow": {"pytorch", "jax", "paddlepaddle", "深度学习框架"},
     }
 
     def match(self, jd: DecodedJD, candidate: CandidateProfile) -> MatcherResult:

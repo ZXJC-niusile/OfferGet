@@ -14,6 +14,8 @@ class LetterType(str, Enum):
     FOLLOW_UP = "follow_up"
     SALARY_NEGOTIATION = "salary_negotiation"
     DECLINE_OFFER = "decline_offer"
+    BOSS_INTRO = "boss_intro"
+    HEADHUNTER_INTRO = "headhunter_intro"
 
 
 @dataclass
@@ -290,6 +292,81 @@ class DeclineOfferWriter:
         )
 
 
+class BossIntroWriter:
+    """Boss直聘等移动端招聘平台的精炼破冰打招呼语 (80-150字，高转化对齐)"""
+
+    @staticmethod
+    def write(
+        candidate_name: str,
+        target_role: str,
+        experience_summary: str,
+        core_actions: List[str],
+        verified_outcomes: List[str],
+        target_company_interest: Optional[str] = None,
+        recipient_title: str = "招聘负责人",
+    ) -> GeneratedLetter:
+        subject = f"【打招呼-{target_role}】{candidate_name}"
+
+        actions_str = "、".join(core_actions[:2]) if core_actions else "核心模块研发"
+        outcomes_str = "、".join(verified_outcomes[:2]) if verified_outcomes else "可验证业务成果"
+        interest_str = target_company_interest.strip() if target_company_interest else "团队当前重点关注的技术与业务方向"
+
+        body = (
+            f"您好！关注到贵团队在招的「{target_role}」岗位。我有{experience_summary}，"
+            f"过往在相关项目中主要负责{actions_str}，取得了{outcomes_str}的可验证成果，"
+            f"与岗位核心要求较为匹配。已附个人简历，想进一步请教并了解{interest_str}，非常期待能有交流机会，谢谢！"
+        )
+        return GeneratedLetter(
+            letter_type=LetterType.BOSS_INTRO,
+            subject=subject,
+            recipient=recipient_title,
+            body_text=body.strip(),
+            key_points=[f"背景: {experience_summary}", f"实战: {actions_str}", f"成效: {outcomes_str}"],
+            call_to_action="请求简历查阅与即时沟通",
+        )
+
+
+class HeadhunterIntroWriter:
+    """面向猎头顾问/高级人才寻访的结构化推介卡片"""
+
+    @staticmethod
+    def write(
+        candidate_name: str,
+        current_or_recent_title: str,
+        years_of_experience: str,
+        core_focus_areas: List[str],
+        representative_impact: List[str],
+        target_job_preferences: str,
+        potential_risks_or_boundaries: Optional[str] = None,
+        headhunter_name: str = "顾问",
+    ) -> GeneratedLetter:
+        subject = f"【人才自荐卡】{candidate_name} - {current_or_recent_title} ({years_of_experience})"
+
+        focus_str = "、".join(core_focus_areas[:3]) if core_focus_areas else "架构与工程落地"
+        impact_lines = "\n".join([f"• {item}" for item in representative_impact[:3]]) if representative_impact else "• 具备完整的从0到1工程交付与性能调优经历"
+        boundary_line = f"\n【背景说明与边界】：\n{potential_risks_or_boundaries}\n" if potential_risks_or_boundaries else ""
+
+        body = (
+            f"{headhunter_name}您好！附上我的基本画像与近期求职方向，供团队在手优质机会对标检索：\n\n"
+            f"【候选人】：{candidate_name} | {current_or_recent_title} | {years_of_experience}\n"
+            f"【核心专注领域】：{focus_str}\n\n"
+            f"【代表性实战成果】：\n"
+            f"{impact_lines}\n\n"
+            f"【求职期望与偏好】：\n"
+            f"{target_job_preferences}\n"
+            f"{boundary_line}\n"
+            f"详细简历已附上，如有契合度高的研发主管或架构师机会，欢迎随时沟通！"
+        )
+        return GeneratedLetter(
+            letter_type=LetterType.HEADHUNTER_INTRO,
+            subject=subject,
+            recipient=headhunter_name,
+            body_text=body.strip(),
+            key_points=[f"方向: {focus_str}", f"期望: {target_job_preferences}"],
+            call_to_action="匹配高契合度岗位推介",
+        )
+
+
 class CareerCommunicationKit:
     """求职沟通信函套件总门面"""
 
@@ -320,3 +397,11 @@ class CareerCommunicationKit:
     @classmethod
     def decline_offer(cls, *args, **kwargs) -> GeneratedLetter:
         return DeclineOfferWriter.write(*args, **kwargs)
+
+    @classmethod
+    def boss_intro(cls, *args, **kwargs) -> GeneratedLetter:
+        return BossIntroWriter.write(*args, **kwargs)
+
+    @classmethod
+    def headhunter_intro(cls, *args, **kwargs) -> GeneratedLetter:
+        return HeadhunterIntroWriter.write(*args, **kwargs)
