@@ -244,6 +244,7 @@ class FactVerificationGuard:
         self._claim_id_to_scope = {}
         self._company_to_exp_idx = {}
         self._project_name_to_proj_idx = {}
+        self._baseline_roles = {}
 
         if not self.master_profile:
             return
@@ -301,6 +302,8 @@ class FactVerificationGuard:
 
             if company:
                 self._company_to_exp_idx[company.lower()] = exp_idx
+                self._baseline_roles[company.lower()] = role
+            self._baseline_roles[f"experience[{exp_idx}]"] = role
 
             exp_text_parts = [company, role]
 
@@ -354,6 +357,8 @@ class FactVerificationGuard:
             p_kw = self._extract_keywords(proj_name)
             if proj_name:
                 self._project_name_to_proj_idx[proj_name.lower()] = p_idx
+                self._baseline_roles[proj_name.lower()] = proj_role
+            self._baseline_roles[f"projects[{p_idx}]"] = proj_role
 
             p_text_parts = [proj_name, proj_role]
 
@@ -593,6 +598,12 @@ class FactVerificationGuard:
         extracted = self._extract_raw_metrics_from_text(text)
         for m in extracted:
             self.all_verified_numbers.add(m["value"])
+            if m.get("type") == "currency":
+                unit_l = (m.get("unit") or "").lower()
+                if "万" in unit_l:
+                    self.all_verified_numbers.add(m["value"] * 10000.0)
+                elif "亿" in unit_l:
+                    self.all_verified_numbers.add(m["value"] * 100000000.0)
             self.baseline_anchors.append({
                 "anchor_id": f"{source_id}:{m['raw']}",
                 "topic": m.get("type", "generic"),
@@ -848,6 +859,7 @@ class FactVerificationGuard:
 
         drifts: List[Dict[str, Any]] = []
         unverified_claims: List[Dict[str, Any]] = []
+        role_inflations: List[Dict[str, Any]] = []
         verified_bullets: List[str] = []
         total_bullets = 0
 
@@ -866,6 +878,16 @@ class FactVerificationGuard:
                 company = exp.get("company") or exp.get("org")
                 if company and company.lower() in self._company_to_exp_idx:
                     exp_scope = f"experience[{self._company_to_exp_idx[company.lower()]}]"
+
+                # Role hierarchy audit
+                claimed_exp_role = exp.get("role") or ""
+                baseline_exp_role = self._baseline_roles.get(exp_scope) or self._baseline_roles.get(company.lower() if company else "", "")
+                if claimed_exp_role and baseline_exp_role:
+                    r_esc = QualityRuleRegistry.check_role_escalation(claimed_exp_role, baseline_exp_role)
+                    if r_esc:
+                        r_esc["scope"] = exp_scope
+                        r_esc["organization"] = company
+                        role_inflations.append(r_esc)
 
                 exp_bullets: List[Tuple[str, Optional[str]]] = []
                 for h in exp.get("highlights", []):
@@ -905,6 +927,16 @@ class FactVerificationGuard:
                 p_name = proj.get("name")
                 if p_name and p_name.lower() in self._project_name_to_proj_idx:
                     proj_scope = f"projects[{self._project_name_to_proj_idx[p_name.lower()]}]"
+
+                # Role hierarchy audit
+                claimed_proj_role = proj.get("role") or ""
+                baseline_proj_role = self._baseline_roles.get(proj_scope) or self._baseline_roles.get(p_name.lower() if p_name else "", "")
+                if claimed_proj_role and baseline_proj_role:
+                    p_esc = QualityRuleRegistry.check_role_escalation(claimed_proj_role, baseline_proj_role)
+                    if p_esc:
+                        p_esc["scope"] = proj_scope
+                        p_esc["project"] = p_name
+                        role_inflations.append(p_esc)
 
                 p_bullets: List[str] = []
                 for k in ["description_zh", "description_en", "description"]:
@@ -948,11 +980,11 @@ class FactVerificationGuard:
                         if not b_drifts and not b_unverified:
                             verified_bullets.append(b_clean)
 
-            passed = (len(drifts) == 0 and len(unverified_claims) == 0)
+            passed = (len(drifts) == 0 and len(unverified_claims) == 0 and len(role_inflations) == 0)
             verdict = "FACT_CHECK_PASSED" if passed else "FACT_DRIFT_DETECTED"
             score = 100.0
             if not passed:
-                penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0
+                penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0 + len(role_inflations) * 20.0
                 score = max(0.0, round(100.0 - penalty, 1))
 
             return {
@@ -960,13 +992,15 @@ class FactVerificationGuard:
                 "score": score,
                 "drifts": drifts,
                 "unverified_claims": unverified_claims,
+                "role_inflations": role_inflations,
                 "verified_bullets": verified_bullets,
                 "verdict": verdict,
                 "summary": {
                     "total_bullets_checked": total_bullets,
                     "verified_bullets_count": len(verified_bullets),
                     "drift_count": len(drifts),
-                    "unverified_claims_count": len(unverified_claims)
+                    "unverified_claims_count": len(unverified_claims),
+                    "role_inflation_count": len(role_inflations),
                 }
             }
 
@@ -992,12 +1026,12 @@ class FactVerificationGuard:
             if not bullet_drifts and not bullet_unverified:
                 verified_bullets.append(bullet_clean)
 
-        passed = (len(drifts) == 0 and len(unverified_claims) == 0)
+        passed = (len(drifts) == 0 and len(unverified_claims) == 0 and len(role_inflations) == 0)
         verdict = "FACT_CHECK_PASSED" if passed else "FACT_DRIFT_DETECTED"
 
         score = 100.0
         if not passed:
-            penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0
+            penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0 + len(role_inflations) * 20.0
             score = max(0.0, round(100.0 - penalty, 1))
 
         return {
@@ -1005,15 +1039,36 @@ class FactVerificationGuard:
             "score": score,
             "drifts": drifts,
             "unverified_claims": unverified_claims,
+            "role_inflations": role_inflations,
             "verified_bullets": verified_bullets,
             "verdict": verdict,
             "summary": {
                 "total_bullets_checked": len(bullets),
                 "verified_bullets_count": len(verified_bullets),
                 "drift_count": len(drifts),
-                "unverified_claims_count": len(unverified_claims)
+                "unverified_claims_count": len(unverified_claims),
+                "role_inflation_count": len(role_inflations),
             }
         }
+
+    def verify_role_hierarchy(self, claimed_role: str, baseline_role: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Verifies whether a claimed job/project role title suffers from title inflation,
+        tier escalation, or domain drift relative to the baseline role.
+        """
+        if not baseline_role:
+            return None
+        return QualityRuleRegistry.check_role_escalation(claimed_role, baseline_role)
+
+    def verify_metric_scope(self, claimed_text: str, baseline_text: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Verifies whether quantified metrics in claimed_text suffer from scope drift,
+        entity substitution, ungrounded currency conversion, or unanchored denominators
+        relative to baseline_text.
+        """
+        if baseline_text is None:
+            baseline_text = getattr(self, "profile_all_text", "")
+        return QualityRuleRegistry.check_metric_scope_drift(claimed_text, baseline_text)
 
     def verify_bullet(
         self,
@@ -1116,6 +1171,26 @@ class FactVerificationGuard:
         if tech_method_drifts:
             bullet_unverified.extend(tech_method_drifts)
 
+        # 3. Metric scope, entity & dimension drift verification
+        b_scope_text = ""
+        if target_scope is not None or target_claim_id is not None or target_excerpt is not None:
+            resolved = self._resolve_scope_text(target_scope, target_claim_id, target_excerpt)
+            b_scope_text = resolved or ""
+        if not b_scope_text:
+            b_scope_text = getattr(self, "profile_all_text", "")
+
+        scope_drifts = QualityRuleRegistry.check_metric_scope_drift(bullet, b_scope_text)
+        if scope_drifts:
+            for s in scope_drifts:
+                bullet_drifts.append({
+                    "bullet": bullet,
+                    "claimed_metric": s.get("claimed_snippet") or s.get("number") or "scope_drift",
+                    "verified_baseline": s.get("reason", "Metric scope drift"),
+                    "metric_type": s.get("type", "METRIC_SCOPE_DRIFT"),
+                    "rule_id": s.get("rule_id", "SCOPE_DRIFT"),
+                    "fix_suggestion": s.get("fix_suggestion", "")
+                })
+
         return bullet_drifts, bullet_unverified
 
     def _extract_tech_and_method_terms(self, bullet: str) -> List[str]:
@@ -1150,12 +1225,22 @@ class FactVerificationGuard:
                     extracted.append(bullet[m.start():m.end()])
 
         # 3. Extract English / alphanumeric technical identifiers
+        # For Chinese bullets with embedded English tech words, extract candidate tokens.
+        # For pure English bullets, only extract known tech terms, uppercase acronyms (>=2 caps), or PascalCase/CamelCase identifiers.
+        is_chinese_bullet = bool(re.search(r"[\u4e00-\u9fa5]", bullet))
         for m in re.finditer(r"\b[A-Za-z][A-Za-z0-9_+#.-]*[A-Za-z0-9+#]\b", bullet):
             raw = m.group(0)
             raw_l = raw.lower()
             if raw_l in EXCLUDED_ENGLISH_WORDS:
                 continue
-            extracted.append(raw)
+            if is_chinese_bullet:
+                extracted.append(raw)
+            else:
+                if (raw_l in KNOWN_TECH_TERMS or raw_l in KNOWN_METHOD_TERMS or
+                    (len(raw) >= 2 and raw.isupper()) or
+                    (re.match(r"^[A-Z][a-z]+[A-Z]", raw)) or
+                    any(c in raw for c in ["+", "#", "."])):
+                    extracted.append(raw)
 
         # 4. Deduplicate terms (case-insensitive, prefer longer terms over their substrings)
         deduped: List[str] = []
@@ -1415,60 +1500,89 @@ class FactVerificationGuard:
         baseline_raw = anchor.get("baseline_raw", str(baseline_val))
         topic = anchor.get("topic", "")
 
+        # Currency unit normalization
+        c_unit = (claimed_metric.get("unit") or "").lower()
+        b_unit = (anchor.get("unit") or "").lower()
+
+        b_is_wan = ("万" in b_unit)
+        c_is_wan = ("万" in c_unit)
+        b_is_yi = ("亿" in b_unit)
+        c_is_yi = ("亿" in c_unit)
+
+        if b_is_wan and not c_is_wan and not c_is_yi:
+            # baseline is 万元, claimed is raw RMB / 元
+            baseline_comp = baseline_val * 10000.0
+            claimed_comp = claimed_val
+        elif c_is_wan and not b_is_wan and not b_is_yi:
+            # claimed is 万元, baseline is raw RMB / 元
+            baseline_comp = baseline_val
+            claimed_comp = claimed_val * 10000.0
+        elif b_is_yi and not c_is_yi:
+            # baseline is 亿元
+            baseline_comp = baseline_val * 100000000.0
+            claimed_comp = claimed_val if not c_is_wan else claimed_val * 10000.0
+        elif c_is_yi and not b_is_yi:
+            # claimed is 亿元
+            baseline_comp = baseline_val if not b_is_wan else baseline_val * 10000.0
+            claimed_comp = claimed_val * 100000000.0
+        else:
+            baseline_comp = baseline_val
+            claimed_comp = claimed_val
+
         # Allow small floating point rounding tolerance
-        if abs(claimed_val - baseline_val) < 0.2:
+        if abs(claimed_comp - baseline_comp) < 0.2:
             return False, baseline_raw
 
         # Model params: check if exact match or exceeding verified max
         if topic == "model_params":
-            if abs(claimed_val - baseline_val) < 0.2:
+            if abs(claimed_comp - baseline_comp) < 0.2:
                 return False, baseline_raw
             matched_param = any(
-                a.get("topic") == "model_params" and abs(a.get("baseline_value", 0) - claimed_val) < 0.2
+                a.get("topic") == "model_params" and abs(a.get("baseline_value", 0) - claimed_comp) < 0.2
                 for a in self.baseline_anchors
             )
             if matched_param:
                 return False, baseline_raw
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # MFU
         elif topic == "mfu":
-            if claimed_val > baseline_val + 0.2:
+            if claimed_comp > baseline_comp + 0.2:
                 return True, baseline_raw
 
         # Cluster size
         elif topic == "cluster_size":
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Downtime before
         elif topic == "downtime_before":
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Downtime after
         elif topic == "downtime_after":
             # If claimed downtime after is worse than baseline (e.g. baseline 8 min, claimed 20 min)
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Annual Savings
         elif topic == "savings":
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Percentage reductions / gains
         elif topic in ("latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain", "uptime", "percentage", "generic"):
-            if claimed_val > baseline_val + 0.2:
+            if claimed_comp > baseline_comp + 0.2:
                 return True, baseline_raw
 
         # Experience years & stars
         elif topic in ("experience_years", "stars"):
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
-        elif claimed_val > baseline_val:
+        elif claimed_comp > baseline_comp:
             return True, baseline_raw
 
         return False, baseline_raw

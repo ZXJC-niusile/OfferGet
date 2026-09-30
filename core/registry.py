@@ -856,6 +856,69 @@ class QualityRuleRegistry:
         "已录用", "已见刊", "已发表", "录用待刊", "已出版", "已授权", "accepted", "published"
     ]
 
+    # -------------------------------------------------------------------------
+    # Role & Title Hierarchy and Inflation Prevention Lexicon
+    # -------------------------------------------------------------------------
+    ROLE_HIERARCHY_LEVELS: Dict[str, int] = {
+        # Level 0: Volunteer / Student Role / Contributor / Task Support
+        "志愿实践成员": 0, "志愿服务成员": 0, "志愿成员": 0, "志愿者": 0, "义工": 0,
+        "心理委员": 0, "宣传委员": 0, "组织委员": 0, "生活委员": 0, "文体委员": 0,
+        "学习委员": 0, "课代表": 0, "班委": 0, "班级代表": 0,
+        "volunteer": 0, "field volunteer": 0, "field research volunteer": 0,
+        "student representative": 0, "mental health representative": 0, "class representative": 0,
+
+        # Level 1: Intern / Team Member / Assistant / Editorial Member
+        "成员": 1, "推广成员": 1, "编辑部成员": 1, "团队成员": 1, "组员": 1, "部员": 1,
+        "队员": 1, "参赛队员": 1, "实习生": 1, "实习": 1, "助理": 1, "助教": 1, "见习生": 1,
+        "member": 1, "team member": 1, "promotion member": 1, "editorial member": 1,
+        "promotion team member": 1, "editorial team member": 1, "brand promotion team member": 1,
+        "intern": 1, "internship": 1, "assistant": 1, "contributor": 1,
+
+        # Level 2: Specialist / Regular Officer / Engineer / Analyst
+        "专员": 2, "运营专员": 2, "推广专员": 2, "编辑专员": 2, "品牌专员": 2,
+        "工程师": 2, "研发工程师": 2, "分析师": 2, "研究员": 2, "统筹员": 2, "干事": 2,
+        "specialist": 2, "operations specialist": 2, "promotion specialist": 2,
+        "editorial specialist": 2, "brand promotion specialist": 2, "officer": 2,
+        "engineer": 2, "analyst": 2, "researcher": 2, "coordinator": 2,
+
+        # Level 3: Lead / Head / Manager / Director / Founder
+        "负责人": 3, "现场负责人": 3, "项目负责人": 3, "业务负责人": 3, "总负责人": 3,
+        "主导者": 3, "主管": 3, "经理": 3, "总监": 3, "组长": 3, "部长": 3, "架构师": 3, "创始人": 3,
+        "操盘手": 3, "掌盘人": 3, "主操盘手": 3, "主操盘": 3,
+        "lead": 3, "field lead": 3, "volunteer field lead": 3, "project lead": 3, "team lead": 3,
+        "head": 3, "manager": 3, "director": 3, "chief": 3, "founder": 3
+    }
+
+    ROLE_HIERARCHY_NAMES: Dict[int, str] = {
+        0: "Volunteer / Student Role (志愿/学生干部/兼职)",
+        1: "Member / Intern (成员/实习生/普通组员)",
+        2: "Specialist / Officer (正式专员/工程师/干事)",
+        3: "Lead / Manager (负责人/组长/总监/主管)",
+    }
+
+    ROLE_PROTECTED_DOMAINS: Dict[str, Dict[str, Any]] = {
+        "心理委员": {
+            "required_keywords": ["心理", "mental health"],
+            "forbidden_generalizations": ["student affairs", "cohort representative", "年级代表", "全权负责"],
+            "recommended_en": "Class Mental Health Representative"
+        },
+        "志愿实践成员": {
+            "required_keywords": ["志愿", "volunteer"],
+            "forbidden_escalations": ["lead", "head", "director", "负责人", "总负责"],
+            "recommended_en": "Field Research Volunteer / Volunteer Team Member"
+        },
+        "推广成员": {
+            "required_keywords": ["成员", "member", "team member"],
+            "forbidden_escalations": ["specialist", "专员", "lead", "负责人", "chief", "head", "director", "manager", "主管"],
+            "recommended_en": "Brand Promotion Team Member"
+        },
+        "编辑部成员": {
+            "required_keywords": ["编辑", "成员", "editorial", "member", "team member"],
+            "forbidden_escalations": ["specialist", "专员", "lead", "负责人", "chief", "head", "director", "manager", "主编"],
+            "recommended_en": "Editorial Team Member"
+        }
+    }
+
     # Safe Read-Only Getters
     @classmethod
     def get_data_depth_levels(cls) -> Dict[str, str]:
@@ -935,6 +998,182 @@ class QualityRuleRegistry:
     def is_forbidden_buzzword(cls, word: str) -> bool:
         w = word.strip().lower()
         return any(b.lower() == w or b.lower() in w for b in cls.FORBIDDEN_BUZZWORDS)
+
+    @classmethod
+    def detect_role_hierarchy_tier(cls, text: str) -> Tuple[Optional[int], Optional[str]]:
+        """
+        Detects the role hierarchy tier (0-3) using longest-match first.
+        Returns (tier, matched_term) or (None, None).
+        """
+        if not text:
+            return None, None
+        lower = str(text).strip().lower()
+        sorted_terms = sorted(cls.ROLE_HIERARCHY_LEVELS.keys(), key=len, reverse=True)
+        for term in sorted_terms:
+            if term.lower() in lower:
+                return cls.ROLE_HIERARCHY_LEVELS[term], term
+        return None, None
+
+    @classmethod
+    def check_role_escalation(cls, claimed_role: str, baseline_role: str) -> Optional[Dict[str, Any]]:
+        """
+        Audits whether a claimed role escalates in tier or drifts in core domain
+        relative to baseline role SSOT.
+        """
+        if not claimed_role or not baseline_role:
+            return None
+
+        b_role = baseline_role.strip()
+        c_role = claimed_role.strip()
+        c_lower = c_role.lower()
+
+        # 1. Protected domain check (e.g. 心理委员 -> Student Affairs, 推广成员 -> Brand Promotion Specialist)
+        for prot_key, cfg in cls.ROLE_PROTECTED_DOMAINS.items():
+            if prot_key.lower() in b_role.lower():
+                forb = cfg.get("forbidden_escalations", [])
+                for f_term in forb:
+                    pat = r"(?<![a-z0-9_])" + re.escape(f_term.lower()) + r"(?![a-z0-9_])" if re.match(r"^[a-z0-9_]+$", f_term.lower()) else re.escape(f_term.lower())
+                    if re.search(pat, c_lower):
+                        return {
+                            "rule_id": "ROLE_HIERARCHY_INFLATION",
+                            "type": "ROLE_HIERARCHY_INFLATION",
+                            "claimed_role": c_role,
+                            "baseline_role": b_role,
+                            "reason": f"Role '{b_role}' was escalated to forbidden term '{f_term}' in '{c_role}'",
+                            "fix_suggestion": cfg.get("recommended_en") or "Downgrade role to match baseline tier (e.g. Member / Volunteer)"
+                        }
+                req_kws = cfg.get("required_keywords", [])
+                if req_kws and not any(kw.lower() in c_lower for kw in req_kws):
+                    return {
+                        "rule_id": "ROLE_DOMAIN_DRIFT",
+                        "type": "ROLE_DOMAIN_DRIFT",
+                        "claimed_role": c_role,
+                        "baseline_role": b_role,
+                        "reason": f"Core domain of '{b_role}' was omitted or altered in '{c_role}'",
+                        "fix_suggestion": cfg.get("recommended_en") or f"Retain core domain keywords: {req_kws}"
+                    }
+
+        # 2. Tier escalation check
+        b_tier, b_term = cls.detect_role_hierarchy_tier(b_role)
+        c_tier, c_term = cls.detect_role_hierarchy_tier(c_role)
+
+        if b_tier is not None and c_tier is not None and c_tier > b_tier and (c_tier >= 2 and b_tier <= 1 or c_tier >= 3):
+            return {
+                "rule_id": "ROLE_HIERARCHY_INFLATION",
+                "type": "ROLE_HIERARCHY_INFLATION",
+                "claimed_role": c_role,
+                "claimed_tier": c_tier,
+                "claimed_tier_name": cls.ROLE_HIERARCHY_NAMES.get(c_tier, str(c_tier)),
+                "baseline_role": b_role,
+                "baseline_tier": b_tier,
+                "baseline_tier_name": cls.ROLE_HIERARCHY_NAMES.get(b_tier, str(b_tier)),
+                "matched_claimed_term": c_term,
+                "matched_baseline_term": b_term,
+                "reason": f"Role level escalated from {cls.ROLE_HIERARCHY_NAMES.get(b_tier, str(b_tier))} to {cls.ROLE_HIERARCHY_NAMES.get(c_tier, str(c_tier))} without SSOT authorization",
+                "fix_suggestion": f"Downgrade role title to match baseline tier (Tier {b_tier})"
+            }
+
+        return None
+
+    @classmethod
+    def check_metric_scope_drift(cls, claimed_text: str, baseline_text: str) -> List[Dict[str, Any]]:
+        """
+        Audits whether quantified metrics in claimed_text suffer from scope drift,
+        entity substitution, ungrounded currency conversion, or unanchored denominators relative to baseline_text.
+        """
+        drifts: List[Dict[str, Any]] = []
+        if not claimed_text or not baseline_text:
+            return drifts
+
+        c_text = claimed_text
+        b_text = baseline_text
+        c_lower = c_text.lower()
+        b_lower = b_text.lower()
+
+        # 1. Currency Conversion Drift ($ / USD introduced without baseline USD)
+        has_claimed_usd = bool(re.search(r"(\$|usd|dollar|美元)", c_lower, re.IGNORECASE))
+        has_baseline_usd = bool(re.search(r"(\$|usd|dollar|美元)", b_lower, re.IGNORECASE))
+        has_baseline_rmb = bool(re.search(r"(¥|￥|rmb|元|万元|cny)", b_lower, re.IGNORECASE))
+        if has_claimed_usd and not has_baseline_usd and has_baseline_rmb:
+            m_usd = re.search(r"([¥$￥]?\s*~?\s*\$?\s*\d+(?:,\d+)*(?:\.\d+)?\s*(?:k|m|b)?\s*usd|\$[0-9]+[km]?)", c_text, re.IGNORECASE)
+            claimed_str = m_usd.group(0) if m_usd else "USD conversion"
+            drifts.append({
+                "rule_id": "SCOPE_UNAUTHORIZED_CURRENCY",
+                "type": "UNAUTHORIZED_CURRENCY_CONVERSION",
+                "claimed_text": c_text,
+                "claimed_snippet": claimed_str,
+                "reason": "Claimed text introduces ungrounded currency conversion ($/USD) not present in SSOT baseline",
+                "fix_suggestion": "Preserve original RMB/万元 denomination directly without speculative exchange rate conversion"
+            })
+
+        # 2. Scale Denominator Drift (GPA /4.0 or /100 introduced without baseline denominator)
+        m_c_gpa = re.search(r"gpa[:\s]*(\d+\.\d+)\s*\/\s*(4(?:\.0)?|100|5)", c_lower)
+        if m_c_gpa:
+            m_b_denom = re.search(r"gpa[:\s]*(\d+\.\d+)\s*\/\s*(4(?:\.0)?|100|5)", b_lower)
+            if not m_b_denom:
+                drifts.append({
+                    "rule_id": "SCOPE_UNANCHORED_DENOMINATOR",
+                    "type": "UNANCHORED_SCALE_DENOMINATOR",
+                    "claimed_text": c_text,
+                    "claimed_snippet": m_c_gpa.group(0),
+                    "reason": f"Claimed text adds ungrounded full scale '/{m_c_gpa.group(2)}' to GPA without official baseline backing",
+                    "fix_suggestion": "Preserve baseline GPA value without fabricating denominator (e.g. 'GPA 3.12 (Top 15%)')"
+                })
+
+        # 3. Event / Session count to Asset / Artifact count drift
+        for m_b in re.finditer(r"(\d+)\s*\+?\s*(?:场|场次|sessions?)", b_lower):
+            num = m_b.group(1)
+            pat_drift = re.compile(rf"{num}\s*\+?\s*(?:件|个|套|custom\s*promo\s*overlays|promo\s*overlays|kt\s*boards|posters|materials|物料)", re.IGNORECASE)
+            if pat_drift.search(c_lower):
+                has_session_qualifier = bool(re.search(rf"{num}\s*\+?\s*.*(?:场|session)", c_lower) or re.search(rf"for\s+{num}\s*\+?\s*.*(?:场|session)", c_lower))
+                if not has_session_qualifier:
+                    drifts.append({
+                        "rule_id": "SCOPE_EVENT_TO_ASSET",
+                        "type": "METRIC_SCOPE_DRIFT",
+                        "number": num,
+                        "claimed_text": c_text,
+                        "reason": f"Baseline metric measures event/session count ({num}+ 场), but claimed text drifted into artifact/asset quantity ({num}+ items/overlays)",
+                        "fix_suggestion": f"Clarify scope as 'for {num}+ livestream sessions' or '为 {num}+ 场直播制作'"
+                    })
+
+        # 4. User to Enterprise Lead drift
+        for m_b in re.finditer(r"(\d+)\s*\+?\s*(?:人|位|名|潜在用户|用户|fans|users|attendees)", b_lower):
+            num = m_b.group(1)
+            pat_ent = re.compile(rf"{num}\s*\+?\s*(?:家|个企业|企业客户|企业线索|企业|enterprise\s*clients|business\s*leads|corporate\s*leads|prospects)", re.IGNORECASE)
+            if pat_ent.search(c_lower):
+                b_has_ent = bool(re.search(rf"{num}\s*\+?\s*(?:家|企业|enterprise|clients|leads)", b_lower))
+                if not b_has_ent:
+                    drifts.append({
+                        "rule_id": "SCOPE_USER_TO_ENTERPRISE",
+                        "type": "TARGET_AUDIENCE_DRIFT",
+                        "number": num,
+                        "claimed_text": c_text,
+                        "reason": f"Baseline metric measures C-end prospective individuals/users ({num}+ 人), but claimed text drifted into B-end enterprise leads/clients",
+                        "fix_suggestion": f"Retain prospective users/attendees scope ('engaging {num}+ prospective users')"
+                    })
+
+        # 5. Peak single-event to Cumulative total drift
+        for m_b in re.finditer(r"(?:单篇最高|单场最高|峰值|最高|peak|single[ -]session|single[ -]article)[^0-9\n]{0,15}(\d+(?:,\d+)*(?:\.\d+)?)", b_lower):
+            num_str = m_b.group(1)
+            num_clean = num_str.replace(",", "")
+            # Look for cumulative / total either before or after number (e.g. "total 5,000" or "5,000+ total cumulative")
+            pat_cum = re.compile(
+                rf"(?:(?:累计|总计|总共|共计|cumulative|total|overall)[^0-9\n]{{0,25}}(?:{re.escape(num_str)}|{re.escape(num_clean)})|(?:{re.escape(num_str)}|{re.escape(num_clean)})[^0-9\n]{{0,25}}(?:累计|总计|总共|共计|cumulative|total|overall))",
+                re.IGNORECASE
+            )
+            if pat_cum.search(c_lower):
+                has_peak_qualifier = bool(re.search(r"(?:单篇|单场|峰值|最高|peak|single[ -]session|single[ -]article|per[ -]session)", c_lower))
+                if not has_peak_qualifier:
+                    drifts.append({
+                        "rule_id": "SCOPE_PEAK_TO_CUMULATIVE",
+                        "type": "AGGREGATION_DRIFT",
+                        "number": num_str,
+                        "claimed_text": c_text,
+                        "reason": f"Baseline metric '{num_str}' is an isolated single-event peak (单篇/单场最高), but claimed text presents it as cumulative total",
+                        "fix_suggestion": "Retain explicit peak qualifier ('peak single-session / peak single-article / 单场最高')"
+                    })
+
+        return drifts
 
 
 __all__ = [
