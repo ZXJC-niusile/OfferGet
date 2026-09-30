@@ -89,14 +89,18 @@ class AcademicExporter:
         profile: Union[Any, Dict[str, Any]],
         reserve_photo: bool = False,
         photo_path: Optional[Union[str, Path]] = None,
+        lang: str = "zh",
+        section_titles: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Generates standard academic Chinese/English LaTeX source (.tex).
         Accepts ResumeViewModel, ProfileContext, or candidate profile dictionary.
         """
         vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
+        is_en = str(lang).lower().startswith("en")
+        titles = section_titles or {}
 
-        name = escape_latex(vm.raw_name or "候选人")
+        name = escape_latex(vm.raw_name or ("Candidate" if is_en else "候选人"))
         title = escape_latex(vm.raw_title or "")
         email = escape_latex(vm.raw_email or "")
         phone = escape_latex(vm.raw_phone or "")
@@ -129,26 +133,29 @@ class AcademicExporter:
         # Header block
         contact_parts = []
         if phone:
-            contact_parts.append(f"电话：{phone}")
+            contact_parts.append(phone if is_en else f"电话：{phone}")
         if email:
-            contact_parts.append(f"邮箱：\\href{{mailto:{email}}}{{{email}}}")
+            contact_parts.append(f"\\href{{mailto:{email}}}{{{email}}}" if is_en else f"邮箱：\\href{{mailto:{email}}}{{{email}}}")
         if location:
             contact_parts.append(location)
         contact_tex = " \\quad | \\quad ".join(contact_parts)
+
+        target_label = "Target Role: " if is_en else "求职意向："
+        photo_placeholder = "Photo\\\\(3:4)" if is_en else "预留证件照\\\\一寸/二寸"
 
         if photo_needed:
             if eff_photo_path and Path(eff_photo_path).is_file():
                 posix_path = Path(eff_photo_path).resolve().as_posix()
                 photo_box_tex = f"  \\includegraphics[width=55pt,height=75pt,keepaspectratio=true]{{{posix_path}}}"
             else:
-                photo_box_tex = r"  \fbox{\parbox[c][75pt][c]{55pt}{\centering \small 预留证件照\\一寸/二寸}}"
+                photo_box_tex = f"  \\fbox{{\\parbox[c][75pt][c]{{55pt}}{{\\centering \\small {photo_placeholder}}}}}"
 
             lines.extend([
                 r"\begin{minipage}[c]{0.78\textwidth}",
                 f"  {{\\LARGE \\textbf{{{name}}}}} \\\\[4pt]",
             ])
             if title:
-                lines.append(f"  \\textbf{{\\color{{blue!70!black}}求职意向：{title}}} \\\\[3pt]")
+                lines.append(f"  \\textbf{{\\color{{blue!70!black}}{target_label}{title}}} \\\\[3pt]")
             if contact_tex:
                 lines.append(f"  {contact_tex}")
             lines.extend([
@@ -221,9 +228,10 @@ class AcademicExporter:
 
         degree_part = f" \\quad \\quad {degree}" if degree else ""
         time_part = f" \\hfill {edu_time}" if edu_time else ""
+        edu_sec = titles.get("education", "EDUCATION" if is_en else "教育背景")
 
         lines.extend([
-            r"\section*{教育背景}",
+            f"\\section*{{{edu_sec}}}",
             f"\\noindent \\textbf{{{school}}}{degree_part}{time_part} \\\\[3pt]",
         ])
 
@@ -260,8 +268,9 @@ class AcademicExporter:
 
         experiences = vm.experiences
         if experiences:
+            exp_sec = titles.get("experience", "WORK EXPERIENCE" if is_en else "实习经历")
             lines.extend([
-                r"\section*{实习经历}",
+                f"\\section*{{{exp_sec}}}",
             ])
             for exp in experiences:
                 lines.append(r"\begin{itemize}[leftmargin=*,itemsep=2pt]")
@@ -284,7 +293,8 @@ class AcademicExporter:
         projects = vm.projects
         pubs = vm.publications
         if projects:
-            p_title = "科研与架构项目经历" if pubs else "校园与实践经历"
+            default_proj_title = "LEADERSHIP & CAMPUS ACTIVITIES" if is_en else ("科研与架构项目经历" if pubs else "校园与实践经历")
+            p_title = titles.get("projects", default_proj_title)
             lines.extend([
                 f"\\section*{{{p_title}}}",
             ])
@@ -306,8 +316,9 @@ class AcademicExporter:
 
         # 4. Publications (if any)
         if pubs:
+            pub_sec = titles.get("publications", "PUBLICATIONS" if is_en else "学术发表与代表作")
             lines.extend([
-                r"\section*{学术发表与代表作}",
+                f"\\section*{{{pub_sec}}}",
                 r"\begin{enumerate}[leftmargin=*,itemsep=2pt]"
             ])
             for p in pubs:
@@ -321,17 +332,19 @@ class AcademicExporter:
         if competencies:
             if isinstance(competencies, list):
                 competencies = {"专业技能": competencies}
-            s_title = "核心技术栈" if pubs else "专业技能"
+            default_skills_title = "CORE SKILLS & TOOLS" if is_en else ("核心技术栈" if pubs else "专业技能")
+            s_title = titles.get("skills", default_skills_title)
             lines.extend([
                 f"\\section*{{{s_title}}}",
                 r"\begin{itemize}[leftmargin=*,itemsep=2pt]"
             ])
+            colon_sym = ": " if is_en else "："
             for k, vals in competencies.items():
                 if isinstance(vals, list):
                     val_str = escape_latex(", ".join(str(v) for v in vals))
                 else:
                     val_str = escape_latex(str(vals))
-                lines.append(f"  \\item \\textbf{{{escape_latex(str(k))}}}: {val_str}")
+                lines.append(f"  \\item \\textbf{{{escape_latex(str(k))}}}{colon_sym}{val_str}")
             lines.append(r"\end{itemize}")
 
         lines.append(r"\end{document}")
@@ -580,6 +593,8 @@ class AcademicExporter:
         photo_size: Optional[int] = None,
         photo_width: Optional[int] = None,
         photo_height: Optional[int] = None,
+        lang: str = "zh",
+        section_titles: Optional[Dict[str, str]] = None,
     ) -> str:
         """
         Generates single-page A4 HTML styled cleanly like LaTeX, with photo placeholder.
@@ -587,8 +602,10 @@ class AcademicExporter:
         Accepts ResumeViewModel, ProfileContext, or candidate profile dictionary.
         """
         vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
+        is_en = str(lang).lower().startswith("en")
+        titles = section_titles or {}
 
-        name = escape_html_text(vm.raw_name or "候选人")
+        name = escape_html_text(vm.raw_name or ("Candidate" if is_en else "候选人"))
         title = escape_html_text(vm.raw_title or "")
         email_raw = str(vm.raw_email or "")
         email = escape_html_text(email_raw)
@@ -671,19 +688,23 @@ class AcademicExporter:
                     else:
                         p_w, p_h = 96, 96
 
+                placeholder_text = "Photo<br>(3:4)" if is_en else "预留证件照<br>一寸 / 二寸"
+                photo_title = "Photo" if is_en else "证件照"
                 photo_html = f"""
-    <div style="width: {p_w}px; height: {p_h}px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+    <div style="width: {p_w}px; height: {p_h}px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="{photo_title}">
+      <img src="{src_attr}" alt="{photo_title}" style="max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
       <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
-        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
+        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">{placeholder_text}</span>
       </div>
     </div>
                 """
             else:
-                photo_html = """
-    <div style="width: 72px; height: 96px; border: 1.5px dashed #1e3a8a; background: #fafafa; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="预留证件照位置">
+                placeholder_text = "Photo<br>(3:4)" if is_en else "预留证件照<br>一寸 / 二寸"
+                photo_title = "Photo" if is_en else "预留证件照位置"
+                photo_html = f"""
+    <div style="width: 72px; height: 96px; border: 1.5px dashed #1e3a8a; background: #fafafa; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="{photo_title}">
       <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
-        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
+        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">{placeholder_text}</span>
       </div>
     </div>
                 """
@@ -696,18 +717,21 @@ class AcademicExporter:
 
         contact_parts = []
         if phone:
-            contact_parts.append(f"电话：{phone}")
+            contact_parts.append(phone if is_en else f"电话：{phone}")
         if email_link:
-            contact_parts.append(f"邮箱：{email_link}")
+            contact_parts.append(email_link if is_en else f"邮箱：{email_link}")
         if location:
             contact_parts.append(location)
         contact_html = " &nbsp;|&nbsp; ".join(contact_parts)
 
+        doc_lang = "en" if is_en else "zh-CN"
+        target_label = "Target Role: " if is_en else "求职意向："
+
         html = f"""<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="{doc_lang}">
 <head>
   <meta charset="UTF-8">
-  <title>Resume - Academic LaTeX Style ({name})</title>
+  <title>Resume - {name}</title>
   <style>
     @page {{
       size: A4 portrait;
@@ -719,7 +743,7 @@ class AcademicExporter:
       padding: 0;
     }}
     body {{
-      font-family: "SimSun", "Songti SC", "Times New Roman", serif;
+      font-family: "Times New Roman", "Songti SC", "SimSun", serif;
       font-size: 9.8pt;
       line-height: 1.40;
       color: #111111;
@@ -776,7 +800,7 @@ class AcademicExporter:
   <div class="header">
     <div>
       <h1>{name}</h1>
-      {'<div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 3pt;">求职意向：' + title + '</div>' if title else ''}
+      {'<div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 3pt;">' + target_label + title + '</div>' if title else ''}
       <div class="contact">
         {contact_html}
       </div>
@@ -824,9 +848,10 @@ class AcademicExporter:
   {table_html}
 """
 
+        edu_sec = titles.get("education", "EDUCATION" if is_en else "教育背景")
         if grid:
             html += f"""
-  <h2>教育背景</h2>
+  <h2>{edu_sec}</h2>
   <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2pt; font-size:9.8pt; line-height:1.42; margin-top:2.5pt; margin-bottom:4pt;">
     <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{school}</div>
     <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{degree_clean}</div>
@@ -836,7 +861,7 @@ class AcademicExporter:
 """
         else:
             html += f"""
-  <h2>教育背景</h2>
+  <h2>{edu_sec}</h2>
   <div class="item-header">
     <span>{school} &nbsp;&nbsp;&nbsp;&nbsp; {degree_clean}</span>
     <span>{edu_time}</span>
@@ -855,7 +880,8 @@ class AcademicExporter:
             return "".join(res)
 
         if exp_list:
-            html += "  <h2>实习经历</h2>\n"
+            exp_sec = titles.get("experience", "WORK EXPERIENCE" if is_en else "实习经历")
+            html += f"  <h2>{exp_sec}</h2>\n"
             for exp in exp_list:
                 dept_str = str(exp.get("raw_dept", exp.get("dept", "")))
                 role_str = str(exp.get("raw_role", exp.get("role", "")))
@@ -872,7 +898,8 @@ class AcademicExporter:
 """
 
         if proj_list:
-            p_title = "科研与架构项目经历" if pubs else "校园与实践经历"
+            default_proj = "LEADERSHIP & CAMPUS ACTIVITIES" if is_en else ("科研与架构项目经历" if pubs else "校园与实践经历")
+            p_title = titles.get("projects", default_proj)
             html += f"  <h2>{p_title}</h2>\n"
             for p in proj_list:
                 p_name_esc = escape_html_text(str(p.get("raw_name", p.get("name", ""))))
@@ -890,13 +917,15 @@ class AcademicExporter:
         if comps:
             if isinstance(comps, list):
                 comps = {"专业技能": comps}
-            s_title = "核心技术栈" if pubs else "专业技能"
+            default_skills = "CORE SKILLS & TOOLS" if is_en else ("核心技术栈" if pubs else "专业技能")
+            s_title = titles.get("skills", default_skills)
             html += f"  <h2>{s_title}</h2>\n  <ul>"
+            colon_sym = ": " if is_en else "："
             for k, v in comps.items():
                 k_esc = escape_html_text(str(k))
                 val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
                 val_esc = escape_html_text(val)
-                html += f"<li><b>{k_esc}：</b>{val_esc}</li>"
+                html += f"<li><b>{k_esc}{colon_sym}</b>{val_esc}</li>"
             html += "</ul>\n"
 
         html += "</body>\n</html>"

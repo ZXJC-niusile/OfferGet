@@ -317,6 +317,8 @@ class ResumeBuilder:
         photo_size: Optional[int] = None,
         photo_width: Optional[int] = None,
         photo_height: Optional[int] = None,
+        lang: str = "zh",
+        section_titles: Optional[Dict[str, str]] = None,
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds academic LaTeX resume, standalone HTML twin, and PDF."""
@@ -327,7 +329,13 @@ class ResumeBuilder:
 
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
 
-        tex_src = self.academic_exporter.generate_latex(vm, reserve_photo=photo, photo_path=eff_photo_path)
+        tex_src = self.academic_exporter.generate_latex(
+            vm,
+            reserve_photo=photo,
+            photo_path=eff_photo_path,
+            lang=lang,
+            section_titles=section_titles,
+        )
         tex_path = out_dir / "resume_academic_latex.tex"
         write_text_atomic(tex_src, tex_path)
 
@@ -338,6 +346,8 @@ class ResumeBuilder:
             photo_size=photo_size,
             photo_width=photo_width,
             photo_height=photo_height,
+            lang=lang,
+            section_titles=section_titles,
         )
         html_path = out_dir / "resume_academic_latex.html"
         write_text_atomic(html_src, html_path)
