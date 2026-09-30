@@ -1,0 +1,6 @@
+# OfferGet Core & Optional Toolkit Dependencies
+pytest>=7.0.0
+pymupdf>=1.20.0
+pypdf>=3.0.0
+python-docx>=0.8.11
+pillow>=9.0.0

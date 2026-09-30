@@ -55,10 +55,10 @@ from core.fact_guard import FactVerificationGuard
 def sample_candidate_profile():
     return {
         "candidate": {
-            "name": "范增煜",
+            "name": "张明",
             "education": [
                 {
-                    "school": "青岛理工大学",
+                    "school": "华东理工大学",
                     "degree": "工学学士在读",
                     "major": "土木工程",
                     "details": "GPA 3.12（专业前15%）",
@@ -365,7 +365,7 @@ def test_04_from_fact_guard_result_inflated_resume(sample_candidate_profile, sam
         tailored_data=sample_inflated_tailored,
     )
 
-    assert ledger.candidate_name == "范增煜"
+    assert ledger.candidate_name == "张明"
     assert len(ledger.entries) > 0
 
     # Verify that title escalations were captured
@@ -507,7 +507,7 @@ def test_06_markdown_output_format(sample_candidate_profile, sample_grounded_tai
 
     # Title & Candidate Header
     assert "# 改动溯源与口径对齐报告" in md
-    assert "范增煜" in md
+    assert "张明" in md
 
     # GitHub Alerts
     assert "> [!NOTE]" in md
@@ -542,7 +542,7 @@ def test_07_json_output_and_serialization(sample_candidate_profile, sample_groun
 
     data = json.loads(json_str)
     assert data["title"] == "改动溯源与口径对齐报告 (Diff Ledger)"
-    assert data["candidate_name"] == "范增煜"
+    assert data["candidate_name"] == "张明"
     assert "summary" in data
     assert "total_entries" in data["summary"]
     assert data["summary"]["total_entries"] == len(ledger.entries)
@@ -567,7 +567,7 @@ def test_08_cli_summary_format(sample_candidate_profile, sample_grounded_tailore
 
     assert "=" * 80 in cli
     assert "-" * 80 in cli
-    assert "范增煜" in cli
+    assert "张明" in cli
     assert "Diff Ledger Summary" in cli
     assert "[🎖️ 职务层级对齐 (Role Hierarchy)]" in cli
     assert "[📊 数据口径对齐 (Metric Scope)]" in cli
@@ -577,7 +577,7 @@ def test_08_cli_summary_format(sample_candidate_profile, sample_grounded_tailore
 
 def test_09_save_to_disk(sample_candidate_profile):
     """Test saving ledger as .md and .json to output directory."""
-    ledger = DiffLedger(candidate_name="范增煜")
+    ledger = DiffLedger(candidate_name="张明")
     ledger.add_entry(
         category=DiffCategory.ROLE_HIERARCHY,
         field="role.editorial",
@@ -684,7 +684,7 @@ def test_12_cmd_diff_audit_cli(sample_candidate_profile, capsys):
         json_file = out_sub / "resume_diff_ledger.json"
         assert md_file.exists()
         assert json_file.exists()
-        assert "范增煜" in md_file.read_text(encoding="utf-8")
+        assert "张明" in md_file.read_text(encoding="utf-8")
 
         # 2. Test --json flag
         args_json = argparse.Namespace(
@@ -697,6 +697,6 @@ def test_12_cmd_diff_audit_cli(sample_candidate_profile, capsys):
         captured_json = capsys.readouterr()
         parsed = json.loads(captured_json.out)
         assert "summary" in parsed
-        assert parsed["candidate_name"] == "范增煜"
+        assert parsed["candidate_name"] == "张明"
         assert parsed["summary"]["total_entries"] > 0
 

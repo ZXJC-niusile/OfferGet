@@ -8,6 +8,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
   <img src="https://img.shields.io/badge/Tests-640%2B%20passed%20(E2E%20%2B%20Unit)-brightgreen.svg" alt="Tests">
+  <a href="https://github.com/ZXJC-niusile/OfferGet/actions"><img src="https://github.com/ZXJC-niusile/OfferGet/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Security-Reversible%20Anonymization-blue.svg" alt="Security">
   <img src="https://img.shields.io/badge/Integrity-Fact%20Verification%20Guard-red.svg" alt="Integrity">
@@ -144,8 +145,10 @@ python -m venv .venv
 .venv\Scripts\activate  # Windows
 # source .venv/bin/activate  # Linux / macOS
 
-# 3. 本地可编辑安装与依赖同步
-python -m pip install -e . pytest
+# 3. 本地可编辑安装与依赖同步 (推荐安装包含全量扩展依赖)
+python -m pip install -e ".[all]"
+# 或使用 requirements.txt:
+# python -m pip install -r requirements.txt && python -m pip install -e .
 
 # 4. 执行全系统环境自检 (包含浏览器渲染与测试套件验证)
 python cli.py selftest

@@ -321,11 +321,11 @@ class TestResumeBuilder(unittest.TestCase):
     def test_compact_education_formatting(self):
         """Test that education details are formatted into compact rows across all templates without vertical pipes."""
         profile = {
-            "name": "范增煜",
+            "name": "张明",
             "candidate": {
-                "name": "范增煜",
+                "name": "张明",
                 "title": "运营岗",
-                "school": "青岛理工大学",
+                "school": "华东理工大学",
                 "degree": "土木工程  本科在读",
                 "edu_time": "2023.09—2027.06",
                 "education_rows": [
@@ -347,7 +347,7 @@ class TestResumeBuilder(unittest.TestCase):
         # 1. HTML theme
         res_html = builder.build_html_theme("modern-navy", self.test_dir)
         html_text = res_html["html"].read_text(encoding="utf-8")
-        self.assertIn("青岛理工大学", html_text)
+        self.assertIn("华东理工大学", html_text)
         self.assertIn("土木工程", html_text)
         self.assertIn("2023.09—2027.06", html_text)
         self.assertIn("edu-grid", html_text)
@@ -364,7 +364,7 @@ class TestResumeBuilder(unittest.TestCase):
         res_ats = builder.build_ats_plain(self.test_dir)
         ats_md = res_ats["md"].read_text(encoding="utf-8")
         ats_html = res_ats["html"].read_text(encoding="utf-8")
-        self.assertIn("青岛理工大学", ats_md)
+        self.assertIn("华东理工大学", ats_md)
         self.assertIn("GPA 3.12，专业前15%", ats_md)
         self.assertIn("全国计算机二级（WPS Office）", ats_md)
         self.assertIn("edu-grid", ats_html)
@@ -375,7 +375,7 @@ class TestResumeBuilder(unittest.TestCase):
         # 3. Academic LaTeX
         res_latex = builder.build_academic_latex(self.test_dir)
         tex_text = res_latex["tex"].read_text(encoding="utf-8")
-        self.assertIn(r"\textbf{青岛理工大学}", tex_text)
+        self.assertIn(r"\textbf{华东理工大学}", tex_text)
         self.assertIn(r"2023.09—2027.06", tex_text)
         self.assertIn(r"\begin{tabular}", tex_text)
         self.assertIn(r"GPA 3.12，专业前15\%", tex_text)
@@ -384,7 +384,7 @@ class TestResumeBuilder(unittest.TestCase):
         # 4. Academic Typst
         res_typ = builder.build_academic_typst(self.test_dir)
         typ_text = res_typ["typ"].read_text(encoding="utf-8")
-        self.assertIn("*青岛理工大学*", typ_text)
+        self.assertIn("*华东理工大学*", typ_text)
         self.assertIn("2023.09—2027.06", typ_text)
         self.assertIn("#grid(", typ_text)
         self.assertIn("[GPA 3.12，专业前15%]", typ_text)

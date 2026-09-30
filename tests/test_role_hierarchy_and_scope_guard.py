@@ -175,10 +175,10 @@ def test_metric_scope_drift_peak_to_cumulative():
 def test_fact_guard_end_to_end_role_and_scope():
     master_profile = {
         "candidate": {
-            "name": "范增煜",
+            "name": "张明",
             "education": [
                 {
-                    "school": "青岛理工大学",
+                    "school": "华东理工大学",
                     "degree": "工学学士在读",
                     "major": "土木工程",
                     "details": "GPA 3.12（专业前15%）"

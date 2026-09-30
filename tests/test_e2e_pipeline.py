@@ -164,12 +164,12 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
     def test_e2e_resume_render_and_autofit(self):
         profile = {
             "candidate": {
-                "name": "范增煜",
+                "name": "张明",
                 "phone": "+86 138-0000-0000",
                 "email": "candidate@example.com",
                 "location": "杭州",
-                "school": "青岛理工大学",
-                "degree": "土木工程 本科在读",
+                "school": "华东理工大学",
+                "degree": "工程管理 本科在读",
                 "edu_time": "2023.09—2027.06",
                 "education_badges": ["GPA 3.12", "前15%"],
                 "courses": "概率论与数理统计、工程经济学、工程项目管理",
@@ -187,7 +187,7 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
             ],
             "projects": [
                 {
-                    "name": "青岛理工大学新媒体中心",
+                    "name": "高校新媒体中心",
                     "role": "编辑部成员",
                     "time": "2023.09—2025.09",
                     "bullets": ["负责校官方公众号内容采编排版，累计输出 15+ 篇推文，建立标准化流程。"],
@@ -198,7 +198,7 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
         # 1. Generate HTML preview with AcademicExporter
         exporter = AcademicExporter()
         html_content = exporter.generate_latex_html_preview(profile, lang="zh")
-        self.assertIn("范增煜", html_content)
+        self.assertIn("张明", html_content)
         self.assertIn("交个朋友", html_content)
 
         # 2. Layout Solver Integration (Underflow expansion + Anti-orphan)
@@ -227,7 +227,7 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
             self.assertEqual(pages, 1, f"Expected 1 page, got {pages}")
 
         # 5. Diff Ledger Traceability
-        ledger = DiffLedger(candidate_name="范增煜", metadata={"target_role": "产品经理实习生"})
+        ledger = DiffLedger(candidate_name="张明", metadata={"target_role": "产品经理实习生"})
         ledger.add_entry(
             category=DiffCategory.ROLE_HIERARCHY,
             field="experience[0].role",
@@ -251,7 +251,7 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
         self.assertTrue(saved_files["markdown"].exists())
         self.assertTrue(saved_files["json"].exists())
         md_text = saved_files["markdown"].read_text(encoding="utf-8")
-        self.assertIn("范增煜", md_text)
+        self.assertIn("张明", md_text)
         self.assertIn("Role Hierarchy", md_text)
 
 
