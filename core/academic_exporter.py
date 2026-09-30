@@ -600,7 +600,7 @@ class AcademicExporter:
         grid = vm.education_grid_rows
         max_cols = max((len(r) for r in grid), default=1)
         if max_cols >= 3:
-            col_template = "38% 28% 1fr"
+            col_template = "42% 34% 1fr"
         elif max_cols == 2:
             col_template = "45% 1fr"
         else:
@@ -611,7 +611,8 @@ class AcademicExporter:
             for i in range(max_cols):
                 cell_text = r[i] if i < len(r) else ""
                 cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                grid_cells_html.append(f'<div>{escape_html_text(cell_clean)}</div>')
+                style_align = ' style="text-align: right;"' if (max_cols >= 3 and i == max_cols - 1 and cell_clean) else ""
+                grid_cells_html.append(f'<div{style_align}>{escape_html_text(cell_clean)}</div>')
 
         degree = vm.raw_degree or ""
         degree_clean = escape_html_text(re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip())
@@ -710,7 +711,7 @@ class AcademicExporter:
   <style>
     @page {{
       size: A4 portrait;
-      margin: 10mm 12mm;
+      margin: 8.5mm 11mm;
     }}
     * {{
       box-sizing: border-box;
@@ -719,8 +720,8 @@ class AcademicExporter:
     }}
     body {{
       font-family: "SimSun", "Songti SC", "Times New Roman", serif;
-      font-size: 10.2pt;
-      line-height: 1.45;
+      font-size: 9.8pt;
+      line-height: 1.40;
       color: #111111;
       background: #FFFFFF;
       -webkit-print-color-adjust: exact;
@@ -730,43 +731,43 @@ class AcademicExporter:
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 8pt;
+      margin-bottom: 5pt;
       border-bottom: 1.2pt solid #1e3a8a;
-      padding-bottom: 6pt;
+      padding-bottom: 4pt;
     }}
     h1 {{
-      font-size: 19pt;
+      font-size: 18pt;
       font-weight: bold;
-      margin: 0 0 3pt 0;
+      margin: 0 0 2pt 0;
     }}
     .contact {{
-      font-size: 10pt;
+      font-size: 9.8pt;
       color: #333333;
     }}
     h2 {{
-      font-size: 11.5pt;
+      font-size: 11pt;
       font-weight: bold;
       color: #1e3a8a;
       border-bottom: 0.8pt solid #1e3a8a;
-      padding-bottom: 2pt;
-      margin-top: 8pt;
-      margin-bottom: 3pt;
+      padding-bottom: 1.5pt;
+      margin-top: 5pt;
+      margin-bottom: 2.5pt;
       text-transform: uppercase;
     }}
     .item-header {{
       display: flex;
       justify-content: space-between;
-      font-size: 10.5pt;
+      font-size: 10pt;
       font-weight: bold;
-      margin-top: 3pt;
+      margin-top: 2.5pt;
     }}
     ul {{
-      margin: 2pt 0 4pt 0;
-      padding-left: 18pt;
+      margin: 1.5pt 0 3pt 0;
+      padding-left: 16pt;
     }}
     li {{
-      font-size: 10pt;
-      margin-bottom: 2pt;
+      font-size: 9.6pt;
+      margin-bottom: 1.5pt;
       text-align: justify;
     }}
   </style>
@@ -823,14 +824,22 @@ class AcademicExporter:
   {table_html}
 """
 
-        html += f"""
+        if grid:
+            html += f"""
+  <h2>教育背景</h2>
+  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2pt; font-size:9.8pt; line-height:1.42; margin-top:2.5pt; margin-bottom:4pt;">
+    <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{school}</div>
+    <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{degree_clean}</div>
+    <div style="font-size: 10.2pt; font-weight: bold; color: #111111; text-align: right;">{edu_time}</div>
+    {"".join(grid_cells_html)}
+  </div>
+"""
+        else:
+            html += f"""
   <h2>教育背景</h2>
   <div class="item-header">
     <span>{school} &nbsp;&nbsp;&nbsp;&nbsp; {degree_clean}</span>
     <span>{edu_time}</span>
-  </div>
-  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3pt; font-size:10pt; color:#333333; line-height:1.45; margin-top:3pt; margin-bottom:5pt;">
-    {"".join(grid_cells_html)}
   </div>
 """
 
