@@ -6,13 +6,34 @@ build-backend = "setuptools.build_meta"
 name = "offerget"
 version = "1.0.0"
 description = "Local-first JD analysis, resume auditing, academic application, and offer strategy toolkit"
+readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "CC-BY-NC-SA-4.0"}
+dependencies = []
 
 [project.optional-dependencies]
-test = ["pytest"]
-render = ["pypdf"]
-dev = ["ruff"]
+test = [
+    "pytest>=7.0.0",
+]
+render = [
+    "pymupdf>=1.20.0",
+    "pypdf>=3.0.0",
+]
+docs = [
+    "python-docx>=0.8.11",
+]
+dev = [
+    "ruff>=0.1.0",
+    "pytest>=7.0.0",
+]
+all = [
+    "pytest>=7.0.0",
+    "pymupdf>=1.20.0",
+    "pypdf>=3.0.0",
+    "python-docx>=0.8.11",
+    "pillow>=9.0.0",
+    "ruff>=0.1.0",
+]
 
 [project.scripts]
 offerget = "cli:main"

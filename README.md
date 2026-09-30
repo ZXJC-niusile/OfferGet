@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Tests-640%2B%20passed%20locally-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-640%2B%20passed%20(E2E%20%2B%20Unit)-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Security-Reversible%20Anonymization-blue.svg" alt="Security">
   <img src="https://img.shields.io/badge/Integrity-Fact%20Verification%20Guard-red.svg" alt="Integrity">
@@ -284,7 +284,13 @@ python cli.py offer counter examples/sample_offer.json \
 OfferGet 采用模块化测试工程，全量单测覆盖各个核心模块，在本地保持 100% 绿灯：
 
 ```bash
-# 运行 OfferGet 全量单元测试套件
+# 运行环境预检与浏览器渲染诊断
+python cli.py doctor
+
+# 运行端到端集成测试套件 (E2E Integration Pipelines)
+python -m pytest tests/test_e2e_pipeline.py -v
+
+# 运行 OfferGet 全量测试套件 (E2E + Unit)
 python -m pytest tests -q
 
 # 运行 ApexResume 独立渲染单测
@@ -297,6 +303,7 @@ python cli.py selftest
 ### 核心测试套件分布
 | 测试套件 | 验证的核心业务逻辑 |
 |:---|:---|
+| **`tests/test_e2e_pipeline.py`** | 🌟 **端到端集成流水线 (E2E Pipelines)**：涵盖工业求职闭环（解码->匹配->ATS->提案->看板->多Offer）、简历微排版与无头渲染、保研合规与导师外联、面试复盘与答辩攻防、CLI 全子命令执行 |
 | **`tests/test_taxonomy_classification.py`** | 6 联工程链路拆解、Owner 表述规范、容差 $\le 0.5\%$ 指标对账、经历膨胀审计与六大岗位族分类 |
 | **`tests/test_evidence_engine.py`** | 证据链不可变模型、比率与变化值校验、开源贡献深度等级划分（Level 0-4）、HTML 审计战报渲染 |
 | **`tests/test_defense_simulator.py`** | Claim-Evidence 证据矩阵生成、3 级拷打烈度递进追问链、100 分制防守评估与 5 步防守速查卡 |

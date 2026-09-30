@@ -63,6 +63,7 @@ from presentation.commands import (
     cmd_resume_build,
     cmd_resume_passthrough,
     cmd_selftest,
+    cmd_doctor,
 )
 
 
@@ -380,6 +381,9 @@ Examples:
     # `offerget selftest`
     subparsers.add_parser("selftest", help="Run comprehensive OfferGet & ApexResume tests")
 
+    # `offerget doctor`
+    subparsers.add_parser("doctor", help="Inspect Python runtime, headless browser, and optional toolkits")
+
     # Store subparser references for help fallback
     parser.subparsers = {
         "jd": jd_parser,
@@ -521,6 +525,8 @@ def main():
             parser.subparsers["baoyan"].print_help()
     elif args.command == "selftest":
         cmd_selftest(args)
+    elif args.command == "doctor":
+        sys.exit(cmd_doctor(args))
     else:
         parser.print_help()
 

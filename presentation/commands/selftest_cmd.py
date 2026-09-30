@@ -33,6 +33,12 @@ def cmd_selftest(args=None):
     print("              OfferGet Unified Environment Self-Test             ")
     print("=" * 68)
     print(f"[1/11] Python Runtime: {sys.version.split()[0]} ({sys.platform})")
+    from ApexResume.core.render import BrowserRenderer
+    diag = BrowserRenderer.diagnose_browser()
+    if diag["found"]:
+        print(f"      ✓ Headless Browser Detected: {diag['browser_path']}")
+    else:
+        print("      ○ Headless Browser: NOT FOUND (Run 'python cli.py doctor' for install guide)")
 
     # 1. Test JD Decoder
     print("[2/11] Testing JD Decoder on sample_ai_jd.txt ...")

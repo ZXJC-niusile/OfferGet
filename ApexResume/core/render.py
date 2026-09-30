@@ -62,11 +62,74 @@ PATH_BINARIES = [
 ]
 
 
+class BrowserNotFoundError(RuntimeError):
+    """Raised when no compatible headless browser (Chrome/Edge/Chromium) is located on the system."""
+    pass
+
+
 class BrowserRenderer:
     """Headless browser controller for rendering HTML to pristine A4 PDF."""
 
     def __init__(self, browser_path: Optional[str] = None):
         self.browser_path = browser_path or self.find_browser()
+
+    @classmethod
+    def get_installation_guide(cls) -> str:
+        """Returns clear, platform-specific installation commands for headless Chromium browsers."""
+        return (
+            "----------------------------------------------------------------------\n"
+            "OfferGet requires Google Chrome, Microsoft Edge, or Chromium to rasterize HTML into A4 PDF.\n\n"
+            "Quick Installation by Platform:\n"
+            "  • Windows (PowerShell): winget install Google.Chrome  -OR-  winget install Microsoft.Edge\n"
+            "  • macOS (Homebrew):    brew install --cask google-chrome\n"
+            "  • Ubuntu / Debian:     sudo apt-get update && sudo apt-get install -y chromium-browser\n"
+            "  • Fedora / RHEL:       sudo dnf install -y chromium\n"
+            "  • Arch Linux:          sudo pacman -S chromium\n\n"
+            "If your browser is already installed in a custom location, configure BROWSER_PATH:\n"
+            "  • Windows (PowerShell): $env:BROWSER_PATH = 'C:\\path\\to\\chrome.exe'\n"
+            "  • Windows (CMD):        set BROWSER_PATH=C:\\path\\to\\chrome.exe\n"
+            "  • Linux / macOS:        export BROWSER_PATH=/path/to/chrome\n"
+            "----------------------------------------------------------------------"
+        )
+
+    @classmethod
+    def diagnose_browser(cls) -> dict:
+        """Inspects environment and candidate locations, returning structured diagnostic details."""
+        platform = "win32" if sys.platform.startswith("win") else sys.platform
+        if platform.startswith("linux"):
+            platform = "linux"
+
+        override = os.environ.get("CHROME_PATH") or os.environ.get("BROWSER_PATH")
+        checked = []
+        found = None
+
+        if override:
+            checked.append(f"ENV(CHROME_PATH/BROWSER_PATH): {override}")
+            if Path(override).exists():
+                found = override
+
+        if not found:
+            for candidate in CANDIDATE_PATHS.get(platform, []):
+                if candidate:
+                    exists = Path(candidate).exists()
+                    checked.append(f"{candidate} [{'FOUND' if exists else 'MISSING'}]")
+                    if exists and not found:
+                        found = candidate
+
+        if not found:
+            for bin_name in PATH_BINARIES:
+                w = shutil.which(bin_name)
+                checked.append(f"PATH({bin_name}): {w or 'NOT_FOUND'}")
+                if w and not found:
+                    found = w
+
+        return {
+            "found": found is not None,
+            "browser_path": found,
+            "platform": platform,
+            "checked_candidates": checked,
+            "installation_guide": cls.get_installation_guide() if not found else "",
+        }
 
     @classmethod
     def find_browser(cls) -> str:
@@ -77,24 +140,13 @@ class BrowserRenderer:
                 return override
             raise FileNotFoundError(f"Configured browser path does not exist: {override}")
 
-        platform = "win32" if sys.platform.startswith("win") else sys.platform
-        if platform.startswith("linux"):
-            platform = "linux"
+        diag = cls.diagnose_browser()
+        if diag["found"] and diag["browser_path"]:
+            return diag["browser_path"]
 
-        # Check candidate paths
-        for candidate in CANDIDATE_PATHS.get(platform, []):
-            if candidate and Path(candidate).exists():
-                return candidate
-
-        # Check PATH binaries
-        for bin_name in PATH_BINARIES:
-            found = shutil.which(bin_name)
-            if found:
-                return found
-
-        raise RuntimeError(
-            "Could not locate Google Chrome, Microsoft Edge, or Chromium. "
-            "Please install Chrome or Edge, or set BROWSER_PATH environment variable."
+        raise BrowserNotFoundError(
+            "Could not locate Google Chrome, Microsoft Edge, or Chromium on this machine.\n\n"
+            + cls.get_installation_guide()
         )
 
     @classmethod

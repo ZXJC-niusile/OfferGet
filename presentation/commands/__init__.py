@@ -45,6 +45,9 @@ from presentation.commands.fact_cmd import (
 from presentation.commands.selftest_cmd import (
     cmd_selftest,
 )
+from presentation.commands.doctor_cmd import (
+    cmd_doctor,
+)
 from presentation.commands.proposal_cmd import (
     cmd_proposal_show,
     cmd_proposal_list,
@@ -93,6 +96,7 @@ __all__ = [
     "cmd_anon_unmask",
     "cmd_anon_profile",
     "cmd_selftest",
+    "cmd_doctor",
     "cmd_proposal_show",
     "cmd_proposal_list",
     "cmd_proposal_accept",
