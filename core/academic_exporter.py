@@ -254,6 +254,13 @@ class AcademicExporter:
             lines.append(r"\end{tabular}")
             lines.append(r"\vspace{2pt}")
 
+        cand_meta = vm.raw_profile.get("candidate", {}) if isinstance(getattr(vm, "raw_profile", None), dict) else {}
+        courses_raw = cand_meta.get("courses") or cand_meta.get("core_courses") or ""
+        if courses_raw:
+            c_label = "Key Coursework" if is_en else "核心课程"
+            c_colon = ": " if is_en else "："
+            lines.append(f"\\noindent \\textbf{{{c_label}{c_colon}}}{escape_latex(str(courses_raw).strip())} \\\\[2pt]")
+
         # 2. Work / Internship Experience
         def format_latex_bullet(text: str) -> str:
             clean = re.sub(r"<strong>(.*?)</strong>", r"**\1**", str(text), flags=re.IGNORECASE)
@@ -848,6 +855,14 @@ class AcademicExporter:
   {table_html}
 """
 
+        cand_meta = vm.raw_profile.get("candidate", {}) if isinstance(getattr(vm, "raw_profile", None), dict) else {}
+        courses_raw = cand_meta.get("courses") or cand_meta.get("core_courses") or ""
+        courses_html = ""
+        c_label = "Key Coursework" if is_en else "核心课程"
+        c_colon = ": " if is_en else "："
+        if courses_raw:
+            courses_html = f'<div style="grid-column: 1 / -1; margin-top: 1.5pt; color: #333333;"><b style="color: #111111;">{c_label}{c_colon}</b>{escape_html_text(str(courses_raw).strip())}</div>'
+
         edu_sec = titles.get("education", "EDUCATION" if is_en else "教育背景")
         if grid:
             html += f"""
@@ -857,15 +872,18 @@ class AcademicExporter:
     <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{degree_clean}</div>
     <div style="font-size: 10.2pt; font-weight: bold; color: #111111; text-align: right;">{edu_time}</div>
     {"".join(grid_cells_html)}
+    {courses_html}
   </div>
 """
         else:
+            courses_line = f'<div style="font-size:9.6pt; color:#333333; margin-top:2pt;"><b style="color:#111111;">{c_label}{c_colon}</b>{escape_html_text(str(courses_raw).strip())}</div>' if courses_raw else ''
             html += f"""
   <h2>{edu_sec}</h2>
   <div class="item-header">
     <span>{school} &nbsp;&nbsp;&nbsp;&nbsp; {degree_clean}</span>
     <span>{edu_time}</span>
   </div>
+  {courses_line}
 """
 
         def format_html_bullet(text: str) -> str:
