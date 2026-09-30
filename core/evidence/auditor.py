@@ -1,6 +1,6 @@
 """
 OfferGet Evidence Auditor.
-Absorbed and expanded from ASu-resume-skills (Apache-2.0).
+OfferGet native evidence auditing and consistency verification engine.
 Synthesizes ProfileContext SSOT evidence, ClaimExtractor, MetricRecalculator,
 and Inflation Patterns to generate self-contained, schema-compliant AuditReports.
 """
@@ -33,7 +33,7 @@ from core.profile_adapter import (
 
 class EvidenceAuditor:
     """
-    Synthesizes SSOT facts and resume claims into structured ASu-compliant audit reports.
+    Synthesizes SSOT facts and resume claims into structured OfferGet audit reports.
     """
 
     def __init__(
@@ -70,7 +70,7 @@ class EvidenceAuditor:
         subject_name: Optional[str] = None,
     ) -> AuditReport:
         """
-        Performs full evidence audit and returns an ASu-compliant AuditReport.
+        Performs full evidence audit and returns a schema-compliant AuditReport.
         """
         now_iso = datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat()
         subject = subject_name or self._resolve_subject_name()

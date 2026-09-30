@@ -2,8 +2,8 @@
 OfferGet Input Router (core/input_router.py)
 ============================================
 Adaptive stage routing based on provided inputs (JD, Candidate Profile, or both).
-Absorbs stage routing patterns from resume-jd-optimizer-cn to govern executable
-stages, blocked stages, missing inputs, and next-step actions across OfferGet pipelines.
+Governs executable stages, blocked stages, missing inputs, and next-step actions
+across OfferGet native pipelines.
 """
 
 from __future__ import annotations

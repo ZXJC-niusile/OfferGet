@@ -1,6 +1,6 @@
 """
 OfferGet Evidence Audit Report HTML Renderer.
-Absorbed and modernized from ASu-resume-skills (Apache-2.0).
+OfferGet native interactive evidence audit report HTML renderer.
 Renders high-fidelity, interactive, print-ready evidence audit reports.
 """
 

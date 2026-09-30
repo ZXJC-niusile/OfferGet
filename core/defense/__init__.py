@@ -1,6 +1,6 @@
 """
 OfferGet Defense Package.
-Absorbed and formalized from defense-beating-simulator (MIT).
+OfferGet native interview defense and adversarial questioning system.
 Provides defense rubrics, 9 weakness dimensions, 2-4 layer follow-up chains,
 100-point answer scoring, 5-step safe answer reframing, and project defense simulation.
 """

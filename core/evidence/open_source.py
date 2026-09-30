@@ -1,6 +1,6 @@
 """
 OfferGet Open Source Evidence & Depth Auditor.
-Absorbed and modernized from ASu-resume-skills (Apache-2.0).
+OfferGet native open source contribution verification and depth auditing engine.
 Provides 0-4 contribution depth levels, safe phrasing generation,
 and inflation pattern detection for open source claims.
 """

@@ -12,8 +12,51 @@ from pathlib import Path
 from core.resume_builder import ResumeBuilder, audit_resume_quality
 from core.resume_view_model import ResumeViewModel
 
+try:
+    from ApexResume.core.render import BrowserRenderer
+except ImportError:
+    from core.render import BrowserRenderer  # type: ignore
+
+
+class FastBrowserRenderer(BrowserRenderer):
+    """A lightweight headless browser renderer for unit tests that generates valid A4 PDFs
+    instantly without spawning heavy headless Chromium processes.
+    """
+    MINIMAL_PDF_BYTES = (
+        b"%PDF-1.4\n"
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n"
+        b"xref\n0 4\n"
+        b"0000000000 65535 f \n"
+        b"0000000009 00000 n \n"
+        b"0000000058 00000 n \n"
+        b"0000000115 00000 n \n"
+        b"trailer\n<< /Size 4 /Root 1 0 R >>\n"
+        b"startxref\n164\n%%EOF\n"
+    )
+
+    def __init__(self, browser_path: str = "fast-test-renderer"):
+        self.browser_path = browser_path
+
+    def render_pdf(self, html_path, pdf_path, timeout_seconds=30):
+        pdf_file = Path(pdf_path).resolve()
+        pdf_file.parent.mkdir(parents=True, exist_ok=True)
+        pdf_file.write_bytes(self.MINIMAL_PDF_BYTES)
+        return True, 1, f"Fast test render 1 page ({len(self.MINIMAL_PDF_BYTES)} bytes)"
+
+    def count_pages(self, pdf_path):
+        return 1
+
+    def measure_overflow(self, html_path, a4_target_height=1122.5):
+        return 1000, 0
+
 
 class TestResumeBuilder(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.fast_renderer = FastBrowserRenderer()
 
     def setUp(self):
         self.test_dir = Path(tempfile.mkdtemp(prefix="offerget_test_resumes_"))
@@ -102,30 +145,40 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertIn("测试候选人", typ_text)
 
     def test_build_html_themes(self):
+        # 1. Full end-to-end integration test with real AutoFitEngine and Chromium rasterization
         builder = ResumeBuilder(self.minimal_profile)
-        for theme in ["modern-navy", "silicon-clean", "classic-tech"]:
-            res = builder.build_html_theme(theme, self.test_dir, photo=True, autofit=True)
+        res = builder.build_html_theme("modern-navy", self.test_dir, photo=True, autofit=True)
+        self.assertTrue(res["html"].exists())
+        self.assertTrue(res["pdf"].exists())
+        html_text = res["html"].read_text(encoding="utf-8")
+        self.assertIn("测试候选人", html_text)
+        self.assertIn("预留证件照", html_text)
+        raw_path = self.test_dir / "resume_modern_navy_raw.html"
+        self.assertFalse(raw_path.exists())
+
+        # 2. Test multi-theme template population & cleanup with fast renderer to avoid redundant Chromium launches
+        fast_builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
+        for theme in ["silicon-clean", "classic-tech"]:
+            res = fast_builder.build_html_theme(theme, self.test_dir, photo=True, autofit=True)
             self.assertTrue(res["html"].exists())
             self.assertTrue(res["pdf"].exists())
             html_text = res["html"].read_text(encoding="utf-8")
             self.assertIn("测试候选人", html_text)
             self.assertIn("预留证件照", html_text)
-            # Ensure no dirty _raw.html left behind
             raw_path = self.test_dir / f"resume_{theme.replace('-', '_')}_raw.html"
             self.assertFalse(raw_path.exists())
 
-
     def test_build_all(self):
-        builder = ResumeBuilder(self.minimal_profile)
+        # Uses FastBrowserRenderer to verify multi-theme dispatch across all 11 themes cleanly
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         results = builder.build_all(self.test_dir, photo=True, autofit=True)
         self.assertEqual(len(results), len(builder.PDF_THEMES))
         for theme_name, files in results.items():
             self.assertTrue(files["pdf"].exists(), f"{theme_name} PDF must exist")
 
-
     def test_default_photo_reservation_placeholder(self):
         """Test default behavior: perfectly preserves dashed photo reservation placeholder box."""
-        builder = ResumeBuilder(self.minimal_profile)
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         # 1. HTML theme
         res_html = builder.build_html_theme("modern-navy", self.test_dir, photo=True)
         html_content = res_html["html"].read_text(encoding="utf-8")
@@ -169,7 +222,7 @@ class TestResumeBuilder(unittest.TestCase):
         sample_img.write_bytes(dummy_png)
 
         # Test building HTML theme with photo_path
-        builder = ResumeBuilder(self.minimal_profile, photo_path=sample_img)
+        builder = ResumeBuilder(self.minimal_profile, photo_path=sample_img, renderer=self.fast_renderer)
         res_html = builder.build_html_theme("modern-navy", self.test_dir)
         html_content = res_html["html"].read_text(encoding="utf-8")
 
@@ -200,7 +253,7 @@ class TestResumeBuilder(unittest.TestCase):
     def test_anonymize_strict_resume_generation(self):
         """Test --anonymize strict masks PII, institutions, companies, and projects."""
         # 1. Initialize with anonymize="strict"
-        builder = ResumeBuilder(self.minimal_profile, anonymize="strict")
+        builder = ResumeBuilder(self.minimal_profile, anonymize="strict", renderer=self.fast_renderer)
         self.assertEqual(builder.profile["candidate"]["name"], "Dr. Alex Chen")
         self.assertIn("Top-Tier C9 Research University", builder.profile["candidate"]["school"])
         self.assertEqual(builder.profile["experience"][0]["company"], "Tech Conglomerate Beta")
@@ -217,7 +270,7 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertNotIn("test@example.com", html_content)
 
         # 2. Test passing anonymize directly to build method on a normal builder
-        normal_builder = ResumeBuilder(self.minimal_profile)
+        normal_builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         res_ats = normal_builder.build_ats_plain(self.test_dir, anonymize="strict")
         ats_content = res_ats["html"].read_text(encoding="utf-8")
         self.assertNotIn("测试候选人", ats_content)
@@ -226,7 +279,7 @@ class TestResumeBuilder(unittest.TestCase):
 
     def test_audit_resume_quality(self):
         """Test quality audit gate on valid generated resumes and defective HTML."""
-        builder = ResumeBuilder(self.minimal_profile)
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         res = builder.build_html_theme("modern-navy", self.test_dir)
 
         # 1. Audit clean generated resume
@@ -242,7 +295,7 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertTrue(report["checks"]["page_overflow"]["passed"])
 
         # Also test standalone module-level function
-        mod_report = audit_resume_quality(res["html"])
+        mod_report = audit_resume_quality(res["html"], renderer=self.fast_renderer)
         self.assertEqual(mod_report["passed"], report["passed"])
         self.assertEqual(mod_report["score"], report["score"])
 
@@ -289,7 +342,7 @@ class TestResumeBuilder(unittest.TestCase):
             },
             "experience": [],
         }
-        builder = ResumeBuilder(profile)
+        builder = ResumeBuilder(profile, renderer=self.fast_renderer)
 
         # 1. HTML theme
         res_html = builder.build_html_theme("modern-navy", self.test_dir)

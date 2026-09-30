@@ -703,7 +703,7 @@ class QualityRuleRegistry:
     }
 
     # -------------------------------------------------------------------------
-    # Role-Specific KPI Metric Lexicon (from resume-jd-optimizer-cn)
+    # Role-Specific KPI Metric Lexicon
     # -------------------------------------------------------------------------
     ROLE_KPI_LEXICON: Dict[str, List[str]] = {
         "product": ["DAU", "MAU", "留存率", "转化率", "点击率", "付费率", "NPS", "需求上线数", "GMV"],

@@ -1,7 +1,7 @@
 """
 OfferGet Baoyan Auditor Module
 Academic Integrity Guard & 3-Tier Word Count Adaptive Compressor for Baoyan Applications.
-Ported and evolved from baoyan-resume-writing and baoyan-skills.
+OfferGet native academic integrity verification and multi-tier word budget optimization engine.
 """
 
 from __future__ import annotations

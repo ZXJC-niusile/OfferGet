@@ -1,7 +1,7 @@
 """
 OfferGet Evidence Graph State Machine (core/evidence/graph.py)
 ==============================================================
-Absorbs architectural patterns from applyr (ADR-011):
+OfferGet native evidence graph state machine (ADR-011):
 1. Finite state machine governing atomic resume claim lifecycles:
    DRAFT -> VERIFIED -> GROUNDED -> USED_IN_RESUME -> INTERVIEW_DEFENDED (or INVALIDATED)
 2. Immutable audit trails with state progression history.

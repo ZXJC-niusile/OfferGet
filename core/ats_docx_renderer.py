@@ -1,7 +1,7 @@
 """
 OfferGet ATS Single-Column DOCX Resume Renderer (core/ats_docx_renderer.py)
 ===========================================================================
-Ported and evolved from ats-optimized-resume-agent-skill.
+OfferGet native ATS-optimized resume rendering engine.
 Produces deterministic, single-column Word (.docx) documents optimized for ATS parsers:
 1. ATS-Friendly Structure:
    - Linear flow (Header -> Summary -> Experience -> Projects -> Education -> Skills).

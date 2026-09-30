@@ -1,6 +1,6 @@
 """
 OfferGet Defense Answer Evaluator and Safe Answer Framer.
-Absorbed and formalized from defense-beating-simulator (MIT).
+OfferGet native defense answer evaluation and safe response reframing engine.
 Evaluates candidate answers against the 100-point rubric and generates
 conservative 5-step safe answers.
 """

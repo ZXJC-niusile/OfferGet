@@ -1529,7 +1529,7 @@ class FactVerificationGuard:
         subject_name: Optional[str] = None,
     ) -> Any:
         """
-        Audits resume text or dictionary into an ASu-compliant typed AuditReport.
+        Audits resume text or dictionary into a schema-compliant typed AuditReport.
         Reuses existing SSOT profile / ProfileContext without secondary normalization.
         """
         from core.evidence.auditor import EvidenceAuditor
@@ -1544,7 +1544,7 @@ class FactVerificationGuard:
     ) -> Dict[str, Any]:
         """
         Audits resume text or dictionary and returns a JSON-serializable report dictionary
-        strictly complying with ASu report-schema.md.
+        strictly complying with OfferGet report schema.
         """
         report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
         return report.to_dict()
@@ -1618,7 +1618,7 @@ def audit_resume_evidence(
     subject_name: Optional[str] = None,
 ) -> dict:
     """
-    Convenience function to generate an ASu-compliant evidence audit report.
+    Convenience function to generate a schema-compliant evidence audit report.
 
     Args:
         tailored_text_or_dict: Resume text, list of bullets, or resume profile dictionary.
@@ -1626,7 +1626,7 @@ def audit_resume_evidence(
         subject_name: Optional subject candidate name.
 
     Returns:
-        dict with ASu report-schema.md compliant audit report.
+        dict with OfferGet schema-compliant audit report.
     """
     guard = FactVerificationGuard(master_profile)
     return guard.generate_audit_report(tailored_text_or_dict, subject_name=subject_name)

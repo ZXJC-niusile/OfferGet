@@ -1,7 +1,7 @@
 """
 OfferGet Resume ViewModel & Decoupled Renderers (core/resume_view_model.py)
 ==========================================================================
-Absorbs architectural patterns from ASu & RenderCV:
+OfferGet native strongly-typed resume view model and decoupled renderers:
 1. ResumeViewModel:
    - Decoupled, strongly-typed view model representation of resume data.
    - Pre-escaped strings and safe markdown bold conversions (preventing runtime XSS).

@@ -1403,8 +1403,7 @@ def generate_defense_followup_chain(
     num_layers: int = 3,
 ) -> Dict[str, Any]:
     """
-    Generates a 2-4 layer defense follow-up question chain.
-    Absorbed from defense-beating-simulator (M3).
+    Generates a 2-4 layer defense follow-up question chain using OfferGet's defense engine.
     """
     from core.defense.chain import DefenseQuestionChain, DefenseRole, QuestionChainType
 

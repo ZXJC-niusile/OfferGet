@@ -1,6 +1,6 @@
 """
 OfferGet Evidence Metric Recalculator.
-Absorbed and verified from ASu-resume-skills (Apache-2.0).
+OfferGet native numerical recalculation and metric verification engine.
 Provides deterministic numerical recalculation for:
   - Ratio consistency: numerator / denominator * 100 == displayed_percent (+-0.5)
   - Relative change: (result - baseline) / baseline * 100 == displayed_change (+-0.5)
@@ -54,7 +54,7 @@ class MetricRecalculator:
         if den == 0:
             return MetricValidationResult(
                 is_valid=False,
-                error_message="指标字段无法计算",  # ASu-compatible message
+                error_message="指标字段无法计算",  # Standard error message
                 tolerance=tolerance,
             )
 
@@ -136,7 +136,7 @@ class MetricRecalculator:
     @classmethod
     def validate_metric(cls, metric: Dict[str, Any], claim_id: str = "<无编号>") -> List[str]:
         """
-        Validates a metric dictionary strictly according to ASu validation rules.
+        Validates a metric dictionary strictly according to OfferGet validation rules.
         Returns list of error messages.
         """
         errors: List[str] = []

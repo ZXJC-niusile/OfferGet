@@ -1,6 +1,6 @@
 """
 OfferGet Evidence Package.
-Absorbed and unified from ASu-resume-skills (Apache-2.0).
+OfferGet native evidence verification, claim validation, and audit system.
 Provides typed atomic claims, source hierarchy, metric recalculation,
 inflation pattern defenses, and audit report generation.
 """

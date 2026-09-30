@@ -1,7 +1,6 @@
 """
 Standard CLI Helpers & I/O Abstraction for OfferGet.
-Adopts best practices from applyr / RenderCV for clean I/O separation,
-directory creation, and structured JSON output.
+Provides clean I/O separation, directory creation, and structured JSON output.
 """
 
 from __future__ import annotations

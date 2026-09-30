@@ -1,8 +1,7 @@
 """
 OfferGet Evidence Audit Models.
-Absorbed and expanded from ASu-resume-skills (Apache-2.0).
 Provides typed atomic claims, source hierarchy, metric checks, inflation patterns,
-and audit report models strictly compatible with ASu report-schema.md.
+and audit report data models conforming to OfferGet evidence specifications.
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional, Set
 
 
-# Allowed string literals strictly matching ASu report schema
+# Allowed string literals matching OfferGet report schema
 ALLOWED_STATUSES: Set[str] = {
     "corroborated",
     "partially_corroborated",
@@ -268,7 +267,7 @@ class AuditTimelineItem:
 @dataclass
 class AuditReport:
     """
-    Full audit report data model matching ASu report-schema.md.
+    Full audit report data model conforming to OfferGet report schema.
     """
     metadata: Dict[str, Any] = field(default_factory=lambda: {
         "title": "简历主张真实性审计",

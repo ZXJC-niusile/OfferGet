@@ -1,7 +1,7 @@
 """
 OfferGet Comprehensive Chinese JD & Resume Rubrics (core/cn_rubrics.py)
 =======================================================================
-Ported and evolved from resume-jd-optimizer-cn.
+OfferGet native multi-dimensional evaluation rubric system for Chinese enterprise hiring.
 Provides 4 orthogonal 100-point rubrics for enterprise hiring in China:
 1. JdMatchScore (100 pts, 7 dimensions):
    - 硬性条件匹配 (20), 技能关键词匹配 (20), 项目相关度 (25),

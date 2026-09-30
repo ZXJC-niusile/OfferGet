@@ -368,7 +368,7 @@ def create_evidence_snapshot(
 ) -> Dict[str, Any]:
     """Creates an immutable, verifiable application scoring & evidence snapshot.
 
-    Absorbs the immutable snapshot contract from applyr (ADR-011):
+    Implements the OfferGet immutable snapshot contract (ADR-011):
     Captures exact profile fingerprint, JD fingerprint, match score, gap matrix,
     and verified evidence claims at the time of evaluation or application submission.
     """

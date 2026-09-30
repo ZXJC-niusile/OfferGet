@@ -2,7 +2,7 @@
 name: offerget
 description: Industrial-grade Job Description Decoding, Candidate Matching, ATS Quality Gate, Three-State Skill Ledger, and Offer Strategy OS.
 allowed-tools: Read Write Edit Bash Glob Grep WebSearch WebFetch
-license: MIT
+license: CC-BY-NC-SA-4.0
 ---
 
 # OfferGet · 轻量求职 Agent 与战略操作系统 (Offer Strategy OS)
@@ -70,7 +70,7 @@ $$\text{岗位 JD 拆解} \longrightarrow \text{基于真实事实的简历建�
   - 目标职级预期（P7/P8、L5/L6、Staff/Principal Engineer）
 
 #### 1.2 5 图层纵向语义拆解引擎 (5-Layer Decoding)
-调用 `modules/jd_analyst/decoder.py` 进行规范化拆解；`core/jd_decoder.py` 仅保留历史 CLI 的兼容包装：
+调用 `core/jd_analyst/decoder.py` 进行规范化拆解；`core/jd_decoder.py` 仅保留历史 CLI 的兼容包装：
 1. **Layer 1: 组织坐标与业务护城河 (Organization & Business Moat)**：
    - 研判团队是“核心战略造核骨干”还是“外围探索/边缘试水”。
    - 解析部门核心考核 KPI 是商业变现（ROI）、模型打榜，还是基建降本。

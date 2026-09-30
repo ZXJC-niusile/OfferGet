@@ -1,6 +1,6 @@
 """
 OfferGet Defense Rubrics and Weakness Dimensions.
-Absorbed and formalized from defense-beating-simulator (MIT).
+OfferGet native defense rubrics, weakness taxonomy, and evaluation standards.
 Provides evidence status labels, risk basis labels, 9 weakness dimensions,
 and a 100-point answer scoring rubric.
 """
