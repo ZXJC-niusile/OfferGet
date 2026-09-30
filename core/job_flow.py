@@ -43,16 +43,16 @@ from core.profile_adapter import (
 from core.evidence.graph import EvidenceGraph, EvidenceNodeState
 from core.application_tracker import create_evidence_snapshot
 from core.material_proposal import create_material_proposal
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.models import (
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.models import (
     CandidateProfile,
     DecodedJD,
     GapState,
     MatcherResult,
     QuestionCategory,
 )
-from modules.jd_analyst.predictor import JDPredictor
+from core.jd_analyst.predictor import JDPredictor
 
 
 def build_candidate_profile(profile_dict: Union[Dict[str, Any], ProfileContext]) -> CandidateProfile:

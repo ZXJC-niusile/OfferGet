@@ -18,9 +18,9 @@ from core.profile_adapter import (
     normalize_candidate_profile,
 )
 from core.registry import TaxonomyRegistry
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.models import (
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.models import (
     BusinessPainPoint,
     CandidateProfile,
     CoreResponsibility,
@@ -31,7 +31,7 @@ from modules.jd_analyst.models import (
     MatcherResult,
     SkillImportance,
 )
-from modules.jd_analyst.predictor import InterviewProbabilityCalculator
+from core.jd_analyst.predictor import InterviewProbabilityCalculator
 
 ROLE_TAXONOMIES: Dict[str, Dict[str, Any]] = TaxonomyRegistry.list_taxonomies()
 
@@ -418,14 +418,20 @@ def to_canonical(decoded: Any) -> DecodedJD:
 
 
 match_profile_to_jd = match_legacy
+decode_jd = decode_legacy
+classify_jd_role_taxonomy = classify_role_taxonomy
+TECH_ROLE_TAXONOMY = ROLE_TAXONOMIES
 
 __all__ = [
     "to_canonical",
     "DecodedJDCompat",
     "ROLE_TAXONOMIES",
+    "TECH_ROLE_TAXONOMY",
     "classify_role_taxonomy",
+    "classify_jd_role_taxonomy",
     "canonical_to_legacy",
     "decode_legacy",
+    "decode_jd",
     "profile_to_canonical",
     "matcher_to_legacy",
     "match_legacy",

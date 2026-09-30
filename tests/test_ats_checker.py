@@ -24,7 +24,7 @@ from core.ats_checker import (
     is_bullet_quantified,
     find_action_verbs
 )
-from core.jd_decoder import decode_jd
+from core.jd_compat import decode_jd
 
 
 class TestATSAuditor(unittest.TestCase):

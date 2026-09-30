@@ -16,7 +16,7 @@ from pathlib import Path
 # Step 1 imports
 from core.profile_adapter import ProfileContext, build_profile_context
 from core.advisor_matcher import AdvisorMatcher, CandidateProfile as AdvisorCandidateProfile
-from modules.jd_analyst.models import CandidateProfile as AnalystCandidateProfile
+from core.jd_analyst.models import CandidateProfile as AnalystCandidateProfile
 from core.resume_view_model import ResumeViewModel
 
 # Step 2 imports

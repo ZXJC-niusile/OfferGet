@@ -22,9 +22,9 @@ class MatchService:
         strict_gate: bool = False,
     ) -> Dict[str, Any]:
         """Matches profile or ProfileContext against decoded JD using canonical matcher and returns compatibility view."""
-        import core.services as facade
+        from core.jd_compat import match_legacy
 
-        return facade.match_legacy(jd_compat, profile_data, strict_gate=strict_gate)
+        return match_legacy(jd_compat, profile_data, strict_gate=strict_gate)
 
     def calculate_gap_roi(
         self,

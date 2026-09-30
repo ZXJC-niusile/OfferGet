@@ -63,7 +63,7 @@
 
 ## ⚡ 核心能力与关键模块详解
 
-### 1. 5 图层 JD 穿透解码与标准岗位族图谱 (`modules/jd_analyst/` & `core/jd_decoder.py`)
+### 1. 5 图层 JD 穿透解码与标准岗位族图谱 (`core/jd_analyst/` & `core/jd_compat.py`)
 - **5 图层纵向语义穿透**：将一段非结构化岗位描述自顶向下拆解为：
   1. `Base Profile`：岗位基础属性、层级、Base 地点；
   2. `Hard Thresholds`：学历、专业、年限、强制技术项等物理红线；
@@ -97,7 +97,7 @@
 - **5 步防守型应答框架**：`[正面回应] -> [实际实现] -> [边界与局限] -> [原因说明] -> [改进规划]`，彻底杜绝虚假自夸。
 - **面试实录长文本切分与 (N+1) 面清单**：输入面试录音转录或文本记录，自动识别问答轮次，进行盲区诊断，输出薄弱项安全应答应急预案。
 
-### 5. 保研推免学术审查与导师外联决策 (`core/baoyan_*.py` & `core/advisor_matcher.py`)
+### 5. 保研推免学术审查与材料套件工程 (`core/baoyan_pipeline.py` & `core/advisor_matcher.py`)
 - **4 大学术诚信红线**：
   1. 仿真模拟混充真实物理系统落地；
   2. 论文在投阶段虚报为录用/发表；
@@ -300,7 +300,7 @@ python cli.py selftest
 | **`tests/test_defense_simulator.py`** | Claim-Evidence 证据矩阵生成、3 级拷打烈度递进追问链、100 分制防守评估与 5 步防守速查卡 |
 | **`tests/test_application_tracker.py`** | 证据图单调状态机、不可变指纹快照、SQLite 数据库模式迁移（v1-v7）、投递结果反馈与简历版本元数据审计 |
 | **`tests/test_offer_matrix.py`** | 多 Offer 真实时薪折算模型（年终折损率、通勤扣减、公积金比例）、6 大合同陷阱雷达与证据门禁博弈脚本 |
-| **`tests/test_baoyan_*.py`** | 保研学术诚信 4 大红线、3 级自适应字数压缩、夏令营 21 项物料合规清单与全生命周期状态机 |
+| **`tests/test_baoyan_pipeline.py`** | 保研学术诚信 4 大红线、3 级自适应字数压缩、夏令营 21 项物料合规清单、材料套件构建与全生命周期状态机 |
 | **`tests/test_advisor_matcher.py`** | 导师研究范式跃迁提取、候选人技术交集加权计算、防鸽承诺矩阵与高情商自荐信 |
 | **`tests/test_ats_checker.py`** | ATS 机器可读性四维打分、三态技能台账（Verified/Claimed/Gap）、排版合规门禁 |
 | **`tests/test_fact_guard.py`** | 事实防伪守护、经历级别作用域锚定、未佐证指标拦截与零漂移保真 |

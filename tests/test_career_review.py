@@ -36,10 +36,10 @@ from core.job_flow import (
 )
 from core.fact_guard import FactVerificationGuard
 from core.profile_adapter import iter_profile_claims
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.reporter import OfferStrategyReporter
-from modules.jd_analyst.predictor import JDPredictor
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.reporter import OfferStrategyReporter
+from core.jd_analyst.predictor import JDPredictor
 
 
 class TestCareerReviewPipeline(unittest.TestCase):
@@ -196,7 +196,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
         matcher_result = matcher.match(decoded_jd, cand)
         reporter = OfferStrategyReporter()
         pred = JDPredictor().predict(decoded_jd, matcher_result)
-        from modules.jd_analyst.models import RedFlagReport
+        from core.jd_analyst.models import RedFlagReport
         redflags = RedFlagReport()
 
         html_out = reporter.generate_html(decoded_jd, cand, matcher_result, redflags, pred)
@@ -776,9 +776,9 @@ class TestCareerReviewPipeline(unittest.TestCase):
 
     def test_26_targeted_questions_role_adaptation_and_no_name_as_project(self):
         """Test Q1 adapts to non-engineering roles and Q2 does not quote candidate name/degree as project."""
-        from modules.jd_analyst.decoder import JDDecoder
-        from modules.jd_analyst.matcher import JDMatcher
-        from modules.jd_analyst.predictor import JDPredictor
+        from core.jd_analyst.decoder import JDDecoder
+        from core.jd_analyst.matcher import JDMatcher
+        from core.jd_analyst.predictor import JDPredictor
         from core.profile_adapter import build_profile_context
         from core.job_flow import select_targeted_interview_questions
 

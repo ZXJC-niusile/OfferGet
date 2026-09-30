@@ -18,7 +18,7 @@ from core.jd_compat import (
     profile_to_canonical,
     to_canonical,
 )
-from modules.jd_analyst.models import CandidateProfile
+from core.jd_analyst.models import CandidateProfile
 
 
 class TestJDCompat(unittest.TestCase):
@@ -109,7 +109,7 @@ class TestJDCompat(unittest.TestCase):
     def test_06_decoded_jd_compat_contract(self):
         """Test DecodedJDCompat carries canonical object and remains JSON-serializable dict."""
         from core.jd_compat import DecodedJDCompat
-        from modules.jd_analyst.models import DecodedJD
+        from core.jd_analyst.models import DecodedJD
 
         decoded = decode_legacy(self.jd_text)
         self.assertIsInstance(decoded, DecodedJDCompat)
@@ -124,7 +124,7 @@ class TestJDCompat(unittest.TestCase):
 
     def test_07_to_canonical_all_types(self):
         """Test to_canonical handles DecodedJDCompat, DecodedJD, plain dict, and rejects invalid types."""
-        from modules.jd_analyst.models import DecodedJD
+        from core.jd_analyst.models import DecodedJD
         from core.jd_compat import DecodedJDCompat
 
         # 1. From DecodedJDCompat

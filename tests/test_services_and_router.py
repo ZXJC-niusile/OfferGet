@@ -24,7 +24,7 @@ from core.services import (
     OfferService,
     ReportService,
 )
-from modules.jd_analyst.models import DecodedJD
+from core.jd_analyst.models import DecodedJD
 
 
 class TestInputRouter(unittest.TestCase):

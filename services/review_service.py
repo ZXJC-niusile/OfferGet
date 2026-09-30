@@ -33,13 +33,13 @@ class CareerReviewService:
         elif isinstance(jd_text, Path):
             raw_jd = jd_text.read_text(encoding="utf-8")
         else:
-            import core.services as facade
+            from core.cli_helpers import read_text
 
-            raw_jd = facade.read_text(str(jd_text or ""))
+            raw_jd = read_text(str(jd_text or ""))
 
-        import core.services as facade
+        from core.job_flow import run_career_review
 
-        return facade.run_career_review(
+        return run_career_review(
             jd_text=raw_jd,
             profile_dict=profile_dict,
             answers_dict=answers_dict,
@@ -66,12 +66,12 @@ class CareerReviewService:
         elif isinstance(jd_text, Path):
             raw_jd = jd_text.read_text(encoding="utf-8")
         else:
-            import core.services as facade
+            from core.cli_helpers import read_text
 
-            raw_jd = facade.read_text(str(jd_text or ""))
-        import core.services as facade
+            raw_jd = read_text(str(jd_text or ""))
+        from core.job_flow import create_review_session
 
-        return facade.create_review_session(
+        return create_review_session(
             raw_jd, profile_dict, review_result, base_session=base_session, **kwargs
         )
 
@@ -81,21 +81,21 @@ class CareerReviewService:
         incoming_answers: Dict[str, Any],
     ) -> Tuple[bool, List[str]]:
         """Validates incoming answers against the session's question snapshot."""
-        import core.services as facade
+        from core.job_flow import validate_session_answers
 
-        return facade.validate_session_answers(session, incoming_answers)
+        return validate_session_answers(session, incoming_answers)
 
     def save_session(self, session: Dict[str, Any], output_path: Union[str, Path]) -> None:
         """Atomically saves review session JSON."""
-        import core.services as facade
+        from core.job_flow import save_review_session
 
-        facade.save_review_session(session, output_path)
+        save_review_session(session, output_path)
 
     def load_session(self, session_path: Union[str, Path]) -> Dict[str, Any]:
         """Loads review session JSON."""
-        import core.services as facade
+        from core.job_flow import load_review_session
 
-        return facade.load_review_session(session_path)
+        return load_review_session(session_path)
 
     def score_rubrics(
         self,
@@ -106,8 +106,8 @@ class CareerReviewService:
         """Evaluates Chinese recruitment rubrics (JD match, Credibility, HR Screen, Interview Readiness)."""
         from core.cn_rubrics import ComprehensiveRubricScorer
         from core.jd_compat import profile_to_canonical, to_canonical
-        from modules.jd_analyst.models import CandidateProfile, DecodedJD
-        from modules.jd_analyst.matcher import JDMatcher
+        from core.jd_analyst.models import CandidateProfile, DecodedJD
+        from core.jd_analyst.matcher import JDMatcher
 
         if isinstance(profile_data, CandidateProfile):
             candidate = profile_data

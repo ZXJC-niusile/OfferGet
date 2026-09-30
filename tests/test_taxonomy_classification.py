@@ -14,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from core.asu_modeler import AsuModeler, AuditRiskLevel, ChangeType
-from core.jd_decoder import classify_jd_role_taxonomy, decode_jd
+from core.jd_compat import classify_jd_role_taxonomy, decode_jd
 
 
 @pytest.fixture

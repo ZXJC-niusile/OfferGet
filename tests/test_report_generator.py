@@ -24,7 +24,7 @@ from core.report_generator import (
 )
 from core.security_gate import validate_output_security
 from core.validator import validate_bilingual_html
-from modules.jd_analyst.models import (
+from core.jd_analyst.models import (
     BusinessPainPoint,
     CandidateProfile,
     CoreResponsibility,
@@ -39,9 +39,9 @@ from modules.jd_analyst.models import (
     RedFlagReport,
     RedFlagType,
 )
-from modules.jd_analyst.predictor import JDPredictor
-from modules.jd_analyst.reporter import OfferStrategyReporter
-from modules.jd_analyst import analyze_jd
+from core.jd_analyst.predictor import JDPredictor
+from core.jd_analyst.reporter import OfferStrategyReporter
+from core.jd_analyst import analyze_jd
 
 
 class TestReportGenerator(unittest.TestCase):

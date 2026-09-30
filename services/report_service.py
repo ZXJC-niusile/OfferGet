@@ -22,7 +22,7 @@ class ReportService:
     @property
     def canonical_reporter(self) -> Any:
         if self._canonical_reporter is None:
-            from modules.jd_analyst.reporter import OfferStrategyReporter
+            from core.jd_analyst.reporter import OfferStrategyReporter
 
             self._canonical_reporter = OfferStrategyReporter()
         return self._canonical_reporter

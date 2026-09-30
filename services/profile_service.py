@@ -17,15 +17,15 @@ class ProfileService:
 
     def normalize(self, profile_data: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
         """Normalizes candidate profile into standard SSOT schema."""
-        import core.services as facade
+        from core.profile_adapter import normalize_candidate_profile
 
-        return facade.normalize_candidate_profile(profile_data)
+        return normalize_candidate_profile(profile_data)
 
     def get_context(self, profile_data: Union[Dict[str, Any], ProfileContext]) -> ProfileContext:
         """Constructs or returns a unified, immutable ProfileContext from candidate profile without cross-call caching."""
-        import core.services as facade
+        from core.profile_adapter import build_profile_context
 
-        return facade.build_profile_context(profile_data)
+        return build_profile_context(profile_data)
 
     def get_evidence_index(
         self, profile_data: Union[Dict[str, Any], ProfileContext, ProfileEvidenceIndex]
@@ -35,9 +35,9 @@ class ProfileService:
             return profile_data
         if isinstance(profile_data, ProfileContext):
             return profile_data.evidence_index
-        import core.services as facade
+        from core.profile_adapter import build_profile_evidence_index
 
-        return facade.build_profile_evidence_index(profile_data)
+        return build_profile_evidence_index(profile_data)
 
     def extract_claims(
         self, profile_data: Union[Dict[str, Any], ProfileContext, ProfileEvidenceIndex]
@@ -48,9 +48,9 @@ class ProfileService:
         if isinstance(profile_data, ProfileContext):
             return list(profile_data.claims)
         normalized = self.normalize(profile_data)
-        import core.services as facade
+        from core.profile_adapter import iter_profile_claims
 
-        return facade.iter_profile_claims(normalized)
+        return iter_profile_claims(normalized)
 
     def audit_ats(
         self,

@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from modules.jd_analyst.models import CandidateProfile, DecodedJD, MatcherResult
+from core.jd_analyst.models import CandidateProfile, DecodedJD, MatcherResult
 from core.registry import MetricPatternRegistry, QualityRuleRegistry
 
 

@@ -34,8 +34,8 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "ResumeBuilder": ("core.resume_builder", "ResumeBuilder"),
     "audit_resume_quality": ("core.resume_builder", "audit_resume_quality"),
 
-    # core.jd_decoder
-    "decode_jd": ("core.jd_decoder", "decode_jd"),
+    # core.jd_compat
+    "decode_jd": ("core.jd_compat", "decode_jd"),
 
     # core.jd_compat
     "match_profile_to_jd": ("core.jd_compat", "match_profile_to_jd"),

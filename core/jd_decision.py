@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from modules.jd_analyst.models import (
+from core.jd_analyst.models import (
     CandidateProfile,
     ChannelProbability,
     ChannelType,
@@ -22,8 +22,8 @@ from modules.jd_analyst.models import (
     MatcherResult,
     ProbabilityForecast,
 )
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.predictor import InterviewProbabilityCalculator
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.predictor import InterviewProbabilityCalculator
 
 
 class UnverifiedJDPipelineError(ValueError):

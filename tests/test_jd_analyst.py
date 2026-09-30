@@ -14,9 +14,9 @@ OFFERGET_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if OFFERGET_ROOT not in sys.path:
     sys.path.insert(0, OFFERGET_ROOT)
 
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.models import (
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.models import (
     BusinessPainPoint,
     CandidateProfile,
     ChannelType,
@@ -35,12 +35,12 @@ from modules.jd_analyst.models import (
     SkillImportance,
     TechDomain,
 )
-from modules.jd_analyst.predictor import (
+from core.jd_analyst.predictor import (
     InterviewProbabilityCalculator,
     InterviewTop20Predictor,
     JDPredictor,
 )
-from modules.jd_analyst.redflags import RedFlagDetector
+from core.jd_analyst.redflags import RedFlagDetector
 from core.gap_roi import SkillGapROIEngine, calculate_gap_roi
 
 

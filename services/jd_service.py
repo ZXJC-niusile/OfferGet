@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, Union
 
 from core.jd_compat import DecodedJDCompat
 from core.cli_helpers import read_text
-from modules.jd_analyst.models import DecodedJD
+from core.jd_analyst.models import DecodedJD
 
 
 class JDService:
@@ -20,24 +20,22 @@ class JDService:
     def decode_jd(self, jd_text_or_path: Union[str, Path]) -> DecodedJDCompat:
         """Decodes JD text or file path into a DecodedJDCompat dictionary view."""
         text = self._read_text_or_path(jd_text_or_path)
-        # Resolve through the legacy facade at call time so existing
-        # integrations that patch core.services.decode_legacy keep working.
-        import core.services as facade
+        from core.jd_compat import decode_legacy
 
-        return facade.decode_legacy(text)
+        return decode_legacy(text)
 
     def to_canonical(self, decoded: Any) -> DecodedJD:
         """Converts legacy or compat decoded JD to canonical DecodedJD dataclass."""
-        import core.services as facade
+        from core.jd_compat import to_canonical
 
-        return facade.to_canonical(decoded)
+        return to_canonical(decoded)
 
     def classify_taxonomy(self, jd_text_or_path: Union[str, Path]) -> Dict[str, Any]:
         """Classifies role taxonomy keywords and dimensions."""
         text = self._read_text_or_path(jd_text_or_path)
-        import core.services as facade
+        from core.jd_compat import classify_role_taxonomy
 
-        return facade.classify_role_taxonomy(text)
+        return classify_role_taxonomy(text)
 
     def evaluate_should_i_apply(
         self,
@@ -48,7 +46,7 @@ class JDService:
         """Evaluates Go/No-Go decision, rating, pros/cons, and 6-week action plan."""
         from core.jd_decision import DecodeBeforeMatchGate, ShouldIApplyEvaluator
         from core.jd_compat import profile_to_canonical
-        from modules.jd_analyst.matcher import JDMatcher
+        from core.jd_analyst.matcher import JDMatcher
 
         canonical_jd = DecodeBeforeMatchGate.enforce(jd_input)
         candidate = profile_to_canonical(profile_data)
