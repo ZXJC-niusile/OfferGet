@@ -456,6 +456,92 @@ class TestAcademicSync(unittest.TestCase):
         self.assertIn("# 🎓 李明 - 夏令营/保研面试 4 页自述 PPT 规范方案", plan.markdown_outline)
 
 
+class TestBaoyanPackageBuilder(unittest.TestCase):
+    """Tests for Baoyan package manifest, personal statement, and outreach builders."""
+
+    def test_validate_config_and_manifest(self):
+        from core.baoyan_package import BaoyanPackageBuilder, PackageManifest
+        builder = BaoyanPackageBuilder()
+        valid, errors = builder.validate_config({})
+        self.assertFalse(valid)
+        self.assertTrue(any("school.name" in e for e in errors))
+
+        config = {
+            "school": {
+                "name": "清华大学", "english": "Tsinghua University",
+                "primary_color": "#660874", "package_title": "夏令营申请材料",
+                "application_label": "申请学院", "application_value": "计算机系",
+            },
+            "applicant": {
+                "name": "李华", "undergraduate_school": "北航",
+                "major": "软件工程", "date_label": "2026年6月",
+                "gpa": "3.92/4.0", "rank": "1/120",
+            },
+            "sections": [
+                {
+                    "number": "01", "title": "个人材料",
+                    "documents": [
+                        {"label": "中英文简历", "group": "个人简历", "page_count": 2},
+                        {"label": "个人陈述", "group": "个人陈述", "page_count": 2},
+                    ],
+                },
+                {
+                    "number": "02", "title": "学业证明",
+                    "documents": [
+                        {"label": "本科成绩单", "group": "学业成绩", "page_count": 1},
+                        {"label": "专业排名证明", "group": "学业成绩", "page_count": 1},
+                        {"label": "四六级成绩单", "group": "英语水平", "page_count": 1},
+                    ],
+                },
+            ],
+        }
+        manifest = builder.build_manifest(config)
+        self.assertIsInstance(manifest, PackageManifest)
+        self.assertEqual(manifest.school.name, "清华大学")
+        self.assertEqual(manifest.total_pages, 9)
+        self.assertEqual(len(manifest.toc_entries), 4)
+
+    def test_personal_statement_builder(self):
+        from core.baoyan_package import PersonalStatementBuilder
+        builder = PersonalStatementBuilder()
+        profile_data = {
+            "name": "王五",
+            "education": {"school": "浙江大学", "major": "计算机", "gpa": "3.88", "rank": "3/150"},
+            "experience": [{"title": "大模型平台", "bullets": ["开发微调流水线，吞吐提升 40%"]}],
+            "awards": ["国家奖学金"],
+        }
+        draft = builder.build_statement(
+            profile_data=profile_data,
+            target_school="上海交通大学",
+            target_major="计算机科学与技术",
+            research_interests=["高效机器学习"],
+        )
+        self.assertEqual(draft.applicant_name, "王五")
+        self.assertEqual(draft.target_school, "上海交通大学")
+        self.assertIn("浙江大学", draft.academic_background)
+        self.assertGreater(draft.word_count, 150)
+
+    def test_taocixin_outreach_builder(self):
+        from core.baoyan_package import TaocixinOutreachBuilder
+        builder = TaocixinOutreachBuilder()
+        letter = builder.build_email(
+            applicant_name="赵六",
+            applicant_school="华中科技大学",
+            applicant_major="软件工程",
+            professor_name="张",
+            target_school="北京大学",
+            target_lab="系统软件实验室",
+            paper_title="Fast Distributed Graph Neural Network Training",
+            applicant_strengths=["图计算优化", "C++ 高并发"],
+            gpa_rank="前 2%",
+        )
+        self.assertIn("【保研自荐】", letter.email_subject)
+        self.assertIn("华中科技大学赵六", letter.email_subject)
+        self.assertIn("张老师", letter.greeting)
+        self.assertEqual(letter.ledger_row["status"], "DRAFTED")
+
+
 if __name__ == "__main__":
     unittest.main()
+
 
