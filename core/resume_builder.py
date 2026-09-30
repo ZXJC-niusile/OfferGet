@@ -314,6 +314,10 @@ class ResumeBuilder:
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         anonymize: Optional[str] = None,
+        photo_size: Optional[int] = None,
+        photo_width: Optional[int] = None,
+        photo_height: Optional[int] = None,
+        **kwargs,
     ) -> Dict[str, Path]:
         """Builds academic LaTeX resume, standalone HTML twin, and PDF."""
         prof = self._resolve_profile(anonymize)
@@ -327,7 +331,14 @@ class ResumeBuilder:
         tex_path = out_dir / "resume_academic_latex.tex"
         write_text_atomic(tex_src, tex_path)
 
-        html_src = self.academic_exporter.generate_latex_html_preview(vm, reserve_photo=photo, photo_path=eff_photo_path)
+        html_src = self.academic_exporter.generate_latex_html_preview(
+            vm,
+            reserve_photo=photo,
+            photo_path=eff_photo_path,
+            photo_size=photo_size,
+            photo_width=photo_width,
+            photo_height=photo_height,
+        )
         html_path = out_dir / "resume_academic_latex.html"
         write_text_atomic(html_src, html_path)
 
@@ -380,6 +391,7 @@ class ResumeBuilder:
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
         anonymize: Optional[str] = None,
+        **kwargs,
     ) -> Dict[str, Path]:
         """Builds a specific theme by name."""
         theme_normalized = theme.lower().replace("_", "-")
@@ -406,6 +418,7 @@ class ResumeBuilder:
                 photo=photo,
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
+                **kwargs,
             )
         elif theme_normalized in ("academic-typst", "typst"):
             return self.build_academic_typst(

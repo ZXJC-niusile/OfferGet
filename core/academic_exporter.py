@@ -577,6 +577,9 @@ class AcademicExporter:
         profile: Union[Any, Dict[str, Any]],
         reserve_photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
+        photo_size: Optional[int] = None,
+        photo_width: Optional[int] = None,
+        photo_height: Optional[int] = None,
     ) -> str:
         """
         Generates single-page A4 HTML styled cleanly like LaTeX, with photo placeholder.
@@ -625,9 +628,51 @@ class AcademicExporter:
             safe_data_uri = sanitize_url(photo_data_uri, allow_data_image=True) if photo_data_uri else ""
             if safe_data_uri:
                 src_attr = escape_html_attribute(safe_data_uri)
+                img_w, img_h = None, None
+                if eff_photo_path and Path(eff_photo_path).is_file():
+                    try:
+                        from PIL import Image
+                        with Image.open(eff_photo_path) as im:
+                            img_w, img_h = im.size
+                    except Exception:
+                        pass
+
+                if photo_width and photo_height:
+                    p_w, p_h = int(photo_width), int(photo_height)
+                elif photo_width and img_w and img_h:
+                    p_w = int(photo_width)
+                    p_h = max(1, int(p_w * img_h / img_w))
+                elif photo_height and img_w and img_h:
+                    p_h = int(photo_height)
+                    p_w = max(1, int(p_h * img_w / img_h))
+                elif photo_size:
+                    base_sz = int(photo_size)
+                    if img_w and img_h:
+                        if img_w >= img_h:
+                            p_w = base_sz
+                            p_h = max(1, int(base_sz * img_h / img_w))
+                        else:
+                            p_h = base_sz
+                            p_w = max(1, int(base_sz * img_w / img_h))
+                    else:
+                        p_w, p_h = base_sz, base_sz
+                else:
+                    if img_w and img_h:
+                        ratio = img_w / img_h
+                        if 0.95 <= ratio <= 1.05:
+                            p_w, p_h = 100, 100
+                        elif ratio < 0.95:
+                            p_h = 105
+                            p_w = max(50, int(p_h * ratio))
+                        else:
+                            p_w = 100
+                            p_h = max(50, int(p_w / ratio))
+                    else:
+                        p_w, p_h = 96, 96
+
                 photo_html = f"""
-    <div style="width: 72px; height: 96px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
+    <div style="width: {p_w}px; height: {p_h}px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
+      <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
       <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
         <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
       </div>
