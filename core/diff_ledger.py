@@ -284,7 +284,11 @@ class DiffLedger:
             elif isinstance(baseline_profile.get("name"), str):
                 c_name = baseline_profile["name"]
 
-        ledger = cls(candidate_name=c_name)
+        meta = {}
+        if layout_metadata:
+            meta["layout_metadata"] = layout_metadata
+
+        ledger = cls(candidate_name=c_name, metadata=meta)
 
         # 1. Ingest explicit issues from FactGuard audit output if available
         if isinstance(guard_result, dict):

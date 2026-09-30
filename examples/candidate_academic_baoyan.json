@@ -1,106 +1,104 @@
 {
+  "_guidance": {
+    "usage_note": "【OfferGet 学术保研模板 · 真实信息占位规范】本文件为学术推免生（直博/学硕/专硕）档案的标准占位模板。请根据个人真实学业与科研经历替换所有 {{...}} 占位字段。OfferGet 严格遵循学术诚信与零幻觉门禁，严禁虚构论文录用状态（如将未投稿虚构为在审、CCF-A）、严禁夸大排位与第一作者身份。",
+    "agent_instruction": "Agent 在解析此模板时，若发现未填写的 {{...}} 或 missing 核心信息，必须主动向用户提问追问，严禁自行补全或伪造科研论文、GPA、竞赛排名与院校背景！"
+  },
   "profile_version": "2.0.0",
   "profile_type": "academic_baoyan",
   "candidate": {
-    "name": "陆宇辰",
-    "en_name": "Yuchen Lu",
-    "gender": "男",
-    "political_status": "中共预备党员",
-    "university": "浙江大学",
-    "college": "计算机科学与技术学院 (College of Computer Science and Technology)",
-    "major": "计算机科学与技术 (拔尖人才培养计划)",
+    "name": "{{CANDIDATE_NAME: 候选人姓名}}",
+    "en_name": "{{CANDIDATE_EN_NAME: 如 Yuchen Lu}}",
+    "gender": "{{GENDER: 男/女}}",
+    "political_status": "{{POLITICAL_STATUS: 共青团员/中共预备党员/中共党员/群众}}",
+    "university": "{{UNIVERSITY_NAME: 本科毕业院校全称}}",
+    "college": "{{COLLEGE_NAME: 所在院系全称，如：计算机学院}}",
+    "major": "{{MAJOR_NAME: 本科专业全称}}",
     "enrollment_year": 2021,
     "expected_graduation": 2025,
-    "email": "yuchen.lu@zju.edu.cn",
-    "phone": "+86 138-1234-5678",
-    "location": "浙江·杭州",
-    "homepage": "https://yuchen-lu.github.io"
+    "email": "{{CANDIDATE_EMAIL: candidate@example.edu.cn}}",
+    "phone": "{{CANDIDATE_PHONE: +86 138-0000-0000}}",
+    "location": "{{LOCATION: 所在城市，如：北京/上海/杭州}}",
+    "homepage": "{{HOMEPAGE: 个人学术主页或 GitHub 链接}}"
   },
   "academic_standing": {
-    "gpa": 3.91,
+    "_guidance": "GPA、排名与专业总人数必须严格按教务处盖章成绩单与推免排名证明如实填写，严禁四舍五入虚高。",
+    "gpa": "{{GPA: 学分绩点，如 3.91}}",
     "max_gpa": 4.0,
-    "rank": "2/160",
-    "rank_percent": "1.2%",
-    "cet6": 635,
+    "rank": "{{RANK: 专业推免综合排名，如 2/160}}",
+    "rank_percent": "{{RANK_PERCENT: 排名百分比，如 1.2%}}",
+    "cet6": "{{CET6_SCORE: 英语六级分数，如 620}}",
     "english": {
-      "cet6": 635,
-      "cet4": 668,
-      "toefl": 110
+      "cet6": "{{CET6_SCORE: 英语六级分数，如 620}}",
+      "cet4": "{{CET4_SCORE: 英语四级分数，如 650}}",
+      "toefl": "{{TOEFL_SCORE: 托福分数（选填）}}"
     },
     "core_courses": [
-      { "course_name": "高级数据结构与算法分析", "grade": 98, "credits": 4.5 },
-      { "course_name": "计算机系统导论", "grade": 99, "credits": 4.0 },
-      { "course_name": "操作系统原理", "grade": 97, "credits": 4.0 },
-      { "course_name": "分布式系统与云计算", "grade": 99, "credits": 3.5 },
-      { "course_name": "深度学习与并行计算", "grade": 96, "credits": 3.5 }
+      {
+        "course_name": "{{CORE_COURSE_1: 专业核心高分课程，如：数据结构与算法}}",
+        "grade": 98,
+        "credits": 4.0
+      },
+      {
+        "course_name": "{{CORE_COURSE_2: 如：操作系统原理}}",
+        "grade": 97,
+        "credits": 4.0
+      },
+      {
+        "course_name": "{{CORE_COURSE_3: 如：计算机系统导论}}",
+        "grade": 99,
+        "credits": 4.0
+      }
     ]
   },
   "honors": [
     {
-      "name": "国家奖学金",
+      "name": "{{HONOR_NAME_1: 奖学金或荣誉名称，如：国家奖学金}}",
       "level": "national",
       "year": 2024,
       "quota_ratio": "< 0.2%",
-      "description": "专业排名前 1%，教育部颁发本专科国家奖学金。"
+      "description": "{{HONOR_DESC_1: 获奖比例与颁发单位说明}}"
     },
     {
-      "name": "美国大学生数学建模竞赛一等奖 (M奖)",
+      "name": "{{HONOR_NAME_2: 学科竞赛或权威荣誉，如：美国大学生数学建模竞赛一等奖}}",
       "level": "international",
       "year": 2024,
-      "role": "队长兼主力算法",
-      "description": "全球前 6%，负责非线性调度建模与分布式仿真实验。"
+      "role": "{{COMPETITION_ROLE: 个人参赛角色，如：队长兼主力算法}}",
+      "description": "{{COMPETITION_DESC: 获奖排位与个人具体负责模块}}"
     }
   ],
   "publications": [
     {
+      "_guidance": "学术成果必须真实可查。author_role 区分 first_author/co_first_author/second_author；status 严格区分 published/accepted/under_review；严禁将正在撰写（in_preparation）伪称为 under_review。",
       "paper_id": "PUB-01",
-      "title": "SpecKV: Fast and Memory-Efficient Speculative Key-Value Cache Eviction for Long-Context LLMs",
-      "venue": "NeurIPS 2024",
+      "title": "{{PAPER_TITLE: 论文题目}}",
+      "venue": "{{PAPER_VENUE: 会议或期刊全称/缩写，如 NeurIPS 2024}}",
       "ccf_rank": "CCF-A",
       "author_role": "first_author",
       "status": "published",
-      "authors": ["陆宇辰", "陈建平 教授"],
+      "authors": ["{{本人姓名}}", "{{导师/合作者姓名}}"],
       "is_first_author": true,
-      "summary": "针对长上下文大语言模型生成中 KV Cache 显存暴涨与内存带宽墙瓶颈，提出投机式键值驱逐机制，在保持困惑度零损失下推理吞吐提升 2.1x。",
-      "individual_contribution": "独立设计投机驱逐通信协议与置换策略，编写 Triton/CUDA 自定义稀疏内核算子，在 8x A100 物理集群完成完整基准评测并执笔手稿。"
-    },
-    {
-      "paper_id": "PUB-02",
-      "title": "AdaOffload: Adaptive Memory-Constrained Model Offloading on Heterogeneous Clusters",
-      "venue": "IEEE ICDCS 2025",
-      "ccf_rank": "CCF-A",
-      "author_role": "first_author",
-      "status": "under_review",
-      "authors": ["陆宇辰", "李明睿 教授"],
-      "is_first_author": true,
-      "summary": "针对异构边缘-云节点内存受限环境，设计基于动态规划分支定界的模型权重自适应卸载与激活重计算管线。",
-      "individual_contribution": "建立显存与带宽受限的约束优化规划模型，搭建端到端异构物理实验台，负责全文方法与评估章节撰写。"
+      "summary": "{{PAPER_SUMMARY: 核心研究问题、技术创新点与量化性能提升}}",
+      "individual_contribution": "{{INDIVIDUAL_CONTRIBUTION: 本人具体独立完成的工作、代码编写、理论证明或物理集群基准实验}}"
     }
   ],
   "projects": [
     {
-      "name": "面向超长上下文的高效分布式 KV-Cache 压缩与换页机制研究",
-      "role": "课题负责人 (独立研究)",
-      "individual_contribution": "独立重写 vLLM 底层 PagedAttention 算子以支持动态秩自适应量化与快速驱逐换页，在 8x A100 物理集群真实负载下进行基准压测，相比原始 vLLM 实现 2.6x 显存换页带宽提升。",
+      "_guidance": "科研课题或大作业项目：必须明确标明 experiment_type ('real_experiment'/'simulation'/'hybrid')，杜绝空洞叙述，量化个人独立工作。",
+      "name": "{{PROJECT_NAME: 课题/研究项目名称}}",
+      "role": "{{PROJECT_ROLE: 课题负责人/独立研究/算法研发}}",
+      "individual_contribution": "{{PROJECT_CONTRIBUTION: 负责模块、关键算子/系统实现、物理评测基准与量化结果}}",
       "experiment_type": "real_experiment",
-      "tags": ["real_experiment", "distributed_systems", "vllm"]
+      "tags": ["real_experiment", "academic_research"]
     }
   ],
   "target_schools": [
     {
-      "school_name": "清华大学",
-      "college": "计算机科学与技术系",
+      "school_name": "{{TARGET_SCHOOL_1: 意向院校，如：清华大学}}",
+      "college": "{{TARGET_COLLEGE_1: 意向院系，如：计算机科学与技术系}}",
       "track": "直博",
-      "target_advisor": "陈建平 教授",
-      "research_direction": "分布式系统与大模型系统架构"
-    },
-    {
-      "school_name": "北京大学",
-      "college": "计算机学院",
-      "track": "直博",
-      "target_advisor": "李明睿 教授",
-      "research_direction": "AI 体系结构与异构计算系统"
+      "target_advisor": "{{TARGET_ADVISOR_1: 意向导师姓名}}",
+      "research_direction": "{{RESEARCH_DIRECTION_1: 意向研究方向}}"
     }
   ],
-  "statement": "自进入浙江大学计算机科学与技术拔尖班以来，我始终保持对系统级计算机体系结构与大规模分布式系统优化的浓厚学术兴趣。本科前三年，我学分绩点达 3.91/4.0，专业排名 2/160（前 1.2%），英语六级 635 分，先后荣获国家奖学金与美国大学生数学建模竞赛一等奖（M奖）。在科研探索方面，我聚焦长上下文大语言模型推理中的系统瓶颈，作为第一作者在顶会 NeurIPS 2024 发表 CCF-A 论文，提出投机式键值驱逐机制并重写 Triton 算子，在 8 卡 A100 物理集群真实测试中实现 2.1x 推理吞吐提升；另有一篇关于异构集群显存卸载调度的论文在审。展望直博阶段的研究生涯，我渴望加入顶尖系统结构课题组，深入探索大规模万卡集群高效容错调度、软硬件协同体系结构及新一代大模型系统软件底座，攻坚计算机系统关键挑战，产出具有国际影响力的顶尖成果。"
+  "statement": "{{PERSONAL_STATEMENT: 个人推免陈述，阐述本科阶段学术兴趣、专业绩点排名、权威科研论文贡献、独立实验经历，以及直博/硕士阶段攻关方向与学术抱负}}"
 }

@@ -237,6 +237,7 @@ class ResumeBuilder:
         adaptive_fill: bool = True,
         diff_ledger: bool = True,
         baseline_profile: Optional[Union[Dict[str, Any], Any]] = None,
+        pages: str = "auto",
         **kwargs: Any,
     ) -> Dict[str, Path]:
         """Builds HTML + CSS based resume theme, optionally applying single-page AutoFit."""
@@ -256,7 +257,9 @@ class ResumeBuilder:
         from core.layout_solver import LayoutConfig, solve_layout
         from core.diff_ledger import DiffLedger
 
-        cfg = layout_config or LayoutConfig()
+        cfg = layout_config or LayoutConfig(page_mode=pages)
+        if layout_config is not None and pages != "auto":
+            cfg.page_mode = pages
         overflow_px = float(kwargs.get("overflow_px", 0.0))
 
         # Detect overflow / underflow via renderer if available and overflow_px not explicitly supplied
@@ -286,7 +289,10 @@ class ResumeBuilder:
         html_path = out_dir / f"resume_{clean_theme_name}.html"
         pdf_path = out_dir / f"resume_{clean_theme_name}.pdf"
 
-        if autofit:
+        # If layout budget is solved for multi-page (> 1), skip single-page squashing
+        is_multi_page = (solve_res.target_pages_solved > 1) or (pages == "2")
+
+        if autofit and not is_multi_page:
             with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as tmp:
                 tmp.write(populated_html)
                 tmp_path = Path(tmp.name)
@@ -322,6 +328,7 @@ class ResumeBuilder:
             )
             layout_meta = {
                 "solved": solve_res.solved,
+                "target_pages": solve_res.target_pages_solved,
                 "body_font_pt": solve_res.body_font_pt,
                 "line_height": solve_res.line_height,
                 "section_margin_pt": solve_res.section_margin_pt,
@@ -488,6 +495,7 @@ class ResumeBuilder:
         adaptive_fill: bool = True,
         diff_ledger: bool = True,
         baseline_profile: Optional[Union[Dict[str, Any], Any]] = None,
+        pages: str = "auto",
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds a specific theme by name."""
@@ -504,6 +512,7 @@ class ResumeBuilder:
                 adaptive_fill=adaptive_fill,
                 diff_ledger=diff_ledger,
                 baseline_profile=baseline_profile,
+                pages=pages,
                 **kwargs,
             )
         elif theme_normalized == "ats-plain":
@@ -590,6 +599,7 @@ class ResumeBuilder:
         adaptive_fill: bool = True,
         diff_ledger: bool = True,
         baseline_profile: Optional[Union[Dict[str, Any], Any]] = None,
+        pages: str = "auto",
         **kwargs,
     ) -> Dict[str, Dict[str, Path]]:
         """Builds all 6 standard resume variants (or all 7 if include_docx=True)."""
@@ -606,6 +616,7 @@ class ResumeBuilder:
                 adaptive_fill=adaptive_fill,
                 diff_ledger=diff_ledger,
                 baseline_profile=baseline_profile,
+                pages=pages,
                 **kwargs,
             )
         return results

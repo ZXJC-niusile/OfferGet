@@ -74,6 +74,12 @@ def cmd_resume_build(args_list=None):
         help="Adaptively expand vertical margins/typography on non-full pages (default: True)",
     )
     build_parser.add_argument(
+        "--pages",
+        default="auto",
+        choices=["auto", "1", "2"],
+        help="Target page budget: 'auto' (default: 1 page or auto-expand if needed), '1' (strict 1-page), '2' (balanced 2-page)",
+    )
+    build_parser.add_argument(
         "--baseline",
         default=None,
         help="Path to baseline candidate profile JSON for diff audit",
@@ -118,6 +124,7 @@ def cmd_resume_build(args_list=None):
     print(f"[*] Target Role: {target_role}")
     print(f"[*] Output Dir:  {out_dir}")
     print(f"[*] Photo Slot:  {photo_status}")
+    print(f"[*] Page Budget: {parsed.pages}")
     print(f"[*] Anonymize:   {parsed.anonymize or 'Disabled'}")
     print(f"[*] AutoFit:     {'Disabled' if parsed.no_autofit else 'Enabled'}")
     print(f"[*] Adaptive:    {'Enabled' if parsed.adaptive_fill else 'Disabled'}")
@@ -128,6 +135,7 @@ def cmd_resume_build(args_list=None):
     autofit = not parsed.no_autofit
     adaptive_fill = bool(parsed.adaptive_fill)
     diff_ledger = bool(parsed.diff_ledger)
+    pages = str(parsed.pages)
 
     if parsed.theme == "all":
         results = builder.build_all(
@@ -137,6 +145,7 @@ def cmd_resume_build(args_list=None):
             adaptive_fill=adaptive_fill,
             diff_ledger=diff_ledger,
             baseline_profile=baseline_data,
+            pages=pages,
         )
         for theme_name, files in results.items():
             pdf_name = files.get("pdf", Path("")).name
@@ -150,6 +159,7 @@ def cmd_resume_build(args_list=None):
             adaptive_fill=adaptive_fill,
             diff_ledger=diff_ledger,
             baseline_profile=baseline_data,
+            pages=pages,
         )
         pdf_name = files.get("pdf", Path("")).name
         print(f"  ✓ [{parsed.theme:<16}] -> {pdf_name}")

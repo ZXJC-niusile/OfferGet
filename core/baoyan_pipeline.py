@@ -157,8 +157,11 @@ def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) ->
             if not candidate.get(field):
                 errors.append(f"Candidate missing required field: '{field}'.")
         email = candidate.get("email", "")
-        if email and not re.match(r"[^@]+@[^@]+\.[^@]+", email):
-            warnings.append(f"Candidate email '{email}' does not look like a standard email format.")
+        if email:
+            if any(p in str(email) for p in ["{{", "<", "["]):
+                warnings.append(f"Candidate email '{email}' is a template placeholder. Please supply real email.")
+            elif not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                warnings.append(f"Candidate email '{email}' does not look like a standard email format.")
 
     # 2. Academic Standing
     standing = profile.get("academic_standing", {})
@@ -168,12 +171,16 @@ def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) ->
         gpa = standing.get("gpa")
         if gpa is None:
             errors.append("Academic standing missing 'gpa'.")
+        elif isinstance(gpa, str) and any(p in gpa for p in ["{{", "<", "["]):
+            warnings.append(f"Academic standing 'gpa' contains placeholder token '{gpa}'. Please replace with actual numerical GPA.")
         elif not (isinstance(gpa, (int, float)) and 0.0 <= float(gpa) <= 5.0):
             errors.append(f"Invalid GPA value: {gpa}. Expected float between 0.0 and 5.0.")
 
         rank = standing.get("rank")
         if not rank:
             errors.append("Academic standing missing 'rank' (e.g. '2/150').")
+        elif isinstance(rank, str) and any(p in rank for p in ["{{", "<", "["]):
+            warnings.append(f"Academic standing 'rank' contains placeholder token '{rank}'. Please replace with actual ranking e.g. '2/160'.")
         elif not re.search(r"\d+\s*/\s*\d+", str(rank)):
             warnings.append(f"Academic rank '{rank}' should follow 'rank/total' format (e.g. '2/150').")
 
@@ -183,12 +190,15 @@ def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) ->
         if cet6 is None and not english.get("toefl") and not english.get("ielts"):
             warnings.append("No CET-6, TOEFL, or IELTS score provided in academic standing.")
         elif cet6 is not None:
-            try:
-                cet6_val = int(cet6)
-                if cet6_val < 425:
-                    warnings.append(f"CET-6 score ({cet6_val}) is below 425 pass threshold.")
-            except (ValueError, TypeError):
-                errors.append(f"Invalid CET-6 score value: {cet6}.")
+            if isinstance(cet6, str) and any(p in cet6 for p in ["{{", "<", "["]):
+                warnings.append(f"Academic standing 'cet6' contains placeholder token '{cet6}'.")
+            else:
+                try:
+                    cet6_val = int(cet6)
+                    if cet6_val < 425:
+                        warnings.append(f"CET-6 score ({cet6_val}) is below 425 pass threshold.")
+                except (ValueError, TypeError):
+                    errors.append(f"Invalid CET-6 score value: {cet6}.")
 
     # 3. Publications
     pubs = profile.get("publications", [])
@@ -206,7 +216,9 @@ def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) ->
                     errors.append(f"{prefix} missing required field: '{f}'.")
 
             ccf_rank = pub.get("ccf_rank")
-            if ccf_rank and ccf_rank not in VALID_CCF_RANKS:
+            if ccf_rank and any(p in str(ccf_rank) for p in ["{{", "<", "["]):
+                warnings.append(f"{prefix} ccf_rank contains placeholder token '{ccf_rank}'.")
+            elif ccf_rank and ccf_rank not in VALID_CCF_RANKS:
                 errors.append(f"{prefix} has invalid CCF rank '{ccf_rank}'. Must be one of {sorted(VALID_CCF_RANKS)}.")
 
             if ccf_rank == "CCF-A":
@@ -215,7 +227,9 @@ def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) ->
                 ccf_b_count += 1
 
             status = pub.get("status")
-            if status and status not in VALID_PUB_STATUSES:
+            if status and any(p in str(status) for p in ["{{", "<", "["]):
+                warnings.append(f"{prefix} status contains placeholder token '{status}'.")
+            elif status and status not in VALID_PUB_STATUSES:
                 errors.append(f"{prefix} has invalid publication status '{status}'. Must be one of {sorted(VALID_PUB_STATUSES)}.")
 
             if status == "under_review":
@@ -348,8 +362,13 @@ def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) ->
         elif c6 >= 425:
             score += 4.0
     except (ValueError, TypeError):
-        if english.get("toefl", 0) >= 100 or english.get("ielts", 0) >= 7.5:
-            score += 10.0
+        try:
+            toefl_val = float(english.get("toefl", 0) or 0)
+            ielts_val = float(english.get("ielts", 0) or 0)
+            if toefl_val >= 100 or ielts_val >= 7.5:
+                score += 10.0
+        except (ValueError, TypeError):
+            pass
 
     score = min(round(score, 1), 100.0)
 

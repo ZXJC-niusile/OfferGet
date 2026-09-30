@@ -405,6 +405,30 @@ class TestLayoutSolver(unittest.TestCase):
         self.assertIn("双页排版", res.page_expansion_prompt_message)
         self.assertIn("9.5pt", res.page_expansion_prompt_message)
 
+    def test_two_page_mode_budgeting(self):
+        """When page_mode='2' is requested, solves with comfortable 10pt font and target_pages_solved=2."""
+        cfg = LayoutConfig(
+            target_body_font_pt=10.0,
+            page_mode="2",
+        )
+        res = solve_layout("<p>Long academic/senior resume</p>", overflow_px=450.0, config=cfg)
+        self.assertTrue(res.solved)
+        self.assertEqual(res.target_pages_solved, 2)
+        self.assertEqual(res.body_font_pt, 10.0)
+        self.assertFalse(res.requires_page_expansion_prompt)
+        self.assertIn("break-inside: avoid", res.css_rules)
+    def test_auto_page_mode_overflow_expansion(self):
+        """When page_mode='auto' and overflow exceeds 1-page capacity at 9.5pt, auto-expands to 2 pages."""
+        cfg = LayoutConfig(
+            target_body_font_pt=10.0,
+            page_mode="auto",
+        )
+        res = solve_layout("<p>Long academic/senior resume</p>", overflow_px=1000.0, config=cfg)
+        self.assertTrue(res.solved)
+        self.assertEqual(res.target_pages_solved, 2)
+        self.assertEqual(res.body_font_pt, 10.0)
+        self.assertFalse(res.requires_page_expansion_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

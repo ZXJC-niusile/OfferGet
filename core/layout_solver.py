@@ -77,6 +77,7 @@ class LayoutConfig:
     enable_micro_typography: bool = True
     enable_adaptive_grid: bool = True
     enable_widow_orphan_mitigation: bool = True
+    page_mode: str = "1"                 # "1" (strict single page), "2" (double page), "auto" (auto-expand if needed)
 
     def __post_init__(self):
         """Enforces design bottom-lines and structural sanity."""
@@ -94,6 +95,8 @@ class LayoutConfig:
             self.min_line_height = 1.20
         if self.max_line_height < self.min_line_height:
             self.max_line_height = self.min_line_height
+        if self.page_mode not in ("1", "2", "auto"):
+            self.page_mode = "auto"
 
 
 @dataclass
@@ -118,6 +121,7 @@ class LayoutSolveResult:
     is_expanded_to_fill: bool = False
     requires_page_expansion_prompt: bool = False
     page_expansion_prompt_message: Optional[str] = None
+    target_pages_solved: int = 1
 
 
 # ==============================================================================
@@ -432,6 +436,32 @@ class SpringsGlueBudgeter:
         word_spacing_em = config.target_word_spacing_em
         body_font_pt = config.target_body_font_pt
 
+        # Multi-page (2-Page) decision:
+        # Activated when explicitly set to "2"
+        is_two_page = config.page_mode == "2"
+        if is_two_page:
+            applied_notes = [
+                f"Multi-Page (2-Page) Layout Activated: Content volume "
+                f"expanded to 2-page budget. Typography maintained at comfortable "
+                f"{config.target_body_font_pt}pt with print break avoidance across 2 pages."
+            ]
+            return {
+                "solved": True,
+                "body_font_pt": config.target_body_font_pt,
+                "line_height": config.target_line_height,
+                "section_margin_pt": config.target_section_margin_pt,
+                "item_gap_pt": config.target_item_gap_pt,
+                "page_padding_y_mm": config.target_page_padding_y_mm,
+                "letter_spacing_em": config.target_letter_spacing_em,
+                "word_spacing_em": config.target_word_spacing_em,
+                "overflow_px_remaining": 0.0,
+                "applied_compressions": applied_notes,
+                "is_expanded_to_fill": False,
+                "requires_page_expansion_prompt": False,
+                "page_expansion_prompt_message": None,
+                "target_pages_solved": 2,
+            }
+
         # Underflow handling: expand springs to gracefully fill the A4 page without white void
         if overflow_px < -5.0:
             underflow_px = abs(float(overflow_px))
@@ -496,6 +526,7 @@ class SpringsGlueBudgeter:
                 "is_expanded_to_fill": True,
                 "requires_page_expansion_prompt": False,
                 "page_expansion_prompt_message": None,
+                "target_pages_solved": 1,
             }
 
         if remaining_overflow <= 0:
@@ -513,6 +544,7 @@ class SpringsGlueBudgeter:
                 "is_expanded_to_fill": False,
                 "requires_page_expansion_prompt": False,
                 "page_expansion_prompt_message": None,
+                "target_pages_solved": 1,
             }
 
         # Stage 1: Section Margins (target: 14pt -> min: 10pt)
@@ -635,6 +667,31 @@ class SpringsGlueBudgeter:
         # Strict baseline assertion
         body_font_pt = max(config.min_body_font_pt, body_font_pt)
         solved = (remaining_overflow <= 1e-3)
+
+        # Multi-page transition for "auto" mode when single-page capacity is exhausted
+        if not solved and config.page_mode == "auto":
+            applied_compressions.append(
+                f"Auto Multi-Page Activated: Content volume ({overflow_px:.1f}px overflow) exceeded single-page "
+                f"capacity at {config.min_body_font_pt}pt floor. Automatically transitioned to balanced "
+                f"2-page layout with comfortable {config.target_body_font_pt}pt typography and print break protection."
+            )
+            return {
+                "solved": True,
+                "body_font_pt": config.target_body_font_pt,
+                "line_height": config.target_line_height,
+                "section_margin_pt": config.target_section_margin_pt,
+                "item_gap_pt": config.target_item_gap_pt,
+                "page_padding_y_mm": config.target_page_padding_y_mm,
+                "letter_spacing_em": config.target_letter_spacing_em,
+                "word_spacing_em": config.target_word_spacing_em,
+                "overflow_px_remaining": 0.0,
+                "applied_compressions": applied_compressions,
+                "is_expanded_to_fill": False,
+                "requires_page_expansion_prompt": False,
+                "page_expansion_prompt_message": None,
+                "target_pages_solved": 2,
+            }
+
         requires_prompt = not solved
         prompt_msg = (
             f"当前简历内容量超出单页优质排版极限（剩余溢出 {remaining_overflow:.1f}px）。"
@@ -658,6 +715,7 @@ class SpringsGlueBudgeter:
             "is_expanded_to_fill": False,
             "requires_page_expansion_prompt": requires_prompt,
             "page_expansion_prompt_message": prompt_msg,
+            "target_pages_solved": 1,
         }
 
 
@@ -695,6 +753,8 @@ def generate_micro_typography_css(
     size: A4 portrait;
     margin-top: {pad_mm}mm;
     margin-bottom: {pad_mm}mm;
+    margin-left: 0;
+    margin-right: 0;
   }}
 
   body {{
@@ -703,6 +763,29 @@ def generate_micro_typography_css(
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    font-feature-settings: "kern" 1, "palt" 1;
+  }}
+
+  @media print {{
+    h1, h2, h3, .section-header, .item-header, .org-bar {{
+      break-after: avoid !important;
+      page-break-after: avoid !important;
+    }}
+    .org-bar, .experience-item, .project-item, .publication-item, ul, li {{
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }}
+    .page {{
+      min-height: calc(297mm - {pad_mm * 2:.1f}mm) !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      box-shadow: none !important;
+      margin: 0 !important;
+    }}
+  }}
+
+  .org-right, .time, .date {{
+    white-space: nowrap !important;
   }}
 
   h1, h2, h3, .section-header, .item-header {{
@@ -824,6 +907,7 @@ def solve_layout(
         is_expanded_to_fill=budget.get("is_expanded_to_fill", False),
         requires_page_expansion_prompt=budget.get("requires_page_expansion_prompt", False),
         page_expansion_prompt_message=budget.get("page_expansion_prompt_message", None),
+        target_pages_solved=budget.get("target_pages_solved", 1),
     )
 
 
