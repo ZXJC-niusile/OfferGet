@@ -789,18 +789,29 @@ class AcademicExporter:
   </div>
 """
 
+        def format_html_bullet(text: str) -> str:
+            clean = re.sub(r"<strong>(.*?)</strong>", r"**\1**", str(text), flags=re.IGNORECASE)
+            parts = re.split(r"\*\*(.+?)\*\*", clean)
+            res = []
+            for idx, part in enumerate(parts):
+                if idx % 2 == 1:
+                    res.append(f"<strong>{escape_html_text(part)}</strong>")
+                else:
+                    res.append(escape_html_text(part))
+            return "".join(res)
+
         if exp_list:
             html += "  <h2>实习经历</h2>\n"
             for exp in exp_list:
-                dept_str = str(exp.get("dept", ""))
-                role_str = str(exp.get("role", ""))
+                dept_str = str(exp.get("raw_dept", exp.get("dept", "")))
+                role_str = str(exp.get("raw_role", exp.get("role", "")))
                 role_label_raw = f"{dept_str} · {role_str}" if dept_str else role_str
                 role_label = escape_html_text(role_label_raw)
-                exp_org_esc = escape_html_text(exp.get('org', ''))
-                exp_time_esc = escape_html_text(exp.get('time', ''))
+                exp_org_esc = escape_html_text(str(exp.get("raw_org", exp.get("org", ""))))
+                exp_time_esc = escape_html_text(str(exp.get("raw_time", exp.get("time", ""))))
                 bullets = "".join([
-                    f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', escape_html_text(str(b)))}</li>"
-                    for b in exp.get("bullets", [])
+                    f"<li>{format_html_bullet(b)}</li>"
+                    for b in exp.get("raw_bullets", exp.get("bullets", []))
                 ])
                 html += f"""  <div class='item-header'><span>{exp_org_esc} · {role_label}</span><span>{exp_time_esc}</span></div>
   <ul>{bullets}</ul>
@@ -810,13 +821,13 @@ class AcademicExporter:
             p_title = "科研与架构项目经历" if pubs else "校园与实践经历"
             html += f"  <h2>{p_title}</h2>\n"
             for p in proj_list:
-                p_name_esc = escape_html_text(p.get('name', ''))
-                p_role_esc = escape_html_text(p.get('role', ''))
-                p_time_esc = escape_html_text(p.get('time', ''))
+                p_name_esc = escape_html_text(str(p.get("raw_name", p.get("name", ""))))
+                p_role_esc = escape_html_text(str(p.get("raw_role", p.get("role", ""))))
+                p_time_esc = escape_html_text(str(p.get("raw_time", p.get("time", ""))))
                 role_disp = f" · {p_role_esc}" if p_role_esc else ""
                 bullets = "".join([
-                    f"<li>{re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', escape_html_text(str(b)))}</li>"
-                    for b in p.get("bullets", [])
+                    f"<li>{format_html_bullet(b)}</li>"
+                    for b in p.get("raw_bullets", p.get("bullets", []))
                 ])
                 html += f"""  <div class='item-header'><span>{p_name_esc}{role_disp}</span><span>{p_time_esc}</span></div>
   <ul>{bullets}</ul>
