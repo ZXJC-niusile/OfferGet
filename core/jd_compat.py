@@ -63,6 +63,8 @@ def to_canonical(decoded: Any) -> DecodedJD:
     raise TypeError(f"Unsupported decoded JD type: {type(decoded).__name__}")
 
 
+match_profile_to_jd = match_legacy
+
 __all__ = [
     "to_canonical",
     "DecodedJDCompat",
@@ -72,4 +74,5 @@ __all__ = [
     "decode_legacy",
     "profile_to_canonical",
     "match_legacy",
+    "match_profile_to_jd",
 ]

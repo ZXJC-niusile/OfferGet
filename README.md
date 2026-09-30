@@ -1,13 +1,13 @@
-# OfferGet · 本地确定性求职审查与学术材料工具箱
+# OfferGet · 本地确定性求职审查与学术材料工程操作系统
 
 <p align="center">
-  <b>面向技术求职与学术申请的本地规则型分析工具</b><br>
-  拆解 JD · 映射候选人事实证据 · 给出可审计的简历建议 · 生成针对性面试问题与回答反馈
+  <b>面向工业级技术求职与学术升学的本地规则型分析与材料工程平台</b><br>
+  穿透解码 JD · 锚定单一事实真值源 · 拦截 AI 虚辞与伪精确吹嘘 · 模拟高压答辩攻防 · 驱动数据化投递与 Offer 决策
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Tests-run%20locally-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-580%2B%20passed%20locally-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Security-Reversible%20Anonymization-blue.svg" alt="Security">
   <img src="https://img.shields.io/badge/Integrity-Fact%20Verification%20Guard-red.svg" alt="Integrity">
@@ -19,203 +19,306 @@
 ## 🎯 项目核心定位与解决的痛点
 
 在企业招聘内卷化与高校保研学术竞争白热化的今天，求职者与深造学子正面临双向信息不对称与信用挤压：
-1. **企业端：JD 修辞虚构与“伪精确”吹嘘泛滥**：招聘启事充斥着公关套话与伪算力承诺，而大量候选人使用通用大模型生成充满 AI 腔调（破折号、空洞动词、编造指标）的简历，遭遇 ATS 过滤系统与资深面试官的“一票否决”。
-2. **学术端：保研学术失信与导师博弈风险**：夏令营报名系统存在严苛字数限制，学生常犯“在投论文虚报、仿真模型混充真实落地、空洞大词”等红线错误；在联系导师时缺乏学术范式认知，容易遭遇口头承诺毁约（被鸽或鸽导师）等信誉危机。
-3. **面试端：缺乏抗压防守能力**：写在简历上的“主导”、“从0到1”经不住技术总监或复试专家连续 3 轮白板追问。
+
+1. **企业端：JD 修辞虚构与“伪精确”吹嘘泛滥**：招聘启事充斥着公关套话与伪算力承诺，而大量候选人使用通用大模型生成充满 AI 腔调（破折号、空洞动词、编造指标）的简历，遭遇 ATS 过滤系统与资深技术考官的“一票否决”。
+2. **面试端：缺乏真实抗压与证据防守能力**：写在简历上的“主导架构”、“从 0 到 1”经不住技术总监或复试专家连续 3 轮白板追问与边界探针。
+3. **学术端：保研学术失信与导师博弈风险**：夏令营报名系统存在严苛字数限制，学生常犯“在投论文虚报、仿真模型混充真实落地、空洞大词”等红线错误；在联系导师时缺乏学术范式认知，容易遭遇口头承诺毁约（被鸽或鸽导师）等信誉危机。
+4. **决策端：薪酬陷阱隐蔽与有效时薪失真**：大厂高薪往往包裹着严苛的“绩效对半拆分、期权悬崖、单边竞业、无效加班”，缺乏科学的多 Offer 真实时薪折算模型。
 
 **OfferGet** 打造了一套**“双轨制（Dual-Track）工业级技术求职与学术深造操作系统”**：
-- **企业求职轨**：JD 穿透解码、6 大技术领域能力树、阿酥式（ASu）6 联全链路工程建模、严谨指标防伪算术对账、ATS 质量门禁与单页压制；
-- **学术深造轨**：保研全生命周期状态机、4 大学术诚信红线审核、3 级自适应字数压缩、导师研究范式匹配与高情商外联、答辩面试红蓝对抗模拟。
+- **企业求职轨（Industry Track）**：5 图层 JD 语义穿透、6 联全链路工程叙事建模、指标数学一致性对账（容差 $\le 0.5\%$）、ATS 机器可读性质量门禁与三态技能台账、真实时薪折算与 6 大合同陷阱雷达；
+- **学术深造轨（Academic Track）**：保研全生命周期状态机、4 大学术诚信红线审查、3 级自适应字数压缩、导师近 3 年学术范式跃迁匹配与高情商外联、21 项推免物料合规清单；
+- **实战攻防与复盘轨（Defense & Debrief Track）**：Claim-Evidence 事实证据链矩阵、3 级拷打烈度压力测试、5 步防守策略与速查卡、面试实录长文本切分诊断与下一轮备战清单；
+- **投递与版本追踪轨（Tracker & Lifecycle Track）**：6 阶段投递看板状态机、不可变证据快照与指纹、Proposal 人工确认机制、产物 SHA-256 审计与版本差异追踪。
 
 ---
 
 ## 🏛️ 全景系统架构 (Full-Spectrum System Architecture)
 
 ```text
-┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                                   OfferGet Master Operating System                                                    │
-├───────────────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────┤
-│                     【企业求职与工程交付轨】                     │                             【学术深造与保研答辩轨】                            │
-├──────────────────────────┬────────────────────────────┼──────────────────────────┬──────────────────────────┬─────────────────────────┤
-│  JDAnalyst & Taxonomy    │ ASu Modeler & Fact Guard   │   Baoyan Auditor & Comp  │  Advisor Match & Pigeon  │ Defense Red-Team Sim    │
-├──────────────────────────┼────────────────────────────┼──────────────────────────┼──────────────────────────┼─────────────────────────┤
-│ • 5 图层纵向语义穿透拆解   │ • Data->Eval 6 联链路拆解  │ • 4 大学术诚信红线审查   │ • 导师近3年学术范式跃迁  │ • Claim-Evidence 矩阵   │
-│ • 6 大技术领域能力树与权重│ • 0→1 vs X→Y 架构演进规约  │ • 仿真/在投/动词越权拦截 │ • 技术交集加权匹配 (0-100)│ • 3 级拷打烈度压力测试 │
-│ • 32 项大厂黑话潜台词词典 │ • 确定性算术重算 (容差≤0.5%)│ • 3 级自适应字数压缩引擎 │ • 高情商外联/套磁邮件生成│ • 5 步防守策略与速查卡  │
-│ • 硬门槛物理隔离与加权打分│ • 6 类夸大模式静态拦截     │ • 标点符号与版面排版规范 │ • 防鸽承诺矩阵与体面拒信 │ • 面试官追问链 (3-Round)│
-│ • 岗位隐性现实与探针问题  │ • 高校官方 Title 防伪白名单│ • 21 项夏令营物料核对清单│ • 强弱 Committee 决策机制│ • 15分钟干净复现自查    │
-├──────────────────────────┴────────────────────────────┴──────────────────────────┴──────────────────────────┴─────────────────────────┤
-│                                             【底层支撑引擎与单页压制子系统】                                                             │
-│  • ApexResume: 11 个手法、13 个句式模板、Mini-RFC 叙事、无头 Chrome 像素级 A4 单页压制                                                    │
-│  • PrivacyAnonymizer: 双向可逆去隐私化脱敏网关 (支持 Standard 与 Strict 双层模式)                                                       │
-│  • Automated Test Suite: 完整自动化测试矩阵 (OfferGet 根测试 + ApexResume 子系统 + 闭环自测流水线)                                      │
-└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                                   OfferGet Master Operating System                                                     │
+├────────────────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────────┤
+│                     【企业求职与工程交付轨】                      │                             【学术深造与保研答辩轨】                             │
+├──────────────────────────┬─────────────────────────────┼──────────────────────────┬──────────────────────────┬─────────────────────────┤
+│   JD Analyst & Decoder   │  Engineering Chain Modeler  │   Baoyan Auditor & Comp  │  Advisor Match & Comm    │  Defense Red-Team Sim   │
+├──────────────────────────┼─────────────────────────────┼──────────────────────────┼──────────────────────────┼─────────────────────────┤
+│ • 5 图层纵向语义穿透拆解    │ • Data->Eval 6 联工程链路建模 │ • 4 大学术诚信红线审查    │ • 导师近3年学术范式跃迁   │ • Claim-Evidence 证据矩阵│
+│ • 6 大标准领域核心能力树   │ • 0→1 vs X→Y 架构演进规约   │ • 仿真/在投/动词越权拦截  │ • 技术交集加权匹配 (0-100)│ • 3 级拷打烈度压力测试  │
+│ • 32 项企业黑话潜台词词典  │ • 确定性算术重算 (容差≤0.5%) │ • 3 级自适应字数压缩引擎  │ • 高情商外联/套磁邮件生成 │ • 5 步防守策略与速查卡   │
+│ • 硬门槛物理隔离与加权打分 │ • 6 类夸大模式静态拦截      │ • 标点符号与学术排版规范  │ • 防鸽承诺矩阵与体面拒信  │ • 递进式追问链 (3-Round)│
+│ • 岗位隐性现实与探针问题   │ • 高校官方 Title 防伪白名单  │ • 21 项夏令营物料核对清单 │ • 强弱 Committee 决策机制 │ • 面试长文本实录全复盘   │
+├──────────────────────────┴─────────────────────────────┴──────────────────────────┴──────────────────────────┴─────────────────────────┤
+│                                                【投递决策、版本追踪与底层支撑基石】                                                      │
+├────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ • Application Tracker & Store: 6 阶段投递看板 (pending->offer->closed)、转化分析、标签洞察与 SQLite 持久化                               │
+│ • Offer Matrix: 多 Offer 真实时薪折算模型 (通勤扣减、年终折损、双边公积金)、6 大劳动合同陷阱雷达与博弈策略                                  │
+│ • ApexResume Engine: 11 种表达手法、13 种黄金句式模板、Mini-RFC 架构叙事、无头 Chrome 像素级 A4 单页压制                                 │
+│ • Privacy Anonymizer: 双向可逆去隐私化脱敏网关 (支持 Standard 与 Strict 双层保护模式)                                                    │
+│ • Fact Verification Guard & Evidence Graph: 单源真值 (SSOT) 事实证据图谱、不可变指纹快照与严格防篡改门禁                                 │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 💡 核心借鉴与技术资产吸收全景说明 (Absorption Catalog)
+## ⚡ 核心能力与关键模块详解
 
-OfferGet 在演进过程中，系统性研读了本地简历生态中的 26 个开源项目，坚决摒弃了“爬虫轰炸、海外黑客工具、商业引流营销号、代码提示词副本”等违规/同质化陷阱，**将经筛选的标杆能力进行边界清晰的重构与测试**：
+### 1. 5 图层 JD 穿透解码与标准岗位族图谱 (`modules/jd_analyst/` & `core/jd_decoder.py`)
+- **5 图层纵向语义穿透**：将一段非结构化岗位描述自顶向下拆解为：
+  1. `Base Profile`：岗位基础属性、层级、Base 地点；
+  2. `Hard Thresholds`：学历、专业、年限、强制技术项等物理红线；
+  3. `Core Skills`：区分为必须具备（`must_have`）与加分项（`nice_to_have`）；
+  4. `Implicit Signals`：从“高并发/重构/海量数据/抗压”等潜台词中反推业务真实痛点；
+  5. `Domain Capabilities`：归属到标准六大核心技术族群（AI 算法工程、分布式后端高并发、前端与跨端、移动端、大数据湖仓、SRE 云原生平台），并动态扩展数据分析、AI 产品经理、测试保障、UI/UX、用户增长等领域。
+- **邻近技能容差匹配（Adjacent Skills）**：支持主流技术栈等价置换（如 Kafka $\leftrightarrow$ RocketMQ，React $\leftrightarrow$ Vue，Flink $\leftrightarrow$ Spark Streaming 等），杜绝单字死板过滤。
 
-### 1. 企业求职与大厂岗位画像类
-| 借鉴项目 | 原始项目核心价值 | OfferGet 的具体重构与吸收方式 | 落地代码模块 |
-|:---|:---|:---|:---|
-| **`resume-jd-optimizer-cn`** | 专为国内大厂打造的岗能分类、量化指标字典与真实性原则 | • 吸收并提炼 **6 大技术领域能力树**（AI算法、分布式后端、前端全栈、移动端、大数据湖仓、SRE云原生）与正交权重矩阵；<br>• 吸收 **8 大核心量化指标字典**（QPS、P99、MFU、显存利用率、收敛加速比等）严谨数学定义与防吹嘘公式；<br>• 提炼 20+ 条大厂公关黑话与隐性招聘潜台词穿透规则。 | `core/jd_decoder.py`<br>`core/jd_matcher.py` |
-| **`ASu-resume-skills`** | 业界知名的“阿酥式”高密度架构叙事履历与证据审计 | • 提炼 **6 联全链路架构建模规范**（`Data / Model / Training / Serving / Agent / Eval`），支持 AI 与经典工程同构映射；<br>• 实现 **最小可闭环 Owner 提炼** 与“0→1 从无到有 vs X→Y 架构演进”叙事约束；<br>• 落地 **5 层失败分类学**（Recall → Planning → Evidence → Tool → Outcome）；<br>• 实现 **6 类夸大模式静态拦截**（绝对容差 $\le 0.5\%$ 机器对账、planned 时态互斥）；<br>• 建立 **教育部官方高校 Title 白名单防伪库**（985/211/双一流/高校联盟）。 | `core/asu_modeler.py`<br>`core/fact_guard.py` |
-| **`ats-optimized-resume-agent-skill`** | 国内外现代 ATS 过滤规则与机器可读性标准 | • 提炼 ATS 评分模型（四维加权，满分 100 分）；<br>• 建立 **三态技能台账（Verified vs Claimed vs Gap）**；<br>• 拦截非标准单字排版与复杂的不可解析嵌套表格。 | `core/ats_checker.py` |
-| **`resume-toolkit`** & **`job-description-skill`** | 简历关键信息抽取与标准化词表规范 | • 吸收了技术实体命名规范与技能同义词归一化映射字典。 | `core/jd_decoder.py` |
+### 2. 6 联全链路工程叙事建模与算术一致性核验 (`core/asu_modeler.py`)
+- **6 联全链路拆解**：针对工程与算法项目，严格按 `Data (数据工程) -> Model (模型设计) -> Training (训练加速) -> Serving (推理与高并发部署) -> Agent (编排落地) -> Eval (严密评测与失败归因)` 六个环节进行经历模块化归位。
+- **架构演进与最小 Owner 规约**：强制规约“0 $\to$ 1 从无到有原型搭建”与“X $\to$ Y 既有系统重构演进”的措辞规范，严禁普通贡献者直接标榜“全网架构负责人”。
+- **确定性算术防伪对账**：
+  - 机器重新计算分子分母比值与百分比，容差严格限制在 $\le 0.5\%$；
+  - 校验优化前后基线变化（相对百分比 vs 绝对百分点），拦截指标自相矛盾；
+  - 拦截缺乏横向基准对比的“业内最高/全球领先”等未锚定绝对最高级。
+- **教育部高校官方 Title 白名单**：对“985/211/双一流/省属重点”等资质进行官方白名单校验，拦截非法包装。
 
-### 2. 学术保研、导师博弈与答辩审查类
-| 借鉴项目 | 原始项目核心价值 | OfferGet 的具体重构与吸收方式 | 落地代码模块 |
-|:---|:---|:---|:---|
-| **`King-of-Pigeon` (鸽子王)** | 经典高情商保研文书与博弈沟通模板 | • 吸收 **高情商导师外联与套磁邮件架构**（Profile Hook、学术心得、价值主张）；<br>• 提炼 **防鸽与学术声誉保护矩阵**（口头承诺有效度评估、夏令营多 Offer 抉择策略、母校信誉保护）；<br>• 吸收 **学术礼貌拒信与报喜答谢信** 标杆范式。 | `core/advisor_matcher.py` |
-| **`defense-beating-simulator`** | 项目答辩与保研复试红蓝对抗审查器 | • 吸收并实现了完整的 **Claim-Evidence 矩阵**（将架构、指标、创新点映射到材料依据，标注 `Material-supported / Material-implied / Material-missing` 状态）；<br>• 落地 **3 级拷打烈度**（先热个身、开始挑刺、严刑拷打）与 3 轮递进追问链；<br>• 提炼 **5 步防守应答策略**（正面回应+说明依据+划清边界+合理解释+给出改进）与“答辩速查卡（Cheat Sheet）”。 | `core/defense_simulator.py` |
-| **`academic-skills`** | 顶会标准全流程学术套件 | • 提炼其 `professor-fit-analyser` 算法：根据导师近 3 年论文分析其**学术研究范式跃迁（Paradigm Shift）**，计算候选人与导师的研究兴趣交集分（0-100%）。 | `core/advisor_matcher.py` |
-| **`baoyan-resume-writing`** & **`baoyan-skills`** | 保研学术简历规范与材料字数压缩算法 | • 落地 **4 大学术诚信红线审查**（仿真混充真实、在投冒充录用、动词越权夸大主导、空洞无凭最高级）；<br>• 实现 **3 级自适应字数压缩引擎**（摘要版 40-60 字、简历版 80-110 字、陈述版 150-220 字），严格保障报名系统字数合规；<br>• 标准化中文学术标点排版。 | `core/baoyan_auditor.py` |
-| **`baoyan_workbench`** & **`CS-BAOYAN-Wiki`** | 跨院校保研流程追踪与高校考核机制 | • 吸收并构建了 **保研全流程状态机**（夏令营、预推免、九推、考研复试）；<br>• 落地 **21 项标准化保研物料核验清单**（覆盖盖章成绩单、排名证明、推荐信、代表作等）；<br>• 建模“强委员会制 (强 com)” 与 “导师一票制 (弱 com)” 的差异化应对策略。 | `core/baoyan_pipeline.py` |
-| **`academic-homepage-cv-sync`** | 单源真值（Single Source of Truth）多端同步理念 | • 吸收其数据驱动架构：全局以单一标准数据模型（SSOT JSON）为真值源，下游统一派生纯文本、HTML 报告、LaTeX 源码与 PDF。 | 全局数据流架构 |
+### 3. ATS 四维可读性质量门禁与三态技能台账 (`core/ats_checker.py`)
+- **四维打分模型**：满分 100 分，按“关键词密度与契合度、排版结构与格式规范、经历叙事量化深度、个人信息完整性”进行打分，给出 `READY_TO_SEND / CONDITIONAL_PASS / REVISE_REQUIRED` 明确裁决。
+- **三态技能台账（Three-State Skill Ledger）**：
+  - `Verified Skills`：在底层项目与经历中具备确凿实测数据与产物支撑的技能；
+  - `Claimed Skills`：仅在个人技能清单中提及、在实际项目无佐证的主张；
+  - `Gap Skills`：岗位核心要求中尚未满足的技术缺口。
 
-### 3. 极致排版与工程压制类
-| 借鉴项目 | 原始项目核心价值 | OfferGet 的具体重构与吸收方式 | 落地代码模块 |
-|:---|:---|:---|:---|
-| **`GodSU / sushen` (酥神简历)** | 爆火校招简历逆向出来的高信号文案与视觉规范 | • 完整逆向并代码化实现 **11 个表达手法**（量化、对比、极值、收敛等）与 **13 个黄金句式模板**；<br>• 将其重构为具备 34 项独立单测的 **`ApexResume` 引擎**，结合无头 Chrome 打印实现一页 A4 完美压制。 | `ApexResume/` 子系统 |
+### 4. 答辩红蓝对抗模拟与面试实录复盘 (`core/defense/` & `core/post_interview.py`)
+- **Claim-Evidence 矩阵构建**：对项目陈述提取断言，划分为 `Material-supported（有据支撑）`、`Material-implied（合理推断）`、`Material-missing（缺乏依据）`。
+- **3 级拷打烈度压力测试**：
+  - `先热个身`：事实摸底，询问基础配置与基线口径；
+  - `开始挑刺`：依赖剥离，追问架构设计权衡与竞品选型理由；
+  - `严刑拷打`：极限复现，针对高并发极限、故障恢复与工程局限性展开步步紧逼。
+- **5 步防守型应答框架**：`[正面回应] -> [实际实现] -> [边界与局限] -> [原因说明] -> [改进规划]`，彻底杜绝虚假自夸。
+- **面试实录长文本切分与 (N+1) 面清单**：输入面试录音转录或文本记录，自动识别问答轮次，进行盲区诊断，输出薄弱项安全应答应急预案。
+
+### 5. 保研推免学术审查与导师外联决策 (`core/baoyan_*.py` & `core/advisor_matcher.py`)
+- **4 大学术诚信红线**：
+  1. 仿真模拟混充真实物理系统落地；
+  2. 论文在投阶段虚报为录用/发表；
+  3. 动词越权（将实验参与者虚报为主持人/通讯作者）；
+  4. 空洞无凭最高级与学术修饰过当。
+- **3 级自适应字数压缩引擎**：在不破坏主谓宾与事实数据的前提下，自动压缩为“摘要版（40-60字）”、“简历版（80-110字）”、“申请表陈述版（150-220字）”，完美适配各高校系统字数限制。
+- **导师研究范式跃迁匹配与防鸽承诺**：基于导师近 3 年学术成果分析其技术演进方向，计算契合度，生成高情商学术自荐信与学术礼貌拒信。
+
+### 6. 投递追踪看板、Proposal 人工确认与版本元数据 (`core/application_tracker.py`)
+- **6 阶段投递看板状态机**：`pending -> applied -> written_test -> interview -> offer -> closed`，具备单向递进与合规跳流校验。
+- **Proposal 人工确认机制**：所有针对候选人档案的修订建议先以 `MaterialProposal` 草稿形态暂存，只有经过候选人显式执行 `proposal accept` 才会落地入库。
+- **版本元数据与产物防篡改**：记录每次投递的 Profile Hash、JD Hash、渲染主题，并在本地严格校验产物文件 SHA-256 签名，生成确定性版本差异。
+
+### 7. 多 Offer 真实时薪折算与 6 大合同陷阱雷达 (`core/offer_*.py`)
+- **真实时薪折算模型**：
+  $$\text{真实时薪} = \frac{\text{现金底薪} + \text{保障年终} \times \text{折损率} + \text{双边公积金} - \text{通勤租房差额}}{(52 \text{周} - \text{年假}) \times (\text{每周工时} + \text{每日通勤} \times \text{工作天数})}$$
+  剔除“996 伪高薪”幻象，还原单位精力产出。
+- **6 大劳动合同陷阱雷达**：
+  1. `TRAP_01_PROBATION`：试用期超长（如 6 个月）或打折超标、不缴社保；
+  2. `TRAP_02_NON_COMPETE`：全员笼统竞业、将法定竞业补偿揉入月薪发放；
+  3. `TRAP_03_SALARY_SPLIT`：薪酬大比例拆分（固定薪资 50% + 浮动绩效 50%）；
+  4. `TRAP_04_EQUITY_CLIFF`：期权 4 年长周期、回购定价不透明；
+  5. `TRAP_05_OVERTIME`：不定时工作制规避法定加班费；
+  6. `TRAP_06_SALARY_DISCREPANCY`：HR 宣称大包与合同实际签署金额严重背离。
+- **薪酬博弈与证据门禁**：生成带有竞品 Offer 门限与真实量化支撑的高情商薪酬争取邮件与口头谈判脚本。
+
+### 8. ApexResume 像素级单页压制引擎 (`ApexResume/`)
+- 包含 11 个表达手法与 13 个黄金句式模板；
+- 采用 Mini-RFC 架构表达技术经历；
+- 集成无头 Chrome 驱动，像素级控制边距、行高、字符间距与分页截断，确保 A4 单页完美压制。
 
 ---
 
-## 🛠️ 快速上手与 CLI 命令指南
+## 🛠️ 快速上手与 CLI 指南
 
-### 1. 环境准备
-系统推荐 Python 3.9+。核心 `review` 流程只使用 Python 标准库；开发与测试可安装项目及 pytest：
+### 1. 环境准备与全量自检
+OfferGet 采用纯 Python 工业化架构，核心分析不依赖任何外部付费 API。
 ```bash
+# 1. 克隆并进入项目
 cd OfferGet
+
+# 2. 创建并激活虚拟环境 (推荐 Python 3.9+)
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-python -m pip install -e . pytest
-```
+# source .venv/bin/activate  # Linux / macOS
 
-### 2. 执行测试
-根测试与 ApexResume 子系统分开运行，实际收集数量以本机输出为准：
-```bash
-python -m pytest tests -q
-python -m pytest ApexResume/tests -q
-# 或运行包含浏览器环境检查的统一自检
+# 3. 本地可编辑安装与依赖同步
+python -m pip install -e . pytest
+
+# 4. 执行全系统环境自检 (包含浏览器渲染与测试套件验证)
 python cli.py selftest
 ```
 
-> **定位说明**：当前实现是本地确定性规则型求职工作流，无外部 LLM/API 依赖。匹配分与渠道区间属于材料诊断启发式，不是 ATS、面试或录用概率承诺。
+---
 
-### 3. 企业求职核心指令
+### 2. 企业求职全流程命令
+
+#### Step 1: 轻量审查全闭环 (JD拆解 -> 事实建议 -> 针对性面试题)
 ```bash
-# 1. 轻量求职审查全闭环 (岗位JD拆解 -> 真实事实简历建议 -> 3道针对性面试题)
-python cli.py review examples/synthetic_intern_jd.txt --profile examples/synthetic_intern_profile.json --json
+python cli.py review examples/synthetic_intern_jd.txt \
+  --profile examples/synthetic_intern_profile.json \
+  --json
+```
 
-# 2. 提交一轮真实作答并获取具体诊断反馈 (指标核验、证据边界与保守精修)
-python cli.py review examples/synthetic_intern_jd.txt --profile examples/synthetic_intern_profile.json --answers examples/synthetic_intern_answers.json --output review.json --json
-
-# 2. 穿透解码企业 JD (提取 5 图层、6 大能力树与隐性黑话)
+#### Step 2: 深入穿透解码企业 JD
+```bash
 python cli.py jd decode examples/sample_ai_jd.txt
+```
 
-# 3. 严格匹配候选人画像 (输出加权匹配分与面试概率)
-python cli.py jd match examples/sample_ai_jd.txt --profile examples/candidate_profile.json
+#### Step 3: 严格匹配候选人画像 (输出加权匹配分与雷达)
+```bash
+python cli.py jd match examples/sample_ai_jd.txt \
+  --profile examples/candidate_profile.json
+```
 
-# 4. 生成双语 HTML 战略对战报告
-python cli.py jd report examples/sample_ai_jd.txt --profile examples/candidate_profile.json --output strategy_report.html
+#### Step 4: 执行 ATS 机器可读性四维质检
+```bash
+python cli.py ats audit examples/candidate_profile.json \
+  --jd examples/sample_ai_jd.txt
+```
 
-# 5. 执行 ATS 质量门禁与三态技能台账审计
-python cli.py ats audit examples/candidate_profile.json --jd examples/sample_ai_jd.txt
-
-# 6. 事实防伪校验 (严格核查指标虚报与算术不一致)
+#### Step 5: 事实防伪校验 (严格拦截夸大虚报)
+```bash
 python cli.py fact verify examples/candidate_profile.json
 ```
 
-### 4. 学术保研核心指令
+#### Step 6: 生成中英双语战略战报 HTML
+```bash
+python cli.py jd report examples/sample_ai_jd.txt \
+  --profile examples/candidate_profile.json \
+  --output strategy_report.html
+```
+
+---
+
+### 3. 项目答辩与红蓝对抗模拟
+
+```bash
+# 针对候选人项目经历执行高压答辩拷打模拟 (支持: 先热个身 / 开始挑刺 / 严刑拷打)
+python cli.py defense simulate \
+  --project "主导 64B Dense 及 230B MoE 基座大模型在 1024 卡集群上的预训练全流程，端到端 MFU 提升至 54.2%" \
+  --intensity "严刑拷打" \
+  --profile examples/candidate_profile.json \
+  --output defense_report.md
+```
+
+---
+
+### 4. 学术保研与推免审查命令
+
 ```bash
 # 1. 保研经历学术诚信审查与 4 大红线拦截
 python cli.py baoyan audit examples/sample_baoyan_entry.txt
 
-# 2. 三级自适应字数压缩 (针对高校系统字数限制)
+# 2. 三级自适应字数压缩 (针对高校申报系统)
 python cli.py baoyan compress examples/sample_baoyan_entry.txt --tier 简历版
 
-# 3. 导师近 3 年范式匹配与高情商套磁信生成
-python cli.py baoyan advisor examples/sample_advisor.json --profile examples/academic_profile.json --scenario summer_camp
+# 3. 导师近 3 年学术范式匹配与高情商外联邮件生成
+python cli.py baoyan advisor examples/sample_advisor.json \
+  --profile examples/academic_profile.json \
+  --scenario summer_camp
 
-# 4. 夏令营 21 项物料清单动态核查
-python cli.py baoyan checklist examples/academic_profile.json --stage 夏令营 --track 直博
-
-# 5. 项目答辩红蓝对抗模拟 (生成 Claim-Evidence 矩阵与追问速查卡)
-python cli.py baoyan defense examples/candidate_profile.json --intensity 严刑拷打
+# 4. 夏令营 21 项物料合规动态核查
+python cli.py baoyan checklist examples/academic_profile.json \
+  --stage 夏令营 --track 直博
 ```
 
-### 5. 投递、人工确认与版本追踪
+---
 
-OfferGet 将“分析建议”和“修改事实档案”分开：`review` 只生成可审计的
-`MaterialProposal` 草稿，只有显式执行 `proposal accept` 才会写出新 Profile。
-所有投递、提案、结果反馈和简历产物元数据都保存在本地 SQLite 中。
+### 5. 投递追踪看板与版本管理
 
 ```bash
-# 创建投递记录
-python cli.py application add APP-001 --company "示例科技" --role "后端工程师" --db applications.db
+# 1. 创建投递记录
+python cli.py application add APP-2026-001 --company "星河科技" --role "后端架构师" --db applications.db
 
-# 生成并持久化待确认 Proposal
+# 2. 结合 Review 流程生成待确认 Proposal
 python cli.py review examples/sample_ai_jd.txt \
   --profile examples/candidate_profile.json \
-  --proposal-db applications.db --application-id APP-001 \
+  --proposal-db applications.db --application-id APP-2026-001 \
   --output review.json --json
 
-# 查看并人工确认
-python cli.py proposal list --application-id APP-001 --db applications.db --json
+# 3. 人工审查并显式接受 Proposal (生成新 Profile 并触发简历构建)
 python cli.py proposal accept PROPOSAL_ID \
   --profile examples/candidate_profile.json \
   --jd examples/sample_ai_jd.txt \
   --output tailored_profile.json --build-resume \
   --db applications.db --json
 
-# 查看投递、简历版本和结果反馈
-python cli.py application show APP-001 --db applications.db --json
-python cli.py application versions APP-001 --db applications.db --json
-python cli.py application outcome APP-001 --stage interview --result rejected \
-  --feedback "系统设计深度不足" --reflection "容量估算不充分" \
-  --next-action "练习缓存与分片设计" --tags system_design,technical_depth \
+# 4. 更新投递状态为面试中
+python cli.py application status APP-2026-001 interview --db applications.db
+
+# 5. 录入面试结果反馈、复盘反思与标签
+python cli.py application outcome APP-2026-001 \
+  --stage interview --result rejected \
+  --feedback "系统设计容量预估不充分" \
+  --reflection "需加强极端流量缓存穿透场景的理论准备" \
+  --tags system_design,technical_depth \
   --db applications.db
+
+# 6. 查看求职转化洞察分析
 python cli.py application insights --db applications.db --json
 ```
 
-### 6. RenderCV JSON 互通
+---
 
-RenderCV 负责自己的 YAML 解析和渲染；OfferGet 只提供无额外依赖的 JSON 数据互通。
-未知 section 会保存在 `rendercv_import_metadata` 并通过 warnings 报告，不会静默丢弃。
+### 6. 多 Offer 真实时薪折算与薪酬博弈
 
 ```bash
-python cli.py rendercv import rendercv.json --output profile.json --json
-python cli.py rendercv export profile.json --output rendercv.json --json
+# 1. 评估单个 Offer 薪酬包并扫描 6 大合同陷阱
+python cli.py offer evaluate examples/sample_offer.json --profile examples/candidate_profile.json
+
+# 2. 生成高情商 Counter-Offer 谈判信与口头博弈话术
+python cli.py offer counter examples/sample_offer.json \
+  --target-base 85000 \
+  --profile examples/candidate_profile.json
 ```
-
-### 7. 当前核心边界
-
-- `ProfileContext` 是事实单一来源；渲染器、JD 分析和证据图都是派生视图。
-- `EvidenceGraph` 与 `FactVerificationGuard` 负责事实边界；Proposal 是人工确认边界。
-- `ApplicationStore` 负责投递生命周期、结果反馈和简历版本元数据。
-- ResumeVersion 当前保存 Profile/JD hash 和输出产物路径，不保存完整 Profile 快照；因此 `version-diff` 只报告元数据差异，不声称内容级差异。
-- ResumeVersion 同时保存产物存在状态与 SHA-256；`proposal accept` 只有在 Profile/HTML/PDF 产物均可读时才登记为 completed。
-- 外部简历项目只作为规则和架构参考，OfferGet 不直接依赖其运行时、数据库或 Web 基础设施。
-- CLI 的 `--json` 失败输出统一为 `{status, error_type, message, exit_code}`；文本模式继续输出面向终端的错误信息。
 
 ---
 
 ## 🧪 质量工程与测试矩阵
 
-OfferGet 拥有覆盖率极高的自动化测试工程，保证每一个规则与算法均有确定性保障：
-- **`tests/test_asu_and_taxonomy.py`**：测试 6 联链路拆解、Owner 命名规范、容差 $\le 0.5\%$ 算术核验、6 类夸大审计与大厂岗位分类；
-- **`tests/test_baoyan_auditor.py`**：41 个测试覆盖学术诚信红线、标点符号审查与三级压缩；
-- **`tests/test_advisor_matcher.py`**：11 个测试覆盖导师画像抽取、范式交集加权、防鸽承诺矩阵与礼貌拒信；
-- **`tests/test_baoyan_pipeline.py`**：9 个测试覆盖保研全生命周期状态机与 21 项物料清单校验；
-- **`tests/test_fact_guard.py`**：测试指标防漂移、未锚定数字拦截与真实性台账；
-- **`ApexResume/tests/`**：覆盖无头浏览器单页压制、DOM 测量与 CSS 视觉规范；
-- **测试基线**：不在文档中硬编码数量；以 `python -m pytest tests -q` 与 `python -m pytest ApexResume/tests -q` 的当前输出为准。
+OfferGet 采用模块化测试工程，全量单测覆盖各个核心模块，在本地保持 100% 绿灯：
+
+```bash
+# 运行 OfferGet 全量单元测试套件
+python -m pytest tests -q
+
+# 运行 ApexResume 独立渲染单测
+python -m pytest ApexResume/tests -q
+
+# 运行全链路系统级端到端自测
+python cli.py selftest
+```
+
+### 核心测试套件分布
+| 测试套件 | 验证的核心业务逻辑 |
+|:---|:---|
+| **`tests/test_taxonomy_classification.py`** | 6 联工程链路拆解、Owner 表述规范、容差 $\le 0.5\%$ 指标对账、经历膨胀审计与六大岗位族分类 |
+| **`tests/test_evidence_engine.py`** | 证据链不可变模型、比率与变化值校验、开源贡献深度等级划分（Level 0-4）、HTML 审计战报渲染 |
+| **`tests/test_defense_simulator.py`** | Claim-Evidence 证据矩阵生成、3 级拷打烈度递进追问链、100 分制防守评估与 5 步防守速查卡 |
+| **`tests/test_application_tracker.py`** | 证据图单调状态机、不可变指纹快照、SQLite 数据库模式迁移（v1-v7）、投递结果反馈与简历版本元数据审计 |
+| **`tests/test_offer_matrix.py`** | 多 Offer 真实时薪折算模型（年终折损率、通勤扣减、公积金比例）、6 大合同陷阱雷达与证据门禁博弈脚本 |
+| **`tests/test_baoyan_*.py`** | 保研学术诚信 4 大红线、3 级自适应字数压缩、夏令营 21 项物料合规清单与全生命周期状态机 |
+| **`tests/test_advisor_matcher.py`** | 导师研究范式跃迁提取、候选人技术交集加权计算、防鸽承诺矩阵与高情商自荐信 |
+| **`tests/test_ats_checker.py`** | ATS 机器可读性四维打分、三态技能台账（Verified/Claimed/Gap）、排版合规门禁 |
+| **`tests/test_fact_guard.py`** | 事实防伪守护、经历级别作用域锚定、未佐证指标拦截与零漂移保真 |
+| **`ApexResume/tests/`** | 11 种表达手法、13 种黄金句式、DOM 高度与视口测量、无头 Chrome A4 像素级单页压制 |
+
+---
+
+## 🔒 核心设计哲学与边界准则
+
+1. **事实单一真值源（SSOT）**：`CandidateProfile` 是唯一真实底稿。所有改写建议、匹配计算、雷达报告及证据图谱均是纯只读或派生视图，绝不未经人工确认擅自篡改候选人真实履历。
+2. **人工确认护栏（Human-in-the-Loop）**：任何求职建议仅以 `MaterialProposal` 存在，必须经由候选人手动 `proposal accept` 后才被持久化。
+3. **本地计算与隐私优先**：全流程提供双向可逆脱敏（`PrivacyAnonymizer`），所有算术校验、词典匹配、规则审计均在本地完成，杜绝敏感经历泄漏。
+4. **恪守学术道德与合规底线**：系统技术性拦截一切伪造学历、编造虚假实验、篡改在投论文状态等不端行为；所有 Offer 劳动法律提示均保持客观中立并附带合规免责声明。
 
 ---
 
 ## 📄 许可证与免责声明
-本项目基于 **MIT License** 开源。
-- **免责声明**：OfferGet 致力于提升求职者与学子的真实表达深度与信息对称度。系统严格杜绝并技术性拦截一切伪造学历、虚构项目经历、篡改实验数据及学术不端行为。求职者须对其提交材料的真实性承担法律与道德责任。
+
+本项目基于 **[MIT License](LICENSE)** 开源。
+
+> **免责声明**：OfferGet 致力于提升求职者与升学学子的真实表达质量与职场信息对称度。系统提供的匹配得分、时薪测算、合同陷阱提示及防守策略仅作为个人材料准备与决策辅助工具，不构成任何形式的法律建议、保研录取承诺或招聘保证。用户对其提交的一切申请材料真实性与法律后果负全责。

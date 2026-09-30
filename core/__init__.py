@@ -37,8 +37,8 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     # core.jd_decoder
     "decode_jd": ("core.jd_decoder", "decode_jd"),
 
-    # core.jd_matcher
-    "match_profile_to_jd": ("core.jd_matcher", "match_profile_to_jd"),
+    # core.jd_compat
+    "match_profile_to_jd": ("core.jd_compat", "match_profile_to_jd"),
 
     # core.report_generator
     "generate_report": ("core.report_generator", "generate_report"),

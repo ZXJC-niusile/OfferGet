@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.jd_decoder import decode_jd
-from core.jd_matcher import match_profile_to_jd
+from core.jd_compat import match_profile_to_jd
 from core.report_generator import generate_report
 from core.validator import validate_bilingual_html, validate_anti_ai_slop
 from core.ats_checker import audit_resume_ats

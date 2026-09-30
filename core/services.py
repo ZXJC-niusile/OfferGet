@@ -66,7 +66,7 @@ _LAZY_EXPORTS: Dict[str, Tuple[str, str]] = {
     "resolve_report_template": ("core.report_generator", "resolve_report_template"),
     "validate_output_security": ("core.security_gate", "validate_output_security"),
     "decode_jd": ("core.jd_decoder", "decode_jd"),
-    "match_profile_to_jd": ("core.jd_matcher", "match_profile_to_jd"),
+    "match_profile_to_jd": ("core.jd_compat", "match_profile_to_jd"),
     "validate_bilingual_html": ("core.validator", "validate_bilingual_html"),
     "validate_anti_ai_slop": ("core.validator", "validate_anti_ai_slop"),
     "audit_resume_ats": ("core.ats_checker", "audit_resume_ats"),
