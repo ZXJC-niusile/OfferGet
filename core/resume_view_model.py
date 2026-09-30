@@ -1,7 +1,7 @@
 """
 OfferGet Resume ViewModel & Decoupled Renderers (core/resume_view_model.py)
 ==========================================================================
-Absorbs architectural patterns from ASu & RenderCV:
+OfferGet native strongly-typed resume view model and decoupled renderers:
 1. ResumeViewModel:
    - Decoupled, strongly-typed view model representation of resume data.
    - Pre-escaped strings and safe markdown bold conversions (preventing runtime XSS).
@@ -23,8 +23,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 # Ensure OfferGet and ApexResume are in sys.path
-CURRENT_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = CURRENT_DIR.parent
+from core.paths import get_project_root, get_theme_path
+
+PROJECT_ROOT = get_project_root()
 
 from core.profile_adapter import extract_education_grid, normalize_candidate_profile
 from core.security_gate import (
@@ -76,6 +77,7 @@ class ResumeViewModel:
     projects: List[Dict[str, Any]] = field(default_factory=list)
     competencies: Dict[str, List[str]] = field(default_factory=dict)
     publications: List[Dict[str, Any]] = field(default_factory=list)
+    postgraduate_exam: Optional[Dict[str, Any]] = None
     photo_data_uri: Optional[str] = None
     reserve_photo: bool = True
 
@@ -108,6 +110,7 @@ class ResumeViewModel:
                 "time": self.edu_time,
                 "grid_rows": self.education_grid_rows,
             },
+            "postgraduate_exam": self.postgraduate_exam,
             "experiences": self.experiences,
             "projects": self.projects,
             "competencies": self.competencies,
@@ -290,6 +293,96 @@ class ResumeViewModel:
                 "raw_year": str(pub.get("year", "")),
             })
 
+        # Postgraduate Exam resolution
+        raw_pg = (
+            prof.get("postgraduate_exam")
+            or cand.get("postgraduate_exam")
+            or (raw_profile.get("postgraduate_exam") if isinstance(raw_profile, dict) else None)
+            or (raw_profile.get("candidate", {}).get("postgraduate_exam") if isinstance(raw_profile, dict) else None)
+        )
+        postgraduate_exam: Optional[Dict[str, Any]] = None
+        if isinstance(raw_pg, dict) and raw_pg:
+            target_school = str(raw_pg.get("target_school") or raw_pg.get("school") or raw_pg.get("target_institution") or "").strip()
+            target_major = str(raw_pg.get("target_major") or raw_pg.get("major") or raw_pg.get("target_discipline") or "").strip()
+            direction = str(raw_pg.get("direction") or raw_pg.get("research_direction") or "").strip()
+
+            scores_data = raw_pg.get("scores")
+            subjects: List[Dict[str, str]] = []
+            total_val = str(raw_pg.get("total_score") or raw_pg.get("total") or raw_pg.get("总分") or "").strip()
+
+            if isinstance(scores_data, list):
+                for item in scores_data:
+                    if isinstance(item, dict):
+                        sub_name = str(item.get("name") or item.get("subject") or "").strip()
+                        sub_score = str(item.get("score") or item.get("grade") or "").strip()
+                        if sub_name and sub_score:
+                            if sub_name == "总分" or sub_name.lower() == "total":
+                                if not total_val:
+                                    total_val = sub_score
+                            else:
+                                subjects.append({
+                                    "name": escape_html_text(sub_name),
+                                    "score": escape_html_text(sub_score),
+                                    "raw_name": sub_name,
+                                    "raw_score": sub_score,
+                                })
+            elif isinstance(scores_data, dict):
+                for k, v in scores_data.items():
+                    k_str = str(k).strip()
+                    v_str = str(v).strip()
+                    if k_str == "总分" or k_str.lower() == "total":
+                        if not total_val:
+                            total_val = v_str
+                    else:
+                        subjects.append({
+                            "name": escape_html_text(k_str),
+                            "score": escape_html_text(v_str),
+                            "raw_name": k_str,
+                            "raw_score": v_str,
+                        })
+            else:
+                pol = raw_pg.get("politics") or raw_pg.get("political_theory") or raw_pg.get("思想政治理论") or raw_pg.get("政治")
+                if pol is not None:
+                    pol_name = str(raw_pg.get("politics_name") or "政治").strip()
+                    subjects.append({"name": escape_html_text(pol_name), "score": escape_html_text(str(pol).strip()), "raw_name": pol_name, "raw_score": str(pol).strip()})
+
+                fl = raw_pg.get("foreign_language") or raw_pg.get("english") or raw_pg.get("外语") or raw_pg.get("英语") or raw_pg.get("英语（一）") or raw_pg.get("英语（二）")
+                if fl is not None:
+                    fl_name = str(raw_pg.get("foreign_language_name") or raw_pg.get("english_name") or "英语（一）").strip()
+                    subjects.append({"name": escape_html_text(fl_name), "score": escape_html_text(str(fl).strip()), "raw_name": fl_name, "raw_score": str(fl).strip()})
+
+                math_val = raw_pg.get("math_or_business_one") or raw_pg.get("math") or raw_pg.get("业务课一") or raw_pg.get("数学") or raw_pg.get("数学（一）") or raw_pg.get("数学（二）") or raw_pg.get("数学（三）")
+                if math_val is not None:
+                    math_name = str(raw_pg.get("math_name") or raw_pg.get("business_one_name") or "数学（一）").strip()
+                    subjects.append({"name": escape_html_text(math_name), "score": escape_html_text(str(math_val).strip()), "raw_name": math_name, "raw_score": str(math_val).strip()})
+
+                major_val = raw_pg.get("major_subject") or raw_pg.get("professional") or raw_pg.get("业务课二") or raw_pg.get("专业课")
+                if major_val is not None:
+                    maj_name = str(raw_pg.get("major_subject_name") or raw_pg.get("business_two_name") or "专业课").strip()
+                    subjects.append({"name": escape_html_text(maj_name), "score": escape_html_text(str(major_val).strip()), "raw_name": maj_name, "raw_score": str(major_val).strip()})
+
+            if not total_val and subjects:
+                try:
+                    num_scores = [float(s["raw_score"]) for s in subjects]
+                    if len(num_scores) == len(subjects):
+                        sum_val = sum(num_scores)
+                        total_val = f"{int(sum_val)}" if sum_val.is_integer() else f"{sum_val:.1f}"
+                except (ValueError, TypeError):
+                    pass
+
+            if target_school or target_major or direction or subjects or total_val:
+                postgraduate_exam = {
+                    "target_school": escape_html_text(target_school),
+                    "target_major": escape_html_text(target_major),
+                    "direction": escape_html_text(direction),
+                    "subjects": subjects,
+                    "total_score": escape_html_text(total_val),
+                    "raw_target_school": target_school,
+                    "raw_target_major": target_major,
+                    "raw_direction": direction,
+                    "raw_total_score": total_val,
+                }
+
         # Photo resolution
         eff_photo_path = photo_path or cand.get("photo_path") or cand.get("photo")
         data_uri = _image_to_base64_data_uri(eff_photo_path) if eff_photo_path else None
@@ -320,6 +413,7 @@ class ResumeViewModel:
             projects=projects,
             competencies=competencies,
             publications=publications,
+            postgraduate_exam=postgraduate_exam,
             photo_data_uri=photo_data_uri,
             reserve_photo=eff_reserve_photo,
             raw_name=raw_name,
@@ -343,8 +437,7 @@ def resolve_theme_template(
     candidates = []
     if template_dir:
         candidates.append(Path(template_dir).resolve() / f"{theme_normalized}.html")
-    candidates.append(PROJECT_ROOT / "ApexResume" / "themes" / f"{theme_normalized}.html")
-    candidates.append(Path(__file__).resolve().parent.parent / "ApexResume" / "themes" / f"{theme_normalized}.html")
+    candidates.append(get_theme_path(theme_normalized))
 
     for p in candidates:
         if p.is_file():
@@ -365,15 +458,35 @@ def resolve_theme_template(
 
 
 class HtmlThemeRenderer:
-    """Renders HTML-based themes (modern-navy, silicon-clean, classic-tech) from ResumeViewModel."""
+    """Renders HTML-based themes from ResumeViewModel."""
 
-    THEMES = ("modern-navy", "silicon-clean", "classic-tech")
+    THEMES = (
+        "modern-navy",
+        "silicon-clean",
+        "classic-tech",
+        "asu-dense",
+        "sidebar-clean",
+        "academic-postgraduate",
+        "engineering-sb2nov",
+        "modern-corporate",
+    )
 
     def render_header(self, vm: ResumeViewModel, theme_name: str = "modern-navy") -> str:
         """Renders header markup with optional photo placeholder."""
         loc_str = f"<span>•</span><span>{vm.location}</span>" if vm.location else ""
+        if theme_name == "academic-postgraduate":
+            title_prefix = "申请方向："
+            title_color = "var(--color-primary, #8B1E1E)"
+            header_style = "display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--color-primary, #8B1E1E); border-bottom:2.5px solid var(--color-primary, #8B1E1E); padding:6px 0; margin-bottom:var(--section-gap, 10px);"
+            name_style = "font-size:24px; font-weight:700; color:var(--color-primary, #8B1E1E); font-family:var(--font-serif, serif); letter-spacing:2px; margin-bottom:2px;"
+        else:
+            title_prefix = "求职意向："
+            title_color = "var(--color-accent, #0284C7)"
+            header_style = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1.5px solid var(--color-primary, #0F172A); padding-bottom:5px;"
+            name_style = "font-size:22px; font-weight:700; margin-bottom:2px;"
+
         title_html = (
-            f'<span style="font-size:12px; font-weight:600; color:var(--color-accent, #0284C7);">求职意向：{vm.title}</span>'
+            f'<span style="font-size:12px; font-weight:600; color:{title_color};">{title_prefix}{vm.title}</span>'
             if vm.title else ""
         )
 
@@ -404,10 +517,10 @@ class HtmlThemeRenderer:
             """
 
         return f"""
-    <header style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1.5px solid var(--color-primary, #0F172A); padding-bottom:5px;">
+    <header style="{header_style}">
       <div style="flex:1; padding-right:12px;">
         <div class="header-top" style="display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;">
-          <h1 style="font-size:22px; font-weight:700; margin-bottom:2px;">{vm.name}</h1>
+          <h1 style="{name_style}">{vm.name}</h1>
           {title_html}
         </div>
         <div class="contacts" style="display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;">
@@ -556,9 +669,81 @@ class HtmlThemeRenderer:
     </section>
     """
 
+    def render_postgraduate_exam(self, vm: ResumeViewModel, theme_name: str = "academic-postgraduate") -> str:
+        """Renders postgraduate entrance exam and target institution section."""
+        if not vm.postgraduate_exam:
+            return ""
+
+        pg = vm.postgraduate_exam
+        school = pg.get("target_school", "")
+        major = pg.get("target_major", "")
+        direction = pg.get("direction", "")
+        subjects = pg.get("subjects", [])
+        total_score = pg.get("total_score", "")
+
+        is_academic = (theme_name == "academic-postgraduate")
+        color_primary = "var(--color-primary, #8B1E1E)" if is_academic else "var(--color-primary, #0F172A)"
+        color_rule = "var(--color-primary, #8B1E1E)" if is_academic else "var(--color-border, #E2E8F0)"
+
+        target_items = []
+        if school:
+            target_items.append(f'<span><b>报考院校：</b>{school}</span>')
+        if major:
+            target_items.append(f'<span><b>报考专业：</b>{major}</span>')
+        if direction:
+            target_items.append(f'<span><b>研究方向：</b>{direction}</span>')
+
+        target_bar_html = ""
+        if target_items:
+            target_bar_html = f"""
+      <div class="exam-target-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:4px; margin-bottom:5px; font-size:11.8px;">
+        {"".join(target_items)}
+      </div>"""
+
+        table_html = ""
+        if subjects or total_score:
+            th_cells = [f'<th class="score-label" style="background:#F5EFEB; font-weight:700; width:16%; border:1px solid #D8CFC4; padding:3.5px 5px; color:{color_primary};">初试成绩</th>']
+            td_cells = ['<td class="score-sublabel" style="background:var(--color-bg-subtle, #FDFBF7); font-weight:600; color:var(--color-muted, #555555); border:1px solid #D8CFC4; padding:3.5px 5px;">得分</td>']
+
+            for sub in subjects:
+                th_cells.append(f'<th style="border:1px solid #D8CFC4; padding:3.5px 5px; font-weight:600;">{sub["name"]}</th>')
+                td_cells.append(f'<td style="border:1px solid #D8CFC4; padding:3.5px 5px;">{sub["score"]}</td>')
+
+            if total_score:
+                th_cells.append(f'<th class="score-total-head" style="background:#F8ECE8; color:{color_primary}; font-weight:700; border:1px solid #D8CFC4; padding:3.5px 5px;">总分</th>')
+                td_cells.append(f'<td class="score-total-val" style="font-weight:700; color:{color_primary}; font-size:12px; background:#FCF6F4; border:1px solid #D8CFC4; padding:3.5px 5px;">{total_score}</td>')
+
+            table_html = f"""
+      <table class="exam-score-table" style="width:100%; border-collapse:collapse; margin-top:4px; margin-bottom:6px; text-align:center; font-size:11.2px; border:1.2px solid {color_primary};">
+        <thead>
+          <tr style="background:var(--color-bg-subtle, #FDFBF7); border-bottom:1.5px solid {color_primary};">
+            {"".join(th_cells)}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {"".join(td_cells)}
+          </tr>
+        </tbody>
+      </table>"""
+
+        return f"""
+    <section id="postgraduate-exam">
+      <div class="section-header">
+        <h2>报考信息</h2>
+        <div class="rule" style="flex:1; height:1px; background:{color_rule};"></div>
+      </div>
+      {target_bar_html}
+      {table_html}
+    </section>
+    """
+
     def render_sections(self, vm: ResumeViewModel, theme_name: str = "modern-navy") -> str:
         """Assembles all standard content sections into a unified markup string."""
         sections = []
+        pg = self.render_postgraduate_exam(vm, theme_name=theme_name)
+        if pg:
+            sections.append(pg)
         edu = self.render_education(vm)
         if edu:
             sections.append(edu)
@@ -629,6 +814,33 @@ class AtsPlainRenderer:
 
         md_lines.extend([
             f"电话：{raw_phone} | 邮箱：{raw_email} | {raw_loc}{photo_tag}",
+        ])
+
+        if vm.postgraduate_exam:
+            pg = vm.postgraduate_exam
+            md_lines.extend(["", "---", "", "## 报考信息"])
+            school = pg.get("raw_target_school", pg.get("target_school", ""))
+            major = pg.get("raw_target_major", pg.get("target_major", ""))
+            direction = pg.get("raw_direction", pg.get("direction", ""))
+            target_parts = []
+            if school:
+                target_parts.append(f"报考院校：{school}")
+            if major:
+                target_parts.append(f"报考专业：{major}")
+            if direction:
+                target_parts.append(f"研究方向：{direction}")
+            if target_parts:
+                md_lines.append(" | ".join(target_parts))
+
+            subjects = pg.get("subjects", [])
+            total_score = pg.get("raw_total_score", pg.get("total_score", ""))
+            if subjects or total_score:
+                sub_parts = [f"{s.get('raw_name', s.get('name', ''))}：{s.get('raw_score', s.get('score', ''))}" for s in subjects]
+                if total_score:
+                    sub_parts.append(f"总分：{total_score}")
+                md_lines.append(f"初试成绩：{' | '.join(sub_parts)}")
+
+        md_lines.extend([
             "",
             "---",
             "",
@@ -820,7 +1032,37 @@ class AtsPlainRenderer:
       </div>
     {photo_box}
   </div>
+"""
+        if vm.postgraduate_exam:
+            pg = vm.postgraduate_exam
+            school = pg.get("target_school", "")
+            major = pg.get("target_major", "")
+            direction = pg.get("direction", "")
+            subjects = pg.get("subjects", [])
+            total_score = pg.get("total_score", "")
 
+            target_items = []
+            if school:
+                target_items.append(f"<span><b>报考院校：</b>{school}</span>")
+            if major:
+                target_items.append(f"<span><b>报考专业：</b>{major}</span>")
+            if direction:
+                target_items.append(f"<span><b>研究方向：</b>{direction}</span>")
+
+            target_bar = f"  <div class='item-header' style='margin-bottom:3pt;'>{' &nbsp;&nbsp;&nbsp;&nbsp; '.join(target_items)}</div>\n" if target_items else ""
+
+            sub_items = []
+            for s in subjects:
+                sub_items.append(f"<span>{s['name']}：<b>{s['score']}</b></span>")
+            if total_score:
+                sub_items.append(f"<span>总分：<b>{total_score}</b></span>")
+
+            scores_bar = f"  <div style='font-size:9.5pt; line-height:1.4; margin-top:2pt; margin-bottom:3pt;'>初试成绩：{' &nbsp;|&nbsp; '.join(sub_items)}</div>\n" if sub_items else ""
+
+            ats_html += f"""  <h2>报考信息</h2>
+{target_bar}{scores_bar}"""
+
+        ats_html += f"""
   <h2>教育背景</h2>
   <div class="item-header">
     <span>{vm.edu_school} &nbsp;&nbsp;&nbsp;&nbsp; {vm.edu_degree}</span>

@@ -12,6 +12,8 @@ htmlcov/
 venv/
 env/
 *.egg-info/
+build/
+dist/
 
 # Generated reports and exports
 report.html
@@ -19,6 +21,8 @@ report.html
 *_report.md
 test_*_report.*
 *_defense_report.*
+!core/evidence/templates/*
+!tests/test_*.py
 review*.json
 *_review.json
 *.pdf
@@ -28,6 +32,8 @@ review*.json
 *.jpg
 *.jpeg
 *.png
+*.db
+*.sqlite
 
 
 # Local anonymization maps and derived profiles
@@ -42,9 +48,6 @@ review*.json
 .DS_Store
 Thumbs.db
 
-# Generated demo resume artifacts
-output/resumes_demo/*.html
-output/resumes_demo/*.pdf
-output/resumes_demo/*.tex
-output/resumes_demo/*.typ
-output/resumes_demo/*.md
+# Local sandbox and generated outputs
+output/
+

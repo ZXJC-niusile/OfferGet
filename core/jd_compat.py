@@ -1,8 +1,7 @@
-"""Compatibility adapters for the canonical JD analyst implementation.
+"""Canonical Ingress and compatibility gateway for Job Description processing.
 
-The typed implementation lives in ``modules.jd_analyst``.  This module keeps
-OfferGet's historical dictionary-shaped API usable by the CLI and reports
-without maintaining a second decoder or matcher.
+The canonical typed models live in ``core.jd_analyst.models``.
+Ingress gateway, conversion, and legacy compatibility APIs are consolidated here.
 """
 
 from __future__ import annotations
@@ -18,9 +17,10 @@ from core.profile_adapter import (
     build_profile_evidence_index,
     normalize_candidate_profile,
 )
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.models import (
+from core.registry import TaxonomyRegistry
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.models import (
     BusinessPainPoint,
     CandidateProfile,
     CoreResponsibility,
@@ -31,10 +31,7 @@ from modules.jd_analyst.models import (
     MatcherResult,
     SkillImportance,
 )
-from modules.jd_analyst.predictor import InterviewProbabilityCalculator
-
-
-from core.registry import TaxonomyRegistry
+from core.jd_analyst.predictor import InterviewProbabilityCalculator
 
 ROLE_TAXONOMIES: Dict[str, Dict[str, Any]] = TaxonomyRegistry.list_taxonomies()
 
@@ -50,7 +47,6 @@ class DecodedJDCompat(dict):
 def classify_role_taxonomy(jd_text: str) -> Dict[str, Any]:
     """Classify a JD for legacy metadata without changing canonical decoding."""
     return TaxonomyRegistry.classify_role(jd_text)
-
 
 
 def _first_match(text: str, patterns: Iterable[str], default: str) -> str:
@@ -73,7 +69,13 @@ def _extract_metadata(text: str) -> Dict[str, str]:
 
 
 def _layer(title: str, zh: str, en: str = "") -> Dict[str, str]:
-    return {"title": title, "jd_text_zh": zh, "jd_text_en": en, "reality_zh": "仅基于当前 JD 原文，待候选人与招聘方进一步确认。", "reality_en": "Based on the supplied JD only; confirm with the hiring team."}
+    return {
+        "title": title,
+        "jd_text_zh": zh,
+        "jd_text_en": en,
+        "reality_zh": "仅基于当前 JD 原文，待候选人与招聘方进一步确认。",
+        "reality_en": "Based on the supplied JD only; confirm with the hiring team.",
+    }
 
 
 def canonical_to_legacy(canonical: DecodedJD) -> DecodedJDCompat:
@@ -131,22 +133,9 @@ def decode_legacy(jd_text: str) -> DecodedJDCompat:
     """Run the one canonical decoder and expose a backwards-compatible result."""
     text = jd_text or ""
     canonical = JDDecoder().decode(text)
-    # The canonical module historically had an AI-specific fallback pain point.
-    # Keep non-AI compatibility output neutral until role packs are introduced.
     if not re.search(r"大模型|机器学习|深度学习|Transformer|LLM|Agent|算法|模型|PyTorch|CUDA|vLLM", text, re.IGNORECASE):
         canonical.business_pain_points = []
     return canonical_to_legacy(canonical)
-
-
-def _flatten_strings(value: Any) -> List[str]:
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    if isinstance(value, dict):
-        result: List[str] = []
-        for nested in value.values():
-            result.extend(_flatten_strings(nested))
-        return result
-    return [str(value)] if value else []
 
 
 def profile_to_canonical(profile_data: Union[Dict[str, Any], ProfileContext]) -> CandidateProfile:
@@ -198,26 +187,65 @@ def profile_to_canonical(profile_data: Union[Dict[str, Any], ProfileContext]) ->
 def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
     """Rehydrate a plain JSON legacy result when it did not come from decode_legacy."""
     raw_text = str(decoded.get("raw_text") or decoded.get("clean_text") or "")
-    if raw_text:
+    if raw_text and not any(k in decoded for k in ("job_title", "title", "required_skills", "core_skills", "requirements")):
         return JDDecoder().decode(raw_text)
 
-    metadata = decoded.get("metadata", {})
-    requirements = decoded.get("requirements", {})
-    hard_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=True) for item in requirements.get("must_haves", [])]
-    nice_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=False) for item in requirements.get("nice_haves", [])]
-    skills = [CoreSkill(name=str(item), category="other", importance=SkillImportance.MUST_HAVE.value, domain="general") for item in requirements.get("must_haves", [])]
-    skills.extend(CoreSkill(name=str(item), category="other", importance=SkillImportance.NICE_TO_HAVE.value, domain="general") for item in requirements.get("nice_haves", []))
-    layers = decoded.get("layers", {})
-    responsibilities = []
-    for layer_key in ("layer_1", "layer_3"):
-        text = layers.get(layer_key, {}).get("jd_text_zh", "")
-        if text:
-            responsibilities.append(CoreResponsibility(title=text[:30], description=text, domain="general"))
+    metadata = decoded.get("metadata", {}) if isinstance(decoded.get("metadata"), dict) else {}
+    job_title = str(decoded.get("job_title") or decoded.get("title") or metadata.get("role") or "未指定职位")
+    company_or_dept = str(
+        decoded.get("company_or_dept")
+        or decoded.get("company")
+        or metadata.get("company")
+        or metadata.get("department")
+        or "未指定公司"
+    )
+
+    requirements = decoded.get("requirements", {}) if isinstance(decoded.get("requirements"), dict) else {}
+    req_must_raw = decoded.get("required_skills") or requirements.get("must_haves") or []
+    req_nice_raw = decoded.get("preferred_skills") or requirements.get("nice_haves") or []
+    req_must = req_must_raw if isinstance(req_must_raw, (list, tuple)) else ([req_must_raw] if req_must_raw else [])
+    req_nice = req_nice_raw if isinstance(req_nice_raw, (list, tuple)) else ([req_nice_raw] if req_nice_raw else [])
+
+    hard_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=True) for item in req_must]
+    nice_thresholds = [HardThreshold(category="other", requirement=str(item), is_mandatory=False) for item in req_nice]
+
+    skills: List[CoreSkill] = []
+    if "core_skills" in decoded and isinstance(decoded["core_skills"], (list, tuple)):
+        for item in decoded["core_skills"]:
+            if isinstance(item, CoreSkill):
+                skills.append(item)
+            elif isinstance(item, dict):
+                skills.append(CoreSkill(name=str(item.get("name", "")), category=str(item.get("category", "other")), importance=str(item.get("importance", SkillImportance.MUST_HAVE.value)), domain=str(item.get("domain", "general"))))
+            else:
+                skills.append(CoreSkill(name=str(item), category="other", importance=SkillImportance.MUST_HAVE.value, domain="general"))
+    else:
+        skills.extend(CoreSkill(name=str(item), category="other", importance=SkillImportance.MUST_HAVE.value, domain="general") for item in req_must)
+        skills.extend(CoreSkill(name=str(item), category="other", importance=SkillImportance.NICE_TO_HAVE.value, domain="general") for item in req_nice)
+
+    responsibilities: List[CoreResponsibility] = []
+    if "core_responsibilities" in decoded and isinstance(decoded["core_responsibilities"], (list, tuple)):
+        for item in decoded["core_responsibilities"]:
+            if isinstance(item, CoreResponsibility):
+                responsibilities.append(item)
+            elif isinstance(item, dict):
+                responsibilities.append(CoreResponsibility(title=str(item.get("title", "")), description=str(item.get("description", "")), domain=str(item.get("domain", "general"))))
+            else:
+                responsibilities.append(CoreResponsibility(title=str(item)[:30], description=str(item), domain="general"))
+    elif "responsibilities" in decoded and isinstance(decoded["responsibilities"], (list, tuple)):
+        for item in decoded["responsibilities"]:
+            responsibilities.append(CoreResponsibility(title=str(item)[:30], description=str(item), domain="general"))
+    else:
+        layers = decoded.get("layers", {}) if isinstance(decoded.get("layers"), dict) else {}
+        for layer_key in ("layer_1", "layer_3"):
+            text = layers.get(layer_key, {}).get("jd_text_zh", "")
+            if text:
+                responsibilities.append(CoreResponsibility(title=text[:30], description=text, domain="general"))
+
     signals = [ImplicitSignal(**item) for item in decoded.get("detected_signals", []) if isinstance(item, dict) and "original_text" in item]
     return DecodedJD(
         raw_text=raw_text,
-        job_title=str(metadata.get("role", "未指定职位")),
-        company_or_dept=str(metadata.get("company", metadata.get("department", "未指定公司"))),
+        job_title=job_title,
+        company_or_dept=company_or_dept,
         hard_thresholds=hard_thresholds + nice_thresholds,
         core_responsibilities=responsibilities,
         core_skills=skills,
@@ -225,16 +253,6 @@ def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
         business_pain_points=[],
         clean_text=str(decoded.get("clean_text", raw_text)),
     )
-
-
-def to_canonical(decoded: Any) -> DecodedJD:
-    if isinstance(decoded, DecodedJDCompat):
-        return decoded.canonical
-    if isinstance(decoded, DecodedJD):
-        return decoded
-    if isinstance(decoded, dict):
-        return _legacy_to_canonical(decoded)
-    raise TypeError(f"Unsupported decoded JD type: {type(decoded).__name__}")
 
 
 def _gap_to_dict(gap: Any) -> Dict[str, Any]:
@@ -289,7 +307,7 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
         verdict_title = "谨慎投递"
         verdict_desc = "当前材料与岗位要求的直接对应关系较少，建议先确认真实缺口。"
 
-    from core.jd_decision import DecodeBeforeMatchGate, ShouldIApplyEvaluator
+    from core.jd_decision import ShouldIApplyEvaluator
 
     should_i_apply = ShouldIApplyEvaluator().evaluate(decoded, candidate, result)
     should_i_apply_dict = {
@@ -315,15 +333,13 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
                     "deliverables": w.deliverables,
                 }
                 for w in should_i_apply.six_week_plan.weeks
-            ]
-        }
+            ],
+        },
     }
 
     return {
         "candidate_name": candidate.name,
         "overall_match_score": score,
-        # Keep the historical scalar field as the conservative interval upper
-        # bound for callers that cannot consume the richer range field.
         "interview_prob": round(probability.base_max_prob),
         "interview_probability_range": [probability.base_min_prob, probability.base_max_prob],
         "breakdown": {
@@ -354,7 +370,70 @@ def match_legacy(
     strict_gate: bool = False,
 ) -> Dict[str, Any]:
     from core.jd_decision import DecodeBeforeMatchGate
+
     canonical_jd = DecodeBeforeMatchGate.enforce(decoded, strict=strict_gate)
     candidate = profile_to_canonical(profile_data)
     result = JDMatcher().match(canonical_jd, candidate)
     return matcher_to_legacy(result, candidate, canonical_jd)
+
+
+def to_canonical(decoded: Any) -> DecodedJD:
+    """Universal ingress gateway returning the SSOT canonical DecodedJD.
+
+    Accepts DecodedJD, DecodedJDCompat, legacy dictionary, Path, or raw JD text.
+    """
+    if isinstance(decoded, DecodedJDCompat):
+        return decoded.canonical
+    if isinstance(decoded, DecodedJD):
+        return decoded
+    if isinstance(decoded, str):
+        if not decoded.strip():
+            return DecodedJD(
+                raw_text=decoded,
+                job_title="未指定职位",
+                company_or_dept="未指定公司",
+                clean_text=decoded.strip(),
+            )
+        return JDDecoder().decode(decoded)
+    if hasattr(decoded, "read_text"):  # pathlib.Path
+        text = decoded.read_text(encoding="utf-8")
+        if not text.strip():
+            return DecodedJD(
+                raw_text=text,
+                job_title="未指定职位",
+                company_or_dept="未指定公司",
+                clean_text=text.strip(),
+            )
+        return JDDecoder().decode(text)
+    if isinstance(decoded, dict):
+        if not decoded:
+            return DecodedJD(
+                raw_text="",
+                job_title="未指定职位",
+                company_or_dept="未指定公司",
+                clean_text="",
+            )
+        return _legacy_to_canonical(decoded)
+    raise TypeError(f"Unsupported decoded JD type: {type(decoded).__name__}")
+
+
+match_profile_to_jd = match_legacy
+decode_jd = decode_legacy
+classify_jd_role_taxonomy = classify_role_taxonomy
+TECH_ROLE_TAXONOMY = ROLE_TAXONOMIES
+
+__all__ = [
+    "to_canonical",
+    "DecodedJDCompat",
+    "ROLE_TAXONOMIES",
+    "TECH_ROLE_TAXONOMY",
+    "classify_role_taxonomy",
+    "classify_jd_role_taxonomy",
+    "canonical_to_legacy",
+    "decode_legacy",
+    "decode_jd",
+    "profile_to_canonical",
+    "matcher_to_legacy",
+    "match_legacy",
+    "match_profile_to_jd",
+]

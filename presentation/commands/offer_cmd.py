@@ -15,10 +15,7 @@ from core.cli_helpers import (
     emit_json,
     emit_stderr,
 )
-from core.services import (
-    evaluate_offer_package,
-    OfferNegotiator,
-)
+from services.offer_service import OfferService
 
 
 def cmd_offer_eval(args):
@@ -37,7 +34,7 @@ def cmd_offer_eval(args):
             sys.exit(1)
         profile_data = load_json(args.profile)
 
-    result = evaluate_offer_package(offer_data, profile_data)
+    result = OfferService().evaluate_offer(offer_data, candidate_profile=profile_data)
 
     if args.json:
         emit_json(result)
@@ -86,9 +83,9 @@ def cmd_offer_counter(args):
     if args.competing and os.path.exists(args.competing):
         competing = load_json(args.competing)
 
-    negotiator = OfferNegotiator()
-    eval_res = negotiator.evaluate_offer(offer_data, profile_data)
-    counter_res = negotiator.generate_counter_offer(eval_res, target_base=args.target_base, competing_offers=competing)
+    offer_service = OfferService()
+    eval_res = offer_service.evaluate_offer(offer_data, candidate_profile=profile_data)
+    counter_res = offer_service.generate_counter_offer(eval_res, target_base=args.target_base, competing_offers=competing)
 
     if args.json:
         emit_json(counter_res)

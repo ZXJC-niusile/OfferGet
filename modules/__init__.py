@@ -1,3 +1,0 @@
-"""
-OfferGet Modules Package
-"""

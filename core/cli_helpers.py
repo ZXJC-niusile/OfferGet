@@ -1,7 +1,6 @@
 """
 Standard CLI Helpers & I/O Abstraction for OfferGet.
-Adopts best practices from applyr / RenderCV for clean I/O separation,
-directory creation, and structured JSON output.
+Provides clean I/O separation, directory creation, and structured JSON output.
 """
 
 from __future__ import annotations
@@ -11,6 +10,8 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
+
+from core.artifacts import require_file
 
 # Common extensions that indicate path_or_str is expected to be a file
 COMMON_FILE_EXTENSIONS = {
@@ -132,30 +133,26 @@ def load_json_or_text(path_or_str: str) -> Tuple[Optional[Dict[str, Any]], str]:
 
 def write_json(data: Any, path: Union[str, Path]) -> str:
     """
-    Write data as formatted JSON to path, automatically creating parent directories recursively.
+    Write data as formatted JSON to path atomically, automatically creating parent directories recursively.
 
     Returns:
         Normalized string path of the written file.
     """
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    return str(p)
+    from core.artifacts import write_json_atomic
+
+    return write_json_atomic(data, path)
 
 
 def write_text(content: str, path: Union[str, Path]) -> str:
     """
-    Write text content to path, automatically creating parent directories recursively.
+    Write text content to path atomically, automatically creating parent directories recursively.
 
     Returns:
         Normalized string path of the written file.
     """
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w", encoding="utf-8") as f:
-        f.write(content)
-    return str(p)
+    from core.artifacts import write_text_atomic
+
+    return write_text_atomic(content, path)
 
 
 def emit_json(data: Any) -> None:
@@ -210,6 +207,22 @@ def exit_cli_error(
     sys.exit(exit_code)
 
 
+def fail_cli(args: Any, error_type: str, message: str, exit_code: int = 1) -> None:
+    """Exit a command with the repository-wide JSON/text error contract."""
+    exit_cli_error(error_type, message, exit_code=exit_code, as_json=bool(getattr(args, "json", False)))
+
+
+def open_application_store(args_or_path: Any = None):
+    """Create the shared SQLite store used by application-related commands."""
+    from core.application_tracker import ApplicationStore
+
+    if isinstance(args_or_path, (str, Path)):
+        db_path = str(args_or_path)
+    else:
+        db_path = getattr(args_or_path, "db", None) or "offerget_applications.db"
+    return ApplicationStore(db_path)
+
+
 __all__ = [
     "read_text",
     "load_json",
@@ -220,4 +233,7 @@ __all__ = [
     "emit_stderr",
     "format_cli_error",
     "exit_cli_error",
+    "fail_cli",
+    "open_application_store",
+    "require_file",
 ]

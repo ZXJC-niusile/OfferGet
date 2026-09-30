@@ -24,7 +24,7 @@ from core.services import (
     OfferService,
     ReportService,
 )
-from modules.jd_analyst.models import DecodedJD
+from core.jd_analyst.models import DecodedJD
 
 
 class TestInputRouter(unittest.TestCase):
@@ -330,7 +330,7 @@ class TestServices(unittest.TestCase):
             risks = report_service.validate_report_security(generated_path)
             self.assertEqual(risks, [], f"Security gate detected risks: {risks}")
 
-            content = open(generated_path, encoding="utf-8").read()
+            content = Path(generated_path).read_text(encoding="utf-8")
             self.assertIn("王工", content)
             self.assertIn("大模型强化学习专家", content)
 
@@ -425,6 +425,22 @@ class TestServices(unittest.TestCase):
         for cmd in (cmd_jd_decode, cmd_jd_match, cmd_jd_report, cmd_resume_build, cmd_career_review, cmd_selftest):
             self.assertTrue(callable(cmd))
 
+    def test_services_package_exports_and_facade_identity(self):
+        """Verifies that all domain services are exported and match core.services."""
+        import services as s
+        import core.services as cs
+
+        expected_services = [
+            "JDService", "ProfileService", "MatchService", "CareerReviewService",
+            "ResumeService", "ResumeVersionService", "OfferService", "ProposalService",
+            "ApplicationOutcomeService", "ReportService", "CommunicationService",
+            "AcademicService", "ApplicationGuardService",
+        ]
+        for name in expected_services:
+            self.assertTrue(hasattr(s, name), f"services missing {name}")
+            self.assertIs(getattr(cs, name), getattr(s, name))
+
 
 if __name__ == "__main__":
     unittest.main()
+

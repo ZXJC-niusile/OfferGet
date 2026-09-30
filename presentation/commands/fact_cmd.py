@@ -19,10 +19,8 @@ from core.cli_helpers import (
     emit_json,
     emit_stderr,
 )
-from core.services import (
-    PrivacyAnonymizer,
-    FactVerificationGuard,
-)
+from core.anonymizer import PrivacyAnonymizer
+from core.fact_guard import FactVerificationGuard
 
 
 def cmd_anon_mask(args):

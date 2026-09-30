@@ -1,6 +1,6 @@
 """
 OfferGet Evidence Auditor.
-Absorbed and expanded from ASu-resume-skills (Apache-2.0).
+OfferGet native evidence auditing and consistency verification engine.
 Synthesizes ProfileContext SSOT evidence, ClaimExtractor, MetricRecalculator,
 and Inflation Patterns to generate self-contained, schema-compliant AuditReports.
 """
@@ -21,6 +21,7 @@ from core.evidence.models import (
     AuditTimelineItem,
     MetricCheck,
 )
+from core.evidence.open_source import OpenSourceAuditor
 from core.evidence.schema import validate_report_data
 from core.profile_adapter import (
     ProfileContext,
@@ -32,7 +33,7 @@ from core.profile_adapter import (
 
 class EvidenceAuditor:
     """
-    Synthesizes SSOT facts and resume claims into structured ASu-compliant audit reports.
+    Synthesizes SSOT facts and resume claims into structured OfferGet audit reports.
     """
 
     def __init__(
@@ -69,7 +70,7 @@ class EvidenceAuditor:
         subject_name: Optional[str] = None,
     ) -> AuditReport:
         """
-        Performs full evidence audit and returns an ASu-compliant AuditReport.
+        Performs full evidence audit and returns a schema-compliant AuditReport.
         """
         now_iso = datetime.datetime.now(datetime.timezone.utc).astimezone().isoformat()
         subject = subject_name or self._resolve_subject_name()
@@ -287,7 +288,30 @@ class EvidenceAuditor:
                 )
                 return
 
-        # 5. General experience / fact check against SSOT text & anchors
+        # 5. Open source contribution & depth check
+        if claim.category == "open_source" or OpenSourceAuditor.is_open_source_claim(claim.resume_text):
+            os_patterns = OpenSourceAuditor.audit_claim(claim.resume_text, claim.id, self.raw_profile)
+            for p in os_patterns:
+                self._record_pattern(
+                    patterns_map,
+                    name=p.name,
+                    description=p.description,
+                    signals=p.signals,
+                    claim_id=claim.id,
+                    confidence=p.confidence,
+                )
+                if p.name in ("官网到核心引擎歧义", "角色升格"):
+                    claim.status = "partially_corroborated"
+                    claim.risk = "high"
+                    claim.evidence_against = [primary_source_id]
+                elif p.name == "品牌或 Star 迁移":
+                    if claim.risk != "critical":
+                        claim.risk = "high"
+            if claim.category == "open_source":
+                claim.evidence_for = [primary_source_id]
+                return
+
+        # 6. General experience / fact check against SSOT text & anchors
         if not self.raw_profile:
             claim.status = "unverifiable"
             claim.risk = "medium"
@@ -329,6 +353,41 @@ class EvidenceAuditor:
                 claim.risk = "medium"
                 claim.confidence = "low"
                 claim.analysis = "底稿中未发现直接印证证据，建议由候选人补充内部材料。"
+
+        # 7. Additional Deep Inflation Patterns Check
+        c_text = claim.resume_text
+        if re.search(r"(?:ai\s*infra|算法中台|模型内核|大模型架构)", c_text, re.I) and re.search(r"(?:前端|页面|表单|css|html|导表|清洗数据|埋点)", c_text, re.I):
+            self._record_pattern(
+                patterns_map,
+                name="术语邻接",
+                description="因工作发生在 AI/模型团队附近，把外围前端/页面/数据处理等基础任务表述为 AI Infra 或模型核心架构。",
+                signals=["AI 核心词汇与外围界面/数据清洗词汇同屏出现", c_text],
+                claim_id=claim.id,
+                confidence="medium",
+            )
+            if claim.risk != "critical":
+                claim.risk = "high"
+
+        if re.search(r"(?:融资\s*\d+|数千万|数亿|千万级\s*(?:dau|mau|日活|用户)|千万级流水|大盘日活)", c_text, re.I):
+            if not re.search(r"(?:本人负责|独立交付|个人负责|贡献了|由我|其中我)", c_text):
+                self._record_pattern(
+                    patterns_map,
+                    name="团队结果个人化",
+                    description="将整个项目/团队宏观业务大盘规模或融资成果展示在个人经历旁，缺乏明确的个人增量归因机制与负责链路。",
+                    signals=["宏观大盘规模指标缺少个人归因限定", c_text],
+                    claim_id=claim.id,
+                    confidence="medium",
+                )
+
+        if re.search(r"(?:与.*(?:探讨|交流|互动)|获得.*(?:赞赏|点赞|认可|肯定|回复)|与.*共同讨论)", c_text):
+            self._record_pattern(
+                patterns_map,
+                name="社交邻接转技术授权",
+                description="将与核心作者或知名专家的社交互动、点赞、提问回复，包装为联合开发或技术权威背书。",
+                signals=["社交互动用语出现在技术产物主张中", c_text],
+                claim_id=claim.id,
+                confidence="medium",
+            )
 
     def _record_pattern(
         self,
@@ -437,6 +496,18 @@ class EvidenceAuditor:
             steps.append("核实同屏展示的指标口径，要求提供未经截断的基线数据与统计时间窗口。")
         if "没有比较全集的最高级" in patterns_map:
             steps.append("要求候选人给出最高级（如“最年轻”、“首个”）的公开权威定义与完整对比名册。")
+        if "品牌或 Star 迁移" in patterns_map:
+            steps.append("要求候选人提供针对开源项目 Star 数或品牌影响力的个人实质增量归因与 PR 链接。")
+        if "官网到核心引擎歧义" in patterns_map:
+            steps.append("核验候选人已合并的代码 Commit 列表，区分外围文档/官网与底层运行时架构。")
+        if "贡献数量漂白" in patterns_map:
+            steps.append("区分已合入 (merged) 与关闭未合入 (closed) 的 PR，核实公开仓库提交工件。")
+        if "术语邻接" in patterns_map:
+            steps.append("分别明确团队业务背景与个人实际技术栈，区分 AI Infra 平台层与业务胶水层。")
+        if "团队结果个人化" in patterns_map:
+            steps.append("要求候选人提供针对大盘宏观指标（如 DAU/流水）的个人增量贡献说明与归因时间窗口。")
+        if "社交邻接转技术授权" in patterns_map:
+            steps.append("核验正式角色与已合并代码工件，将社交互动与实际研发产物解耦。")
         if not steps:
             steps.append("主张真实度良好，建议按正常流程进入技术深度答辩环节。")
         return steps

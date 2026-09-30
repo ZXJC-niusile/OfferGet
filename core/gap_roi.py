@@ -17,9 +17,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.models import (
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.models import (
     DecodedJD,
     CandidateProfile,
     GapState,

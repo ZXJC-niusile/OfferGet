@@ -1,6 +1,6 @@
 """
 OfferGet Defense Question Chain Generator.
-Absorbed and expanded from defense-beating-simulator (MIT).
+OfferGet native multi-layer follow-up questioning and cross-examination engine.
 Provides universal 2-4 layer follow-up chains across 5 critical dimensions
 and role-adapted phrasing (interviewer, mentor, instructor, judge).
 """

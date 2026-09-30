@@ -9,6 +9,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from core.evidence.models import AuditClaim, MetricCheck
+from core.evidence.open_source import OpenSourceAuditor
 from core.registry import MetricPatternRegistry, QualityRuleRegistry
 
 
@@ -124,6 +125,25 @@ class ClaimExtractor:
                 confidence="medium",
                 analysis=f"简历叙事使用了宏观全系统措辞：{', '.join(set(scs))}，需分离个人实际交付产物与候选人能够解释的整体架构。",
                 verification_steps=["核验候选人代码产物目录，区分核心实现者与外围胶水层/参与者。"],
+            ))
+
+        # 5. Check for Open Source contribution claims
+        if OpenSourceAuditor.is_open_source_claim(clean_bullet):
+            lvl, safe_phrase = OpenSourceAuditor.classify_level(clean_bullet)
+            sub_id = f"{claim_id}-OS"
+            claims.append(AuditClaim(
+                id=sub_id,
+                category="open_source",
+                resume_text=clean_bullet,
+                normalized_claim=f"声称开源贡献（分级 {int(lvl)} 级 · {lvl.name}）：{clean_bullet}",
+                status="unverifiable",
+                risk="high" if lvl >= 3 else "medium",
+                confidence="medium",
+                analysis=f"开源贡献分级参考：建议安全措辞为「{safe_phrase}」。需进一步核查 PR 合并状态与代码影响区域。",
+                verification_steps=[
+                    "查验 GitHub PR 记录（绝不能把 closed 当作 merged）。",
+                    "核实代码贡献区域（核心运行时、独立功能、前端/官网还是仅文档/配置）。",
+                ],
             ))
 
         return claims

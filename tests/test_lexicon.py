@@ -162,3 +162,21 @@ class TestLexiconSSOT(unittest.TestCase):
         self.assertIs(asu_mod.INFLATION_PATTERNS, INFLATION_PATTERNS)
         self.assertIs(asu_mod.ROLE_RANKS, ROLE_RANKS)
         self.assertIs(asu_mod.VERB_HIERARCHY, VERB_HIERARCHY)
+
+    def test_role_kpi_lexicon(self):
+        from core.lexicon import ROLE_KPI_LEXICON
+        from core.registry import QualityRuleRegistry
+
+        self.assertIn("product", ROLE_KPI_LEXICON)
+        self.assertIn("ai_product", ROLE_KPI_LEXICON)
+        self.assertIn("technical", ROLE_KPI_LEXICON)
+        self.assertIn("data_analyst", ROLE_KPI_LEXICON)
+
+        self.assertIn("DAU", ROLE_KPI_LEXICON["product"])
+        self.assertIn("QPS", ROLE_KPI_LEXICON["technical"])
+        self.assertIn("看板数量", ROLE_KPI_LEXICON["data_analyst"])
+        self.assertIn("任务成功率", ROLE_KPI_LEXICON["ai_product"])
+
+        lex_copy = QualityRuleRegistry.get_role_kpi_lexicon()
+        self.assertEqual(lex_copy["technical"], ROLE_KPI_LEXICON["technical"])
+

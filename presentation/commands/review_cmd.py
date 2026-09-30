@@ -17,14 +17,10 @@ from core.cli_helpers import (
     write_json,
     emit_json,
     emit_stderr,
+    open_application_store,
 )
-from core.services import (
-    run_career_review,
-    create_review_session,
-    save_review_session,
-    load_review_session,
-    validate_session_answers,
-)
+from services.review_service import CareerReviewService
+from core.material_proposal import MaterialProposal
 
 
 def cmd_career_review(args):
@@ -44,13 +40,14 @@ def cmd_career_review(args):
 
     jd_text = read_text(jd_path)
     profile_data = load_json(profile_path)
+    review_service = CareerReviewService()
 
     session_data = None
     if session_path:
         if not os.path.exists(session_path):
             emit_stderr(f"[-] Error: Session file not found: {session_path}")
             sys.exit(1)
-        session_data = load_review_session(session_path)
+        session_data = review_service.load_session(session_path)
 
         jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
         profile_hash = hashlib.sha256(json.dumps(profile_data, sort_keys=True).encode("utf-8")).hexdigest()[:12]
@@ -70,13 +67,13 @@ def cmd_career_review(args):
             sys.exit(1)
         answers_data = load_json(answers_path)
         if session_data:
-            valid, errors = validate_session_answers(session_data, answers_data)
+            valid, errors = review_service.validate_session(session_data, answers_data)
             if not valid:
                 emit_stderr(f"[-] Error: Answers do not match session snapshot: {'; '.join(errors)}")
                 sys.exit(1)
 
     try:
-        review_result = run_career_review(
+        review_result = review_service.run_review(
             jd_text=jd_text,
             profile_dict=profile_data,
             answers_dict=answers_data,
@@ -90,12 +87,26 @@ def cmd_career_review(args):
         sys.exit(1)
 
     if save_session_path:
-        session = create_review_session(jd_text, profile_data, review_result, base_session=session_data)
-        save_review_session(session, save_session_path)
+        session = review_service.create_session(jd_text, profile_data, review_result, base_session=session_data)
+        review_service.save_session(session, save_session_path)
         if args.json:
             emit_stderr(f"[+] Review session saved to {save_session_path}")
         else:
             print(f"[+] Review session saved to {save_session_path}")
+
+    proposal_db = getattr(args, "proposal_db", None)
+    if proposal_db:
+        proposal_data = dict(review_result["material_proposal"])
+        proposal_data["application_id"] = getattr(args, "application_id", None)
+        proposal = MaterialProposal.from_dict(proposal_data)
+        with open_application_store(proposal_db) as store:
+            store.save_material_proposal(proposal)
+            application_id = getattr(args, "application_id", None)
+            if application_id:
+                if not store.attach_evidence_snapshot(application_id, review_result["evidence_snapshot"]):
+                    emit_stderr(f"[-] Application not found for proposal link: {application_id}")
+                    sys.exit(1)
+        emit_stderr(f"[+] Material proposal saved to {proposal_db}: {proposal.proposal_id}")
 
     if args.output:
         write_json(review_result, args.output)

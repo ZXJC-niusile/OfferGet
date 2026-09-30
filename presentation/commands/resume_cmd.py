@@ -12,7 +12,8 @@ import argparse
 import subprocess
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+from core.paths import get_project_root
+PROJECT_ROOT = get_project_root()
 
 from core.cli_helpers import (
     emit_stderr,
@@ -30,7 +31,20 @@ def cmd_resume_build(args_list=None):
     build_parser.add_argument(
         "--theme",
         default="all",
-        choices=["all", "modern-navy", "silicon-clean", "classic-tech", "ats-plain", "academic-latex", "academic-typst"],
+        choices=[
+            "all",
+            "modern-navy",
+            "silicon-clean",
+            "classic-tech",
+            "asu-dense",
+            "sidebar-clean",
+            "academic-postgraduate",
+            "engineering-sb2nov",
+            "modern-corporate",
+            "ats-plain",
+            "academic-latex",
+            "academic-typst",
+        ],
         help="Resume theme to build (default: all)",
     )
     build_parser.add_argument(

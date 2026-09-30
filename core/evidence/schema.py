@@ -1,6 +1,6 @@
 """
 OfferGet Evidence Audit Report Schema Validator.
-Ported and enhanced from ASu-resume-skills (Apache-2.0).
+OfferGet native evidence audit report schema validation engine.
 Validates JSON structure, ID referential integrity, and metric consistency.
 """
 
@@ -20,7 +20,7 @@ from core.evidence.models import (
 
 def validate_report_data(data: Dict[str, Any]) -> List[str]:
     """
-    Validates report data against ASu report-schema.md.
+    Validates report data against OfferGet report schema specification.
     Returns list of error messages. If empty, the report data is valid.
     """
     errors: List[str] = []

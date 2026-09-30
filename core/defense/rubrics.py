@@ -1,6 +1,6 @@
 """
 OfferGet Defense Rubrics and Weakness Dimensions.
-Absorbed and formalized from defense-beating-simulator (MIT).
+OfferGet native defense rubrics, weakness taxonomy, and evaluation standards.
 Provides evidence status labels, risk basis labels, 9 weakness dimensions,
 and a 100-point answer scoring rubric.
 """
@@ -21,6 +21,9 @@ class EvidenceStatus(str, Enum):
     MATERIAL_IMPLIED = "Material-implied"      # 材料有所暗示但未明确说明，需澄清
     MATERIAL_MISSING = "Material-missing"      # 提出主张但无任何依据佐证
 
+    def __str__(self) -> str:
+        return str(self.value)
+
 
 class RiskBasis(str, Enum):
     """
@@ -29,6 +32,9 @@ class RiskBasis(str, Enum):
     MATERIAL_DERIVED = "Material-derived"                      # 风险直接来自材料矛盾、遗漏或表述夸大
     RISK_INFERRED = "Risk-inferred"                            # 风险来自答辩经验与攻防推断
     COMBINED = "Material-derived + Risk-inferred"              # 兼具材料依据与经验推断
+
+    def __str__(self) -> str:
+        return str(self.value)
 
 
 class DefenseWeaknessDimension(str, Enum):
@@ -44,6 +50,9 @@ class DefenseWeaknessDimension(str, Enum):
     REPRODUCIBILITY = "可复现性"        # README、运行命令、依赖、示例数据、Demo、许可证
     RISK_PHRASING = "风险表述"          # 是否有夸大、模糊、偷换概念、不严谨表述
     DEFENSE_SAFETY = "答辩安全性"       # 哪些问题最容易引出致命连续追问
+
+    def __str__(self) -> str:
+        return str(self.value)
 
 
 @dataclass

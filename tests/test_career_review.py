@@ -36,10 +36,10 @@ from core.job_flow import (
 )
 from core.fact_guard import FactVerificationGuard
 from core.profile_adapter import iter_profile_claims
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.reporter import OfferStrategyReporter
-from modules.jd_analyst.predictor import JDPredictor
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.reporter import OfferStrategyReporter
+from core.jd_analyst.predictor import JDPredictor
 
 
 class TestCareerReviewPipeline(unittest.TestCase):
@@ -196,7 +196,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
         matcher_result = matcher.match(decoded_jd, cand)
         reporter = OfferStrategyReporter()
         pred = JDPredictor().predict(decoded_jd, matcher_result)
-        from modules.jd_analyst.models import RedFlagReport
+        from core.jd_analyst.models import RedFlagReport
         redflags = RedFlagReport()
 
         html_out = reporter.generate_html(decoded_jd, cand, matcher_result, redflags, pred)
@@ -776,9 +776,9 @@ class TestCareerReviewPipeline(unittest.TestCase):
 
     def test_26_targeted_questions_role_adaptation_and_no_name_as_project(self):
         """Test Q1 adapts to non-engineering roles and Q2 does not quote candidate name/degree as project."""
-        from modules.jd_analyst.decoder import JDDecoder
-        from modules.jd_analyst.matcher import JDMatcher
-        from modules.jd_analyst.predictor import JDPredictor
+        from core.jd_analyst.decoder import JDDecoder
+        from core.jd_analyst.matcher import JDMatcher
+        from core.jd_analyst.predictor import JDPredictor
         from core.profile_adapter import build_profile_context
         from core.job_flow import select_targeted_interview_questions
 
@@ -828,6 +828,26 @@ class TestCareerReviewPipeline(unittest.TestCase):
         qs_short = select_targeted_interview_questions(dec, p_short, list(ctx_short.claims), m_short, pred)
         q2_short = qs_short[1]
         self.assertIn("SQLite", q2_short["question_zh"], "Short real experience should be anchored in Q2")
+
+    def test_27_evidence_graph_is_integrated_into_review_and_snapshot(self):
+        result = run_career_review(self.jd_text, self.profile_data)
+
+        self.assertIn("evidence_graph", result)
+        self.assertIn("evidence_gate", result)
+        self.assertIn("evidence_snapshot", result)
+        self.assertTrue(result["evidence_gate"]["is_ready"])
+        self.assertEqual(
+            result["evidence_snapshot"]["evidence_graph"]["graph_hash"],
+            result["evidence_graph"]["graph_hash"],
+        )
+        self.assertTrue(result["evidence_gate"]["selected_claim_ids"])
+        self.assertTrue(
+            all(
+                patch.get("validation_status") != "applied"
+                or patch.get("source_claim_id") in result["evidence_gate"]["selected_claim_ids"]
+                for patch in result["tailored_profile"].get("applied_patches", [])
+            )
+        )
 
 
 if __name__ == "__main__":

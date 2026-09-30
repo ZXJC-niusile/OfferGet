@@ -1,7 +1,7 @@
 """
 OfferGet JD Decision Engine (core/jd_decision.py)
 =================================================
-Ported and evolved from job-description-skill.
+OfferGet native JD decision and strategic application evaluation engine.
 Provides:
 1. DecodeBeforeMatchGate: Pipeline enforcement ensuring no un-decoded raw JD can bypass semantic decomposition.
 2. ShouldIApplyEvaluator: 5-dimension Go/No-Go decision framework, ⭐ 1-5 rating, mandatory 3-pros/3-cons,
@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from modules.jd_analyst.models import (
+from core.jd_analyst.models import (
     CandidateProfile,
     ChannelProbability,
     ChannelType,
@@ -22,8 +22,8 @@ from modules.jd_analyst.models import (
     MatcherResult,
     ProbabilityForecast,
 )
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.predictor import InterviewProbabilityCalculator
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.predictor import InterviewProbabilityCalculator
 
 
 class UnverifiedJDPipelineError(ValueError):
@@ -126,8 +126,8 @@ class DecodeBeforeMatchGate:
 
 class ShouldIApplyEvaluator:
     """
-    Evaluates candidate-to-JD alignment using the 5-dimension Should I Apply
-    decision framework from job-description-skill.
+    Evaluates candidate-to-JD alignment using OfferGet's 5-dimension Should I Apply
+    decision framework.
     """
 
     # Weights

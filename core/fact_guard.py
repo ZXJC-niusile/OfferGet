@@ -244,6 +244,7 @@ class FactVerificationGuard:
         self._claim_id_to_scope = {}
         self._company_to_exp_idx = {}
         self._project_name_to_proj_idx = {}
+        self._baseline_roles = {}
 
         if not self.master_profile:
             return
@@ -301,6 +302,8 @@ class FactVerificationGuard:
 
             if company:
                 self._company_to_exp_idx[company.lower()] = exp_idx
+                self._baseline_roles[company.lower()] = role
+            self._baseline_roles[f"experience[{exp_idx}]"] = role
 
             exp_text_parts = [company, role]
 
@@ -354,6 +357,8 @@ class FactVerificationGuard:
             p_kw = self._extract_keywords(proj_name)
             if proj_name:
                 self._project_name_to_proj_idx[proj_name.lower()] = p_idx
+                self._baseline_roles[proj_name.lower()] = proj_role
+            self._baseline_roles[f"projects[{p_idx}]"] = proj_role
 
             p_text_parts = [proj_name, proj_role]
 
@@ -459,265 +464,128 @@ class FactVerificationGuard:
     def _index_verified_metrics_dict(
         self, verified_metrics: Dict[str, Any], claim_id: str, context_keywords: Set[str]
     ) -> None:
-        """Indexes explicit verified_metrics key-values into structured anchors."""
+        """Indexes explicit verified_metrics key-values into structured anchors using declarative pattern matching."""
+        pct_rule_topics = [
+            ("mfu", "mfu", {"mfu", "flops", "utilization", "利用率", "算力利用率"}),
+            ("uptime", "uptime", {"uptime", "可用率", "训练可用率", "在线率"}),
+            ("availability", "uptime", {"uptime", "可用率", "训练可用率", "在线率"}),
+            ("cost", "cost_reduction", {"成本", "降本", "cost", "单token"}),
+            ("latency", "latency_reduction", {"延迟", "latency", "p99", "p99延迟"}),
+            ("vram", "vram_reduction", {"显存", "vram", "显存消耗", "memory"}),
+            ("memory", "vram_reduction", {"显存", "vram", "显存消耗", "memory"}),
+            ("gsm8k", "gsm8k_gain", {"gsm8k", "数学", "推理", "准确率"}),
+            ("math", "math_gain", {"math", "代码推理", "准确率"}),
+        ]
+
         for key, val in verified_metrics.items():
             val_str = str(val).strip()
 
-            # 1. Cluster size (e.g. 1024)
+            # Cluster size
             if "cluster" in key or key == "cluster_size":
                 m = re.search(r"(\d+)", val_str)
                 if m:
                     num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "cluster_size",
-                        "keywords": list(context_keywords | {"卡", "gpu", "gpus", "h800", "h100", "集群", "cluster", "node", "节点"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{int(num)} 卡",
-                        "unit": "卡",
-                        "metric_type": "cluster_size"
-                    })
-                    self.all_verified_numbers.add(num)
+                    self._add_anchor(claim_id, key, "cluster_size", context_keywords | {"卡", "gpu", "gpus", "h800", "h100", "集群", "cluster", "node", "节点"}, num, f"{int(num)} 卡", "卡", "cluster_size")
 
-            # 2. MFU metrics (e.g. mfu_before: 38.5%, mfu_after: 54.2%)
-            elif "mfu" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    subtopic = "mfu_before" if "before" in key else "mfu_after"
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "mfu",
-                        "subtopic": subtopic,
-                        "keywords": list(context_keywords | {"mfu", "flops", "utilization", "利用率", "算力利用率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # 3. Downtime metrics (e.g. downtime_before: 2.4h/day, downtime_after: <8min/day)
+            # Downtime
             elif "downtime" in key:
                 if "before" in key:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:小时|h|hours?)", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "downtime_before",
-                            "keywords": list(context_keywords | {"downtime", "中断", "故障", "有效中断", "日均中断", "慢卡", "慢节点"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{num} 小时",
-                            "unit": "小时",
-                            "metric_type": "time_hours"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "downtime_before", context_keywords | {"downtime", "中断", "故障", "有效中断", "日均中断", "慢卡", "慢节点"}, num, f"{num} 小时", "小时", "time_hours")
                 else:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:分钟|min|minutes?)", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "downtime_after",
-                            "keywords": list(context_keywords | {"downtime", "中断", "故障", "压减至", "以内"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{num} 分钟",
-                            "unit": "分钟",
-                            "metric_type": "time_minutes"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "downtime_after", context_keywords | {"downtime", "中断", "故障", "压减至", "以内"}, num, f"{num} 分钟", "分钟", "time_minutes")
 
-            # 4. Uptime (e.g. 99.4%)
-            elif "uptime" in key or "availability" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "uptime",
-                        "keywords": list(context_keywords | {"uptime", "可用率", "训练可用率", "在线率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # 5. Annual Savings / Compute Cost (e.g. 38,000,000 RMB / 3800 万元)
+            # Currency savings
             elif "savings" in key or "annual_savings" in key:
-                # Dynamically parse value and unit from val_str
-                # e.g., "38,000,000 RMB" -> 3800.0 万元 (normalized to 万元 for comparison) or "3800 万元"
                 raw_num = val_str.replace(",", "").strip()
                 m_curr = re.search(r"(\d+(?:\.\d+)?)\s*(万元|万|亿元|M\s*RMB|m\s*rmb|million\s*rmb|RMB|usd|美元)?", raw_num, re.IGNORECASE)
                 if m_curr:
                     amount = float(m_curr.group(1))
                     curr_unit = (m_curr.group(2) or "").strip().lower()
-                    # Normalize to 万元
                     if "亿" in curr_unit:
                         baseline_wan = amount * 10000.0
                     elif "million" in curr_unit or "m rmb" in curr_unit or curr_unit.startswith("m"):
-                        # e.g. 38M RMB, 38m -> 38 * 100 = 3800 万元
                         baseline_wan = amount * 100.0
                     elif "万" in curr_unit:
                         baseline_wan = amount
-                    elif amount >= 10000.0:  # e.g. 38,000,000 RMB -> 3800 万元
+                    elif amount >= 10000.0:
                         baseline_wan = amount / 10000.0
                     else:
                         baseline_wan = amount
 
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "savings",
-                        "keywords": list(context_keywords | {"节省", "降本", "成本", "开销", "savings", "cost", "算力开销", "云算力", "万元"}),
-                        "baseline_value": baseline_wan,
-                        "baseline_raw": f"{int(baseline_wan) if baseline_wan.is_integer() else baseline_wan} 万元",
-                        "unit": "万元",
-                        "metric_type": "currency"
-                    })
-                    self.all_verified_numbers.add(baseline_wan)
+                    self._add_anchor(claim_id, key, "savings", context_keywords | {"节省", "降本", "成本", "开销", "savings", "cost", "算力开销", "云算力", "万元"}, baseline_wan, f"{int(baseline_wan) if baseline_wan.is_integer() else baseline_wan} 万元", "万元", "currency")
                     self.all_verified_numbers.add(amount)
                     if baseline_wan > 0:
                         self.all_verified_numbers.add(baseline_wan * 10000.0)
                         self.all_verified_numbers.add(baseline_wan / 100.0)
 
-            elif "cost" in key:
-                m_pct = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m_pct:
-                    num = float(m_pct.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "cost_reduction",
-                        "keywords": list(context_keywords | {"成本", "降本", "cost", "单token"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # 6. Latency / TTFT metrics
-            elif "latency" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "latency_reduction",
-                        "keywords": list(context_keywords | {"延迟", "latency", "p99", "p99延迟"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
+            # TTFT
             elif "ttft" in key:
                 if "before" in key:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:秒|s|sec)", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "ttft_before",
-                            "keywords": list(context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{num}s",
-                            "unit": "s",
-                            "metric_type": "time_s"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "ttft_before", context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}, num, f"{num}s", "s", "time_s")
                 else:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*ms", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "ttft_after",
-                            "keywords": list(context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{int(num)}ms",
-                            "unit": "ms",
-                            "metric_type": "time_ms"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "ttft_after", context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}, num, f"{int(num)}ms", "ms", "time_ms")
 
-            # 7. Time saved (e.g. 3 weeks)
+            # Time saved
             elif "time" in key:
                 m = re.search(r"(\d+)\s*(?:周|weeks?)", val_str, re.IGNORECASE)
                 if m:
                     num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "time_saved",
-                        "keywords": list(context_keywords | {"提前", "节省时间", "周", "weeks", "里程碑"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{int(num)} 周",
-                        "unit": "周",
-                        "metric_type": "time_weeks"
-                    })
-                    self.all_verified_numbers.add(num)
+                    self._add_anchor(claim_id, key, "time_saved", context_keywords | {"提前", "节省时间", "周", "weeks", "里程碑"}, num, f"{int(num)} 周", "周", "time_weeks")
 
-            # 8. VRAM Reduction & Benchmark gains
-            elif "vram" in key or "memory" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "vram_reduction",
-                        "keywords": list(context_keywords | {"显存", "vram", "显存消耗", "memory"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            elif "gsm8k" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "gsm8k_gain",
-                        "keywords": list(context_keywords | {"gsm8k", "数学", "推理", "准确率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            elif "math" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "math_gain",
-                        "keywords": list(context_keywords | {"math", "代码推理", "准确率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # Model params (e.g. 230B MoE, 64B, 32B)
+            # Model params
             elif "model_params" in key or "params" in key:
                 for pm in re.finditer(r"(\d+)\s*[bB]", val_str):
                     p_num = float(pm.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:model_param_{int(p_num)}B",
-                        "topic": "model_params",
-                        "keywords": list(context_keywords | {"参数", "dense", "moe", "基座大模型"}),
-                        "baseline_value": p_num,
-                        "baseline_raw": f"{int(p_num)}B",
-                        "unit": "B",
-                        "metric_type": "model_param"
-                    })
-                    self.all_verified_numbers.add(p_num)
+                    self._add_anchor(claim_id, f"model_param_{int(p_num)}B", "model_params", context_keywords | {"参数", "dense", "moe", "基座大模型"}, p_num, f"{int(p_num)}B", "B", "model_param")
+
+            # General percentage metrics
+            else:
+                for trigger_key, topic, kw in pct_rule_topics:
+                    if trigger_key in key:
+                        m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
+                        if m:
+                            num = float(m.group(1))
+                            subtopic = f"{topic}_{'before' if 'before' in key else 'after'}" if "before" in key or "after" in key else None
+                            self._add_anchor(claim_id, key, topic, context_keywords | kw, num, f"{num}%", "%", "percentage", subtopic=subtopic)
+                            break
+
+    def _add_anchor(
+        self,
+        claim_id: str,
+        key: str,
+        topic: str,
+        keywords: Set[str],
+        baseline_value: float,
+        baseline_raw: str,
+        unit: str,
+        metric_type: str,
+        subtopic: Optional[str] = None,
+    ) -> None:
+        anchor: Dict[str, Any] = {
+            "anchor_id": f"{claim_id}:{key}",
+            "topic": topic,
+            "keywords": list(keywords),
+            "baseline_value": baseline_value,
+            "baseline_raw": baseline_raw,
+            "unit": unit,
+            "metric_type": metric_type,
+        }
+        if subtopic:
+            anchor["subtopic"] = subtopic
+        self.baseline_anchors.append(anchor)
+        self.all_verified_numbers.add(baseline_value)
 
     def _extract_and_index_text_metrics(
         self, text: str, source_id: str, extra_keywords: Optional[Set[str]] = None
@@ -730,6 +598,12 @@ class FactVerificationGuard:
         extracted = self._extract_raw_metrics_from_text(text)
         for m in extracted:
             self.all_verified_numbers.add(m["value"])
+            if m.get("type") == "currency":
+                unit_l = (m.get("unit") or "").lower()
+                if "万" in unit_l:
+                    self.all_verified_numbers.add(m["value"] * 10000.0)
+                elif "亿" in unit_l:
+                    self.all_verified_numbers.add(m["value"] * 100000000.0)
             self.baseline_anchors.append({
                 "anchor_id": f"{source_id}:{m['raw']}",
                 "topic": m.get("type", "generic"),
@@ -985,6 +859,7 @@ class FactVerificationGuard:
 
         drifts: List[Dict[str, Any]] = []
         unverified_claims: List[Dict[str, Any]] = []
+        role_inflations: List[Dict[str, Any]] = []
         verified_bullets: List[str] = []
         total_bullets = 0
 
@@ -1003,6 +878,16 @@ class FactVerificationGuard:
                 company = exp.get("company") or exp.get("org")
                 if company and company.lower() in self._company_to_exp_idx:
                     exp_scope = f"experience[{self._company_to_exp_idx[company.lower()]}]"
+
+                # Role hierarchy audit
+                claimed_exp_role = exp.get("role") or ""
+                baseline_exp_role = self._baseline_roles.get(exp_scope) or self._baseline_roles.get(company.lower() if company else "", "")
+                if claimed_exp_role and baseline_exp_role:
+                    r_esc = QualityRuleRegistry.check_role_escalation(claimed_exp_role, baseline_exp_role)
+                    if r_esc:
+                        r_esc["scope"] = exp_scope
+                        r_esc["organization"] = company
+                        role_inflations.append(r_esc)
 
                 exp_bullets: List[Tuple[str, Optional[str]]] = []
                 for h in exp.get("highlights", []):
@@ -1042,6 +927,16 @@ class FactVerificationGuard:
                 p_name = proj.get("name")
                 if p_name and p_name.lower() in self._project_name_to_proj_idx:
                     proj_scope = f"projects[{self._project_name_to_proj_idx[p_name.lower()]}]"
+
+                # Role hierarchy audit
+                claimed_proj_role = proj.get("role") or ""
+                baseline_proj_role = self._baseline_roles.get(proj_scope) or self._baseline_roles.get(p_name.lower() if p_name else "", "")
+                if claimed_proj_role and baseline_proj_role:
+                    p_esc = QualityRuleRegistry.check_role_escalation(claimed_proj_role, baseline_proj_role)
+                    if p_esc:
+                        p_esc["scope"] = proj_scope
+                        p_esc["project"] = p_name
+                        role_inflations.append(p_esc)
 
                 p_bullets: List[str] = []
                 for k in ["description_zh", "description_en", "description"]:
@@ -1085,11 +980,11 @@ class FactVerificationGuard:
                         if not b_drifts and not b_unverified:
                             verified_bullets.append(b_clean)
 
-            passed = (len(drifts) == 0 and len(unverified_claims) == 0)
+            passed = (len(drifts) == 0 and len(unverified_claims) == 0 and len(role_inflations) == 0)
             verdict = "FACT_CHECK_PASSED" if passed else "FACT_DRIFT_DETECTED"
             score = 100.0
             if not passed:
-                penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0
+                penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0 + len(role_inflations) * 20.0
                 score = max(0.0, round(100.0 - penalty, 1))
 
             return {
@@ -1097,13 +992,15 @@ class FactVerificationGuard:
                 "score": score,
                 "drifts": drifts,
                 "unverified_claims": unverified_claims,
+                "role_inflations": role_inflations,
                 "verified_bullets": verified_bullets,
                 "verdict": verdict,
                 "summary": {
                     "total_bullets_checked": total_bullets,
                     "verified_bullets_count": len(verified_bullets),
                     "drift_count": len(drifts),
-                    "unverified_claims_count": len(unverified_claims)
+                    "unverified_claims_count": len(unverified_claims),
+                    "role_inflation_count": len(role_inflations),
                 }
             }
 
@@ -1129,12 +1026,12 @@ class FactVerificationGuard:
             if not bullet_drifts and not bullet_unverified:
                 verified_bullets.append(bullet_clean)
 
-        passed = (len(drifts) == 0 and len(unverified_claims) == 0)
+        passed = (len(drifts) == 0 and len(unverified_claims) == 0 and len(role_inflations) == 0)
         verdict = "FACT_CHECK_PASSED" if passed else "FACT_DRIFT_DETECTED"
 
         score = 100.0
         if not passed:
-            penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0
+            penalty = len(drifts) * 25.0 + len(unverified_claims) * 15.0 + len(role_inflations) * 20.0
             score = max(0.0, round(100.0 - penalty, 1))
 
         return {
@@ -1142,15 +1039,36 @@ class FactVerificationGuard:
             "score": score,
             "drifts": drifts,
             "unverified_claims": unverified_claims,
+            "role_inflations": role_inflations,
             "verified_bullets": verified_bullets,
             "verdict": verdict,
             "summary": {
                 "total_bullets_checked": len(bullets),
                 "verified_bullets_count": len(verified_bullets),
                 "drift_count": len(drifts),
-                "unverified_claims_count": len(unverified_claims)
+                "unverified_claims_count": len(unverified_claims),
+                "role_inflation_count": len(role_inflations),
             }
         }
+
+    def verify_role_hierarchy(self, claimed_role: str, baseline_role: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Verifies whether a claimed job/project role title suffers from title inflation,
+        tier escalation, or domain drift relative to the baseline role.
+        """
+        if not baseline_role:
+            return None
+        return QualityRuleRegistry.check_role_escalation(claimed_role, baseline_role)
+
+    def verify_metric_scope(self, claimed_text: str, baseline_text: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Verifies whether quantified metrics in claimed_text suffer from scope drift,
+        entity substitution, ungrounded currency conversion, or unanchored denominators
+        relative to baseline_text.
+        """
+        if baseline_text is None:
+            baseline_text = getattr(self, "profile_all_text", "")
+        return QualityRuleRegistry.check_metric_scope_drift(claimed_text, baseline_text)
 
     def verify_bullet(
         self,
@@ -1253,6 +1171,26 @@ class FactVerificationGuard:
         if tech_method_drifts:
             bullet_unverified.extend(tech_method_drifts)
 
+        # 3. Metric scope, entity & dimension drift verification
+        b_scope_text = ""
+        if target_scope is not None or target_claim_id is not None or target_excerpt is not None:
+            resolved = self._resolve_scope_text(target_scope, target_claim_id, target_excerpt)
+            b_scope_text = resolved or ""
+        if not b_scope_text:
+            b_scope_text = getattr(self, "profile_all_text", "")
+
+        scope_drifts = QualityRuleRegistry.check_metric_scope_drift(bullet, b_scope_text)
+        if scope_drifts:
+            for s in scope_drifts:
+                bullet_drifts.append({
+                    "bullet": bullet,
+                    "claimed_metric": s.get("claimed_snippet") or s.get("number") or "scope_drift",
+                    "verified_baseline": s.get("reason", "Metric scope drift"),
+                    "metric_type": s.get("type", "METRIC_SCOPE_DRIFT"),
+                    "rule_id": s.get("rule_id", "SCOPE_DRIFT"),
+                    "fix_suggestion": s.get("fix_suggestion", "")
+                })
+
         return bullet_drifts, bullet_unverified
 
     def _extract_tech_and_method_terms(self, bullet: str) -> List[str]:
@@ -1287,12 +1225,22 @@ class FactVerificationGuard:
                     extracted.append(bullet[m.start():m.end()])
 
         # 3. Extract English / alphanumeric technical identifiers
+        # For Chinese bullets with embedded English tech words, extract candidate tokens.
+        # For pure English bullets, only extract known tech terms, uppercase acronyms (>=2 caps), or PascalCase/CamelCase identifiers.
+        is_chinese_bullet = bool(re.search(r"[\u4e00-\u9fa5]", bullet))
         for m in re.finditer(r"\b[A-Za-z][A-Za-z0-9_+#.-]*[A-Za-z0-9+#]\b", bullet):
             raw = m.group(0)
             raw_l = raw.lower()
             if raw_l in EXCLUDED_ENGLISH_WORDS:
                 continue
-            extracted.append(raw)
+            if is_chinese_bullet:
+                extracted.append(raw)
+            else:
+                if (raw_l in KNOWN_TECH_TERMS or raw_l in KNOWN_METHOD_TERMS or
+                    (len(raw) >= 2 and raw.isupper()) or
+                    (re.match(r"^[A-Z][a-z]+[A-Z]", raw)) or
+                    any(c in raw for c in ["+", "#", "."])):
+                    extracted.append(raw)
 
         # 4. Deduplicate terms (case-insensitive, prefer longer terms over their substrings)
         deduped: List[str] = []
@@ -1552,60 +1500,89 @@ class FactVerificationGuard:
         baseline_raw = anchor.get("baseline_raw", str(baseline_val))
         topic = anchor.get("topic", "")
 
+        # Currency unit normalization
+        c_unit = (claimed_metric.get("unit") or "").lower()
+        b_unit = (anchor.get("unit") or "").lower()
+
+        b_is_wan = ("万" in b_unit)
+        c_is_wan = ("万" in c_unit)
+        b_is_yi = ("亿" in b_unit)
+        c_is_yi = ("亿" in c_unit)
+
+        if b_is_wan and not c_is_wan and not c_is_yi:
+            # baseline is 万元, claimed is raw RMB / 元
+            baseline_comp = baseline_val * 10000.0
+            claimed_comp = claimed_val
+        elif c_is_wan and not b_is_wan and not b_is_yi:
+            # claimed is 万元, baseline is raw RMB / 元
+            baseline_comp = baseline_val
+            claimed_comp = claimed_val * 10000.0
+        elif b_is_yi and not c_is_yi:
+            # baseline is 亿元
+            baseline_comp = baseline_val * 100000000.0
+            claimed_comp = claimed_val if not c_is_wan else claimed_val * 10000.0
+        elif c_is_yi and not b_is_yi:
+            # claimed is 亿元
+            baseline_comp = baseline_val if not b_is_wan else baseline_val * 10000.0
+            claimed_comp = claimed_val * 100000000.0
+        else:
+            baseline_comp = baseline_val
+            claimed_comp = claimed_val
+
         # Allow small floating point rounding tolerance
-        if abs(claimed_val - baseline_val) < 0.2:
+        if abs(claimed_comp - baseline_comp) < 0.2:
             return False, baseline_raw
 
         # Model params: check if exact match or exceeding verified max
         if topic == "model_params":
-            if abs(claimed_val - baseline_val) < 0.2:
+            if abs(claimed_comp - baseline_comp) < 0.2:
                 return False, baseline_raw
             matched_param = any(
-                a.get("topic") == "model_params" and abs(a.get("baseline_value", 0) - claimed_val) < 0.2
+                a.get("topic") == "model_params" and abs(a.get("baseline_value", 0) - claimed_comp) < 0.2
                 for a in self.baseline_anchors
             )
             if matched_param:
                 return False, baseline_raw
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # MFU
         elif topic == "mfu":
-            if claimed_val > baseline_val + 0.2:
+            if claimed_comp > baseline_comp + 0.2:
                 return True, baseline_raw
 
         # Cluster size
         elif topic == "cluster_size":
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Downtime before
         elif topic == "downtime_before":
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Downtime after
         elif topic == "downtime_after":
             # If claimed downtime after is worse than baseline (e.g. baseline 8 min, claimed 20 min)
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Annual Savings
         elif topic == "savings":
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
         # Percentage reductions / gains
         elif topic in ("latency_reduction", "cost_reduction", "vram_reduction", "gsm8k_gain", "math_gain", "uptime", "percentage", "generic"):
-            if claimed_val > baseline_val + 0.2:
+            if claimed_comp > baseline_comp + 0.2:
                 return True, baseline_raw
 
         # Experience years & stars
         elif topic in ("experience_years", "stars"):
-            if claimed_val > baseline_val:
+            if claimed_comp > baseline_comp:
                 return True, baseline_raw
 
-        elif claimed_val > baseline_val:
+        elif claimed_comp > baseline_comp:
             return True, baseline_raw
 
         return False, baseline_raw
@@ -1666,7 +1643,7 @@ class FactVerificationGuard:
         subject_name: Optional[str] = None,
     ) -> Any:
         """
-        Audits resume text or dictionary into an ASu-compliant typed AuditReport.
+        Audits resume text or dictionary into a schema-compliant typed AuditReport.
         Reuses existing SSOT profile / ProfileContext without secondary normalization.
         """
         from core.evidence.auditor import EvidenceAuditor
@@ -1681,10 +1658,39 @@ class FactVerificationGuard:
     ) -> Dict[str, Any]:
         """
         Audits resume text or dictionary and returns a JSON-serializable report dictionary
-        strictly complying with ASu report-schema.md.
+        strictly complying with OfferGet report schema.
         """
         report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
         return report.to_dict()
+
+    def generate_audit_report_html(
+        self,
+        tailored_text_or_dict: Union[str, dict, list],
+        subject_name: Optional[str] = None,
+        template_path: Optional[Union[str, Path]] = None,
+    ) -> str:
+        """
+        Audits resume text or dictionary and returns an interactive, styled HTML audit report string.
+        """
+        from core.evidence.report_renderer import render_audit_report_html
+
+        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
+        return render_audit_report_html(report, template_path=template_path)
+
+    def save_audit_report_html(
+        self,
+        tailored_text_or_dict: Union[str, dict, list],
+        output_path: Union[str, Path],
+        subject_name: Optional[str] = None,
+        template_path: Optional[Union[str, Path]] = None,
+    ) -> Path:
+        """
+        Audits resume text or dictionary, renders HTML, and saves to output_path.
+        """
+        from core.evidence.report_renderer import save_audit_report_html
+
+        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
+        return save_audit_report_html(report, output_path=output_path, template_path=template_path)
 
 
 # ---------------------------------------------------------------------------
@@ -1726,7 +1732,7 @@ def audit_resume_evidence(
     subject_name: Optional[str] = None,
 ) -> dict:
     """
-    Convenience function to generate an ASu-compliant evidence audit report.
+    Convenience function to generate a schema-compliant evidence audit report.
 
     Args:
         tailored_text_or_dict: Resume text, list of bullets, or resume profile dictionary.
@@ -1734,7 +1740,7 @@ def audit_resume_evidence(
         subject_name: Optional subject candidate name.
 
     Returns:
-        dict with ASu report-schema.md compliant audit report.
+        dict with OfferGet schema-compliant audit report.
     """
     guard = FactVerificationGuard(master_profile)
     return guard.generate_audit_report(tailored_text_or_dict, subject_name=subject_name)

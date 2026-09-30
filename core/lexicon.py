@@ -69,6 +69,7 @@ DECISION_PLANNING_KEYWORDS: List[str] = QualityRuleRegistry.DECISION_PLANNING_KE
 DATA_DEPTH_LEVELS: Dict[str, str] = QualityRuleRegistry.DATA_DEPTH_LEVELS
 RESULT_EVIDENCE_LEVELS: Dict[str, str] = QualityRuleRegistry.RESULT_EVIDENCE_LEVELS
 BANNED_SLOP_PATTERNS: List[Tuple[str, str]] = QualityRuleRegistry.BANNED_SLOP_PATTERNS
+ROLE_KPI_LEXICON: Dict[str, List[str]] = QualityRuleRegistry.ROLE_KPI_LEXICON
 
 # ============================================================================
 # 8. ATS Formats & Defense Guidance (Re-exported from QualityRuleRegistry)
@@ -126,6 +127,7 @@ __all__ = [
     "DATA_DEPTH_LEVELS",
     "RESULT_EVIDENCE_LEVELS",
     "BANNED_SLOP_PATTERNS",
+    "ROLE_KPI_LEXICON",
     "STANDARD_SECTIONS",
     "FORMATTING_RISKS",
     "DEFENSE_GUIDE_TEMPLATES",

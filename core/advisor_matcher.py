@@ -70,8 +70,8 @@ class CandidateProfile:
     name: str
     undergraduate_school: str
     major: str
-    grade: str = "2022级本科生"
-    target_degree: str = "master"  # master, phd, direct_phd, academic_master, professional_master
+    grade: str = ""
+    target_degree: str = ""  # master, phd, direct_phd, academic_master, professional_master
     gpa: str = ""
     rank: str = ""  # e.g., "1/120", "前2%"
     rank_percentage: Optional[float] = None
@@ -602,9 +602,15 @@ class AdvisorMatcher:
         salutation = f"尊敬的{advisor_prof.surname}老师："
 
         # 3. Profile Hook (Strict 2 sentences)
-        hook_sentence_1 = f"您好！我是{cand_prof.undergraduate_school}{cand_prof.major}专业的{cand_prof.grade}{cand_prof.name}，对您课题组的研究方向极为向往。"
+        grade_prefix = cand_prof.grade if cand_prof.grade else ""
+        if cand_prof.undergraduate_school and cand_prof.major:
+            hook_sentence_1 = f"您好！我是{cand_prof.undergraduate_school}{cand_prof.major}专业的{grade_prefix}{cand_prof.name}，对您课题组的研究方向极为向往。"
+        elif cand_prof.undergraduate_school:
+            hook_sentence_1 = f"您好！我是来自{cand_prof.undergraduate_school}的{grade_prefix}{cand_prof.name}，对您课题组的研究方向极为向往。"
+        else:
+            hook_sentence_1 = f"您好！我是{grade_prefix}{cand_prof.name}，对您课题组的研究方向极为向往。"
         
-        # Build academic credentials clause
+        # Build academic credentials clause (strict fact checking: do not claim top rank if unverified)
         cred_parts = []
         if cand_prof.gpa:
             cred_parts.append(f"GPA {cand_prof.gpa}")
@@ -612,7 +618,7 @@ class AdvisorMatcher:
             cred_parts.append(f"专业排名 {cand_prof.rank}")
         if cand_prof.honors_awards:
             cred_parts.append(f"曾获{cand_prof.honors_awards[0]}")
-        cred_str = "，".join(cred_parts) if cred_parts else "专业成绩名列前茅，数理与专业基础扎实"
+        cred_str = "，".join(cred_parts) if cred_parts else "系统修读了专业核心课程，数理与专业基础扎实"
 
         # Key achievements (project / publication / competition)
         achievement_str = ""
@@ -620,11 +626,25 @@ class AdvisorMatcher:
             top_pub = cand_prof.publications[0]
             pub_title = top_pub.get("title", "学术成果")
             pub_venue = top_pub.get("venue", "")
-            achievement_str = f"曾以第一作者/核心作者在{pub_venue or '相关领域'}发表《{pub_title}》"
+            venue_clause = f"在{pub_venue}发表" if pub_venue else "发表"
+            is_first = (
+                top_pub.get("is_first_author") is True
+                or str(top_pub.get("author_rank", "")).strip() in ("1", "一作", "第一作者")
+                or "第一作者" in str(top_pub.get("role", ""))
+            )
+            if is_first:
+                achievement_str = f"曾以第一作者身份{venue_clause}论文《{pub_title}》"
+            else:
+                achievement_str = f"曾参与{venue_clause}论文《{pub_title}》"
         elif cand_prof.projects:
             top_prj = cand_prof.projects[0]
             prj_name = top_prj.get("name", "科研项目")
-            achievement_str = f"曾主导完成【{prj_name}】，具备从算法复现到工程调优的完整科研闭环经历"
+            role_str = str(top_prj.get("role", "")).lower()
+            is_lead = any(kw in role_str for kw in ["负责人", "主导", "owner", "lead", "组长", "主持", "核心负责"])
+            if is_lead:
+                achievement_str = f"曾主导完成【{prj_name}】，具备从算法复现到工程调优的完整科研闭环经历"
+            else:
+                achievement_str = f"曾参与完成【{prj_name}】，具备扎实的算法复现与工程实践经历"
         else:
             achievement_str = "具备严谨的数理思维与扎实的系统工程实践能力"
 
@@ -730,7 +750,7 @@ class AdvisorMatcher:
 
         # Strict Anti-Hallucination Audit
         anti_hallucination_report = self._verify_anti_hallucination(
-            email_body, advisor_prof, cand_prof
+            email_body, advisor_prof, cand_prof, candidate_statements=profile_hook
         )
 
         # Practical Sending Tips (baoyan best practices)
@@ -934,9 +954,15 @@ class AdvisorMatcher:
             openings_info=dict(advisor.get("openings_info", advisor.get("openings", {})))
         )
 
-    def _ensure_candidate_profile(self, candidate: Union[CandidateProfile, Dict[str, Any]]) -> CandidateProfile:
+    def _ensure_candidate_profile(self, candidate: Union[CandidateProfile, Dict[str, Any], Any]) -> CandidateProfile:
         if isinstance(candidate, CandidateProfile):
             return candidate
+        if hasattr(candidate, "to_advisor_candidate"):
+            return candidate.to_advisor_candidate()
+        if hasattr(candidate, "normalized_profile"):
+            from core.profile_adapter import ProfileContext
+            if isinstance(candidate, ProfileContext):
+                return candidate.to_advisor_candidate()
 
         cand_dict = candidate.get("candidate", {}) if "candidate" in candidate else candidate
         standing_dict = candidate.get("academic_standing", {})
@@ -957,7 +983,10 @@ class AdvisorMatcher:
         rank = str(standing_dict.get("rank", candidate.get("rank", "")))
 
         coursework = [c.get("course_name", "") for c in standing_dict.get("core_courses", [])] if "core_courses" in standing_dict else list(candidate.get("coursework", candidate.get("courses", [])))
-        honors = [h.get("name", "") for h in candidate.get("honors", [])] if "honors" in candidate else list(candidate.get("honors_awards", candidate.get("awards", [])))
+        honors = [
+            h.get("name", "") if isinstance(h, dict) else str(h)
+            for h in (candidate.get("honors") or candidate.get("honors_awards") or candidate.get("awards") or cand_dict.get("honors_awards") or [])
+        ]
 
         # Extract research interests from candidate interests or target schools
         interests = list(candidate.get("research_interests", candidate.get("interests", [])))
@@ -970,12 +999,15 @@ class AdvisorMatcher:
             gt = candidate["graduation_thesis"]
             interests.extend(gt.get("tags", []))
 
+        grade = str(cand_dict.get("grade") or candidate.get("grade") or "")
+        target_degree = str(candidate.get("target_degree") or cand_dict.get("target_degree") or "")
+
         return CandidateProfile(
             name=str(cand_dict.get("name", "候选人")),
             undergraduate_school=str(school),
             major=str(major),
-            grade=str(cand_dict.get("grade", "2022级本科生")),
-            target_degree=str(candidate.get("target_degree", "master")),
+            grade=grade,
+            target_degree=target_degree,
             gpa=gpa,
             rank=rank,
             rank_percentage=candidate.get("rank_percentage"),
@@ -1046,13 +1078,15 @@ class AdvisorMatcher:
         self,
         text: str,
         advisor: AdvisorProfile,
-        candidate: CandidateProfile
+        candidate: CandidateProfile,
+        candidate_statements: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Anti-Hallucination Guard:
-        Extracts all paper titles in Chinese title marks 《...》 from text.
-        Verifies whether every referenced paper title actually exists in factual input
-        (advisor.recent_publications or candidate.publications).
+        1. Extracts all paper titles in Chinese title marks 《...》 from text.
+           Verifies whether every referenced paper title actually exists in factual input
+           (advisor.recent_publications or candidate.publications).
+        2. Verifies candidate factual statements (GPA, rank, project claims) using FactVerificationGuard.
         """
         quoted_titles = re.findall(r'《(.*?)》', text)
         factual_advisor_titles = set(p.title.strip() for p in advisor.recent_publications)
@@ -1075,11 +1109,61 @@ class AdvisorMatcher:
                 hallucinated_citations.append(clean_title)
 
         is_clean = len(hallucinated_citations) == 0
+
+        # Target candidate factual statements (e.g. GPA, rank, project bullets)
+        fact_guard_issues = []
+        target_statements = candidate_statements
+        if not target_statements:
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            cand_lines = [
+                l for l in lines
+                if any(k in l for k in ["本科期间", "科研实践", "绩点", "GPA", "排名", "曾主导", "曾参与"])
+            ]
+            if cand_lines:
+                target_statements = "\n".join(cand_lines)
+
+        if target_statements:
+            try:
+                from core.fact_guard import FactVerificationGuard
+                cand_profile_grounding = {
+                    "candidate": {
+                        "name": candidate.name,
+                        "school": candidate.undergraduate_school,
+                        "major": candidate.major,
+                        "gpa": candidate.gpa,
+                        "rank": candidate.rank,
+                    },
+                    "skills": candidate.skills,
+                    "projects": candidate.projects,
+                    "honors_awards": candidate.honors_awards,
+                    "publications": candidate.publications,
+                }
+                guard = FactVerificationGuard(cand_profile_grounding)
+                fact_res = guard.verify_facts(target_statements)
+                if isinstance(fact_res, dict) and not fact_res.get("passed", True):
+                    for d in fact_res.get("drifts", []):
+                        fact_guard_issues.append(f"指标夸大/漂移: {d}")
+                    for u in fact_res.get("unverified_claims", []):
+                        fact_guard_issues.append(f"未核验数据: {u}")
+            except Exception:
+                pass
+
+        if fact_guard_issues:
+            is_clean = False
+
+        if is_clean:
+            verdict = "严谨真实（未检出任何虚构论文或夸大指标）"
+        elif hallucinated_citations:
+            verdict = f"风险警告（检出未收录文献：{hallucinated_citations}）"
+        else:
+            verdict = f"风险警告（检出未核验指标事实：{fact_guard_issues}）"
+
         return {
             "is_clean": is_clean,
             "verified_citations": verified_citations,
             "hallucinated_citations": hallucinated_citations,
-            "audit_verdict": "严谨真实（未检出任何虚构论文）" if is_clean else f"风险警告（检出未收录文献：{hallucinated_citations}）"
+            "fact_guard_issues": fact_guard_issues,
+            "audit_verdict": verdict
         }
 
 

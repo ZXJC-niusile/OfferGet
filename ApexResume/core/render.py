@@ -142,6 +142,7 @@ class BrowserRenderer:
             return False, 0, f"HTML file not found: {html_file}"
 
         temp_user_data = tempfile.mkdtemp(prefix="apex_browser_")
+        temp_rendered_pdf = Path(temp_user_data) / "rendered.pdf"
         file_url = html_file.as_uri()
 
         cmd = [
@@ -150,7 +151,7 @@ class BrowserRenderer:
             "--disable-gpu",
             "--no-pdf-header-footer",
             f"--user-data-dir={temp_user_data}",
-            f"--print-to-pdf={str(pdf_file)}",
+            f"--print-to-pdf={str(temp_rendered_pdf)}",
             file_url,
         ]
 
@@ -163,14 +164,48 @@ class BrowserRenderer:
                 errors="replace",
                 timeout=timeout_seconds,
             )
-            if proc.returncode != 0 and not pdf_file.exists():
+            if proc.returncode != 0 and not temp_rendered_pdf.exists():
                 return False, 0, f"Browser returned code {proc.returncode}: {proc.stderr}"
 
-            if not pdf_file.exists() or pdf_file.stat().st_size == 0:
+            if not temp_rendered_pdf.exists() or temp_rendered_pdf.stat().st_size == 0:
                 return False, 0, "PDF was not generated or generated empty."
 
-            pages = self.count_pages(pdf_file)
-            return True, pages, f"Successfully rendered {pages} page(s) ({pdf_file.stat().st_size} bytes)"
+            pages = self.count_pages(temp_rendered_pdf)
+
+            safe_save_func = None
+            repo_root = Path(__file__).resolve().parent.parent.parent
+            atomic_path = repo_root / "core" / "atomic_writer.py"
+            if atomic_path.exists():
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("offerget_core_atomic_writer", str(atomic_path))
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        safe_save_func = getattr(mod, "safe_save_file", None)
+                except Exception:
+                    pass
+
+            if safe_save_func is None:
+                try:
+                    from core.atomic_writer import safe_save_file as safe_save_func
+                except Exception:
+                    pass
+
+            if safe_save_func is not None:
+                res = safe_save_func(pdf_file, temp_rendered_pdf, allow_shadow=True)
+                if not res.success:
+                    return False, 0, f"Failed to save PDF to {pdf_file}: {res.error_message}"
+
+                if res.is_shadow:
+                    msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
+                else:
+                    msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
+
+                return True, pages, msg
+            else:
+                shutil.move(str(temp_rendered_pdf), str(pdf_file))
+                return True, pages, f"Successfully rendered {pages} page(s) ({pdf_file.stat().st_size} bytes)"
         except subprocess.TimeoutExpired:
             return False, 0, f"Rendering timed out after {timeout_seconds}s"
         except Exception as e:

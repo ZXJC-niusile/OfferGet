@@ -12,7 +12,7 @@ Validates all 4 orthogonal rubrics:
 import pytest
 from core.cn_rubrics import ComprehensiveRubricScorer, RubricScoreCard
 from core.services import CareerReviewService
-from modules.jd_analyst.models import (
+from core.jd_analyst.models import (
     CandidateProfile,
     CoreSkill,
     DecodedJD,

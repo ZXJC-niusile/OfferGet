@@ -7,7 +7,7 @@ name = "offerget"
 version = "1.0.0"
 description = "Local-first JD analysis, resume auditing, academic application, and offer strategy toolkit"
 requires-python = ">=3.9"
-license = {text = "MIT"}
+license = {text = "CC-BY-NC-SA-4.0"}
 
 [project.optional-dependencies]
 test = ["pytest"]
@@ -26,7 +26,7 @@ py-modules = ["cli"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "modules*", "presentation*", "ApexResume*", "templates*"]
+include = ["core*", "presentation*", "ApexResume*", "templates*", "services*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.html", "*.css", "*.md"]

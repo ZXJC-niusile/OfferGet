@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+from core.paths import get_project_root
 
 from core.cli_helpers import (
     read_text,
@@ -19,12 +19,10 @@ from core.cli_helpers import (
     emit_json,
     emit_stderr,
 )
-from core.services import (
-    decode_jd,
-    match_profile_to_jd,
-    generate_report,
-    validate_bilingual_html,
-)
+from services.jd_service import JDService
+from services.match_service import MatchService
+from services.report_service import ReportService
+from core.validator import validate_bilingual_html
 
 
 def cmd_jd_decode(args):
@@ -35,7 +33,7 @@ def cmd_jd_decode(args):
         sys.exit(1)
 
     jd_text = read_text(jd_path)
-    decoded = decode_jd(jd_text)
+    decoded = JDService().decode_jd(jd_text)
 
     if args.json:
         emit_json(decoded)
@@ -90,8 +88,8 @@ def cmd_jd_match(args):
     jd_text = read_text(jd_path)
     profile_data = load_json(profile_path)
 
-    decoded = decode_jd(jd_text)
-    match_result = match_profile_to_jd(decoded, profile_data)
+    decoded = JDService().decode_jd(jd_text)
+    match_result = MatchService().match(decoded, profile_data)
 
     if args.json:
         emit_json(match_result)
@@ -147,14 +145,16 @@ def cmd_jd_report(args):
     jd_text = read_text(jd_path)
     profile_data = load_json(profile_path)
 
-    decoded = decode_jd(jd_text)
+    decoded = JDService().decode_jd(jd_text)
 
     print(f"[*] Computing Candidate Alignment Matrix with: {profile_path} ...")
-    match_result = match_profile_to_jd(decoded, profile_data)
+    match_result = MatchService().match(decoded, profile_data)
 
     print(f"[*] Generating Industrial-grade Bilingual HTML Report ...")
     try:
-        out_file = generate_report(decoded, match_result, template_path=template_arg, output_path=output_path)
+        out_file = ReportService().generate_offer_strategy_report(
+            decoded, match_result, template_path=template_arg, output_path=output_path
+        )
     except FileNotFoundError as e:
         emit_stderr(f"[-] Error: {e}")
         sys.exit(1)

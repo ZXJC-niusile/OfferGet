@@ -27,9 +27,9 @@ from core.jd_compat import (
 )
 from core.profile_adapter import build_profile_context
 from core.services import JDService, MatchService
-from modules.jd_analyst.decoder import JDDecoder
-from modules.jd_analyst.matcher import JDMatcher
-from modules.jd_analyst.models import (
+from core.jd_analyst.decoder import JDDecoder
+from core.jd_analyst.matcher import JDMatcher
+from core.jd_analyst.models import (
     CandidateProfile,
     DecodedJD,
     HardThreshold,

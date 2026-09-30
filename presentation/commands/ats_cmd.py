@@ -18,11 +18,7 @@ from core.cli_helpers import (
     emit_json,
     emit_stderr,
 )
-from core.services import (
-    audit_resume_ats,
-    generate_skill_ledger,
-    filter_profile_by_visibility,
-)
+from services.profile_service import ProfileService
 
 
 def cmd_ats_audit(args):
@@ -37,7 +33,7 @@ def cmd_ats_audit(args):
         emit_stderr(f"[-] Error: JD file not found: {jd_path}")
         sys.exit(1)
 
-    result = audit_resume_ats(
+    result = ProfileService().audit_ats(
         profile_or_text=input_path,
         jd_decoded_or_text=jd_path,
         target_tag=args.tag
@@ -93,7 +89,7 @@ def cmd_ats_ledger(args):
     profile_data = load_json(profile_path)
     jd_text = read_text(jd_path)
 
-    ledger = generate_skill_ledger(profile_data, jd_text)
+    ledger = ProfileService().generate_skill_ledger(profile_data, jd_text)
 
     if args.json:
         emit_json(ledger)
@@ -135,7 +131,7 @@ def cmd_ats_filter(args):
         sys.exit(1)
 
     profile_data = load_json(profile_path)
-    tailored = filter_profile_by_visibility(profile_data, tag)
+    tailored = ProfileService().filter_by_visibility(profile_data, tag)
 
     if args.output:
         write_json(tailored, args.output)

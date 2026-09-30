@@ -211,42 +211,22 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertIn("OfferGet", proc.stdout)
         self.assertIn("Available subcommands", proc.stdout)
 
-    def test_cli_jd_decode_help(self):
-        proc = self.run_cli("jd", "decode", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("jd_file", proc.stdout)
-        self.assertIn("--json", proc.stdout)
-
-    def test_cli_jd_match_help(self):
-        proc = self.run_cli("jd", "match", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("--profile", proc.stdout)
-        self.assertIn("--json", proc.stdout)
-
-    def test_cli_ats_audit_help(self):
-        proc = self.run_cli("ats", "audit", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("input_file", proc.stdout)
-
-    def test_cli_gap_roi_help(self):
-        proc = self.run_cli("gap", "roi", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("jd_files", proc.stdout)
-
-    def test_cli_offer_evaluate_help(self):
-        proc = self.run_cli("offer", "evaluate", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("offer_file", proc.stdout)
-
-    def test_cli_baoyan_audit_help(self):
-        proc = self.run_cli("baoyan", "audit", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("entry", proc.stdout)
-
-    def test_cli_review_help(self):
-        proc = self.run_cli("review", "--help")
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("--profile", proc.stdout)
+    def test_cli_subcommands_help(self):
+        cases = [
+            (["jd", "decode", "--help"], ["jd_file", "--json"]),
+            (["jd", "match", "--help"], ["--profile", "--json"]),
+            (["ats", "audit", "--help"], ["input_file"]),
+            (["gap", "roi", "--help"], ["jd_files"]),
+            (["offer", "evaluate", "--help"], ["offer_file"]),
+            (["baoyan", "audit", "--help"], ["entry"]),
+            (["review", "--help"], ["--profile"]),
+        ]
+        for cmd_args, expected_snippets in cases:
+            with self.subTest(cmd=cmd_args):
+                proc = self.run_cli(*cmd_args)
+                self.assertEqual(proc.returncode, 0, f"Failed on {cmd_args}: {proc.stderr}")
+                for snippet in expected_snippets:
+                    self.assertIn(snippet, proc.stdout)
 
     def test_cli_jd_decode_json_pure_stdout(self):
         """Ensure --json produces 100% pure JSON on stdout with no extra log lines."""
@@ -281,6 +261,51 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertIn("Error: JD file not found", proc.stderr)
         self.assertEqual(proc.stdout.strip(), "")
 
+    def test_application_review_accept_and_render(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db = tmp_path / "applications.db"
+            review = tmp_path / "review.json"
+            profile_out = tmp_path / "accepted_profile.json"
+            resume_dir = tmp_path / "resume"
+
+            add = self.run_cli("application", "add", "APP-SMOKE", "--db", str(db), "--company", "测试公司", "--role", "后端工程师", "--json")
+            self.assertEqual(add.returncode, 0, add.stderr)
+
+            review_proc = self.run_cli(
+                "review", "examples/sample_ai_jd.txt",
+                "--profile", "examples/candidate_profile.json",
+                "--proposal-db", str(db), "--application-id", "APP-SMOKE",
+                "--output", str(review), "--json",
+            )
+            self.assertEqual(review_proc.returncode, 0, review_proc.stderr)
+            proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
+
+            accepted = self.run_cli(
+                "proposal", "accept", proposal_id, "--db", str(db),
+                "--profile", "examples/candidate_profile.json",
+                "--jd", "examples/sample_ai_jd.txt",
+                "--output", str(profile_out), "--build-resume",
+                "--resume-output-dir", str(resume_dir), "--json",
+            )
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertTrue(profile_out.exists())
+
+    def test_resume_version_records_artifact_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "applications.db"
+            profile_out = Path(tmp) / "profile.json"
+            resume_dir = Path(tmp) / "resume"
+            self.run_cli("application", "add", "APP-HASH", "--db", str(db), "--company", "验收公司", "--role", "工程师")
+            review = Path(tmp) / "review.json"
+            self.run_cli("review", "examples/sample_ai_jd.txt", "--profile", "examples/candidate_profile.json", "--proposal-db", str(db), "--application-id", "APP-HASH", "--output", str(review), "--json")
+            proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
+            accepted = self.run_cli("proposal", "accept", proposal_id, "--db", str(db), "--profile", "examples/candidate_profile.json", "--jd", "examples/sample_ai_jd.txt", "--output", str(profile_out), "--build-resume", "--resume-output-dir", str(resume_dir), "--json")
+            payload = json.loads(accepted.stdout)
+            self.assertEqual(payload["accept_phase"], "completed")
+            self.assertEqual(set(payload["artifact_status"].values()), {"present"})
+
 
 if __name__ == "__main__":
     unittest.main()
+

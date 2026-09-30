@@ -321,5 +321,191 @@ class TestInterviewDebriefFixes(unittest.TestCase):
         self.assertIn("访问速度", revised)
 
 
+# ============================================================================
+# Post-Interview Long Transcript & Checklist Integration Tests
+# ============================================================================
+
+from core.interview_debrief import (
+    InterviewDialogueTurn,
+    NextRoundChecklist,
+    PostInterviewDebriefEngine,
+    TranscriptParser,
+)
+
+
+def test_transcript_parser_basic():
+    raw_text = """
+面试官：请介绍一下你负责的订单中心高并发改造项目？
+候选人：我主导了订单中心的读写分离与分库分表重构，承载峰值 10000 QPS。
+面试官：在分库分表后，跨分片分页查询是怎么处理的？
+候选人：我们在底层引入了 Elasticsearch 做读索引同步，核心订单通过分片键直查。
+"""
+    turns = TranscriptParser.parse(raw_text)
+    assert len(turns) == 2
+    assert turns[0].turn_id == 1
+    assert "订单中心高并发改造" in turns[0].interviewer_question
+    assert "10000 QPS" in turns[0].candidate_answer
+    assert turns[1].turn_id == 2
+    assert "跨分片分页查询" in turns[1].interviewer_question
+    assert "Elasticsearch" in turns[1].candidate_answer
+
+
+def test_transcript_parser_prefixes_and_multiline():
+    raw_text = """
+Q1: Redis 集群如果发生脑裂，会导致什么后果？
+A1: 可能导致部分数据写入丢失。
+因为网络分区后，老主节点可能仍接收少量写入，待网络恢复后新主节点会覆盖老节点数据。
+
+问：你平时如何规避这一问题？
+答：配置 min-replicas-to-write 与 min-replicas-max-lag 参数。
+同时搭配自动化哨兵/Sentinel 集群巡检。
+"""
+    turns = TranscriptParser.parse(raw_text)
+    assert len(turns) == 2
+    assert "Redis 集群如果发生脑裂" in turns[0].interviewer_question
+    assert "覆盖老节点数据" in turns[0].candidate_answer
+    assert "如何规避这一问题" in turns[1].interviewer_question
+    assert "min-replicas-to-write" in turns[1].candidate_answer
+
+
+def test_post_interview_debrief_engine():
+    transcript = """
+面试官：你们系统在秒杀大促时发生过缓存击穿吗？你是怎么解决的？
+候选人：发生过一次，但我完美解决了。没有任何技术挑战，我们彻底重构了代码，达到了百分之百零故障。
+面试官：具体是怎么做互斥与异步更新的？
+候选人：我主要负责使用分布式锁 Singleflight 防击穿，通过互斥锁拦截击穿并发，降级率降至 0.01%。
+"""
+    checklist = PostInterviewDebriefEngine.debrief(
+        transcript_text=transcript,
+        target_role="高级后端工程师",
+        session_title="美团基础架构一面复盘",
+    )
+
+    assert isinstance(checklist, NextRoundChecklist)
+    assert checklist.total_turns == 2
+    assert checklist.session_title == "美团基础架构一面复盘"
+    assert checklist.next_round_readiness_score > 0
+    assert len(checklist.dialogue_turns) == 2
+
+    turn1 = checklist.dialogue_turns[0]
+    assert turn1.turn_score < 90.0
+    assert any("夸大" in bp or "过度断言" in bp for bp in checklist.blindspot_summary)
+
+    assert len(checklist.high_frequency_follow_ups) > 0
+    assert any("0.01%" in m for m in checklist.mandatory_metrics_to_memorize)
+    assert len(checklist.failure_contingency_scripts) > 0
+    assert "# 🎯 面试全复盘战报与 (N+1) 面备战清单" in checklist.markdown_report
+
+
+def test_debrief_empty_transcript():
+    checklist = PostInterviewDebriefEngine.debrief("")
+    assert checklist.total_turns == 0
+    assert checklist.next_round_readiness_score == 0.0
+    assert "未解析到有效" in checklist.markdown_report
+
+
+class TestInterviewReviewContract(unittest.TestCase):
+    def setUp(self):
+        import copy
+        from core.interview_review_contract import build_interview_review_snapshot
+        self.note = {
+            "company": "Example Co",
+            "position": "Backend Engineer",
+            "round": "Technical interview",
+            "date": "2026-09-24",
+            "questions": "How did you scale the API? I explained the cache layer.",
+            "self_reflection": "I omitted the baseline and traffic volume.",
+            "difficulty_points": "Capacity estimation",
+            "mood": "nervous",
+            "untrusted_extra": "must not enter snapshot",
+        }
+        self.snapshot = build_interview_review_snapshot(self.note)
+        self.payload = {
+            "summary": {
+                "text": "回答提到了缓存层，但缺少流量基线。",
+                "evidence_refs": [{
+                    "source": "interview_note",
+                    "path": "/self_reflection",
+                    "excerpt": "omitted the baseline",
+                }],
+            },
+            "observations": [{
+                "id": "obs-1",
+                "text": "复盘记录指出未提供基线。",
+                "evidence_refs": [{
+                    "source": "interview_note",
+                    "path": "/self_reflection",
+                    "excerpt": "the baseline",
+                }],
+            }],
+            "clarifications": [{
+                "id": "clarify-1",
+                "question": "当时的请求量和基线是多少？",
+                "evidence_refs": [{
+                    "source": "interview_note",
+                    "path": "/questions",
+                    "excerpt": "How did you scale the API?",
+                }],
+            }],
+            "practice_focuses": [],
+            "next_questions": [],
+        }
+
+    def test_snapshot_whitelists_and_copies_note_text(self):
+        from core.interview_review_contract import build_interview_review_snapshot
+        snapshot = build_interview_review_snapshot(self.note)
+        self.assertNotIn("untrusted_extra", snapshot["note"])
+        self.note["questions"] = "changed after snapshot"
+        self.assertEqual(snapshot["note"]["questions"], "How did you scale the API? I explained the cache layer.")
+
+    def test_valid_grounded_payload_is_normalized(self):
+        from core.interview_review_contract import validate_interview_review_proposal
+        result = validate_interview_review_proposal(self.payload, self.snapshot)
+        self.assertEqual(result["summary"]["text"], self.payload["summary"]["text"])
+        self.assertEqual(result["observations"][0]["evidence_refs"][0]["path"], "/self_reflection")
+
+    def test_rejects_forged_refs_duplicate_ids_and_extra_fields(self):
+        import copy
+        from core.interview_review_contract import validate_interview_review_proposal, InterviewReviewContractError
+        forged = copy.deepcopy(self.payload)
+        forged["summary"]["evidence_refs"][0]["excerpt"] = "not in the note"
+        with self.assertRaisesRegex(InterviewReviewContractError, "does not match"):
+            validate_interview_review_proposal(forged, self.snapshot)
+
+        duplicate = copy.deepcopy(self.payload)
+        duplicate["clarifications"][0]["id"] = "obs-1"
+        with self.assertRaisesRegex(InterviewReviewContractError, "unique"):
+            validate_interview_review_proposal(duplicate, self.snapshot)
+
+        extra = copy.deepcopy(self.payload)
+        extra["observations"][0]["score"] = 100
+        with self.assertRaisesRegex(InterviewReviewContractError, "unexpected fields"):
+            validate_interview_review_proposal(extra, self.snapshot)
+
+    def test_rejects_unsupported_paths_and_unbounded_items(self):
+        import copy
+        from core.interview_review_contract import validate_interview_review_proposal, InterviewReviewContractError
+        invalid_path = copy.deepcopy(self.payload)
+        invalid_path["summary"]["evidence_refs"][0]["path"] = "/company"
+        with self.assertRaisesRegex(InterviewReviewContractError, "outside the allowed"):
+            validate_interview_review_proposal(invalid_path, self.snapshot)
+
+        too_many = copy.deepcopy(self.payload)
+        too_many["observations"] = [copy.deepcopy(self.payload["observations"][0]) for _ in range(11)]
+        with self.assertRaisesRegex(InterviewReviewContractError, "at most 10"):
+            validate_interview_review_proposal(too_many, self.snapshot)
+
+    def test_safe_fallback_is_valid_only_for_empty_evidence(self):
+        from core.interview_review_contract import (
+            build_interview_review_snapshot,
+            safe_empty_interview_review_proposal,
+            validate_interview_review_proposal,
+        )
+        empty_snapshot = build_interview_review_snapshot({})
+        safe = safe_empty_interview_review_proposal()
+        self.assertEqual(validate_interview_review_proposal(safe, empty_snapshot), safe)
+
+
 if __name__ == "__main__":
     unittest.main()
+

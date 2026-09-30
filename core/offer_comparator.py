@@ -1,8 +1,7 @@
 """
 OfferGet Multi-Offer Comparison Matrix & Valuation Engine (core/offer_comparator.py)
 ====================================================================================
-Ported and evolved from offerPilot (offer_comparison, compensation)
-and ResumeSkills (offer-comparison-analyzer).
+OfferGet native multi-offer valuation and multidimensional comparison engine.
 
 Provides multi-offer quantitative comparison:
 1. Complete compensation breakdown: Cash, Bonus, Equity/RSU, Housing Fund.

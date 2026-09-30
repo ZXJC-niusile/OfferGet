@@ -14,6 +14,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from core.artifacts import write_json_atomic
+
 
 # ---------------------------------------------------------------------------
 # Predefined Deterministic Mappings for Canonical Entities
@@ -432,10 +434,7 @@ class PrivacyAnonymizer:
         """
         Saves de-anonymization map to a JSON file.
         """
-        path = Path(filepath)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(deanon_map, f, ensure_ascii=False, indent=2)
+        write_json_atomic(deanon_map, filepath)
 
     def load_map(self, filepath: Union[str, Path]) -> dict:
         """

@@ -27,6 +27,16 @@ from presentation.commands import (
     cmd_anon_mask,
     cmd_anon_profile,
     cmd_anon_unmask,
+    cmd_application_add,
+    cmd_application_list,
+    cmd_application_show,
+    cmd_application_snapshot,
+    cmd_application_status,
+    cmd_application_outcome,
+    cmd_application_outcomes,
+    cmd_application_insights,
+    cmd_application_versions,
+    cmd_application_version_diff,
     cmd_ats_audit,
     cmd_ats_filter,
     cmd_ats_ledger,
@@ -44,6 +54,12 @@ from presentation.commands import (
     cmd_offer_counter,
     cmd_offer_eval,
     cmd_offer_evaluate,
+    cmd_proposal_accept,
+    cmd_proposal_list,
+    cmd_proposal_reject,
+    cmd_proposal_show,
+    cmd_rendercv_export,
+    cmd_rendercv_import,
     cmd_resume_build,
     cmd_resume_passthrough,
     cmd_selftest,
@@ -62,6 +78,13 @@ Examples:
   offerget jd match examples/sample_ai_jd.txt --profile examples/candidate_profile.json
   offerget jd report examples/sample_ai_jd.txt --profile examples/candidate_profile.json --output report.html
   offerget ats audit examples/candidate_profile.json --jd examples/sample_ai_jd.txt
+  offerget review examples/sample_ai_jd.txt --profile examples/candidate_profile.json --proposal-db offers.db --application-id APP-001
+  offerget proposal accept MP-AB12CD --profile examples/candidate_profile.json --jd examples/sample_ai_jd.txt --output tailored_profile.json
+  offerget application add APP-001 --company "示例科技" --role "后端工程师"
+  offerget application outcome APP-001 --stage interview --result rejected --tags system_design,communication
+  offerget application insights --json
+  offerget rendercv import rendercv.json --output profile.json
+  offerget rendercv export profile.json --output rendercv.json
   offerget resume selftest
   offerget selftest
         """,
@@ -163,7 +186,8 @@ Examples:
     defense_subparsers = defense_parser.add_subparsers(dest="defense_command", help="Defense subcommands")
 
     defense_sim_parser = defense_subparsers.add_parser("simulate", help="Simulate project defense interrogation against claims")
-    defense_sim_parser.add_argument("target", help="Project description text, claim list, or file path")
+    defense_sim_parser.add_argument("target", nargs="?", default=None, help="Project description text, claim list, or file path")
+    defense_sim_parser.add_argument("--project", dest="project_opt", default=None, help="Project description text, claim list, or file path")
     defense_sim_parser.add_argument("--profile", help="Path to SSOT candidate_profile.json")
     defense_sim_parser.add_argument("--intensity", default="开始挑刺", choices=["先热个身", "开始挑刺", "严刑拷打", "warmup", "critical", "hell"], help="Interrogation intensity level")
     defense_sim_parser.add_argument("--scenario", default="技术 / 简历面试", help="Defense scenario")
@@ -194,7 +218,8 @@ Examples:
     baoyan_adv_parser.add_argument("--json", action="store_true", help="Output raw JSON")
 
     baoyan_check_parser = baoyan_subparsers.add_parser("checklist", help="Generate summer camp / re-examination checklist")
-    baoyan_check_parser.add_argument("--profile", required=True, help="Path to academic_profile.json")
+    baoyan_check_parser.add_argument("profile_pos", nargs="?", default=None, help="Path to academic_profile.json")
+    baoyan_check_parser.add_argument("--profile", default=None, help="Path to academic_profile.json")
     baoyan_check_parser.add_argument("--stage", default="夏令营", choices=["夏令营", "预推免", "九推", "统考复试"], help="Application stage")
     baoyan_check_parser.add_argument("--track", default="直博", choices=["直博", "学硕", "专硕"], help="Target track")
     baoyan_check_parser.add_argument("--json", action="store_true", help="Output raw JSON")
@@ -210,12 +235,144 @@ Examples:
     review_parser.add_argument(
         "--resume-theme",
         default="modern-navy",
-        choices=["all", "modern-navy", "silicon-clean", "classic-tech", "ats-plain", "academic-latex", "academic-typst"],
+        choices=[
+            "all",
+            "modern-navy",
+            "silicon-clean",
+            "classic-tech",
+            "asu-dense",
+            "sidebar-clean",
+            "academic-postgraduate",
+            "engineering-sb2nov",
+            "modern-corporate",
+            "ats-plain",
+            "academic-latex",
+            "academic-typst",
+        ],
         help="Theme for tailored resume (default: modern-navy)",
     )
     review_parser.add_argument("--resume-output-dir", default=None, help="Custom output directory for tailored resumes")
     review_parser.add_argument("--session", help="Optional path to load an existing review session JSON")
     review_parser.add_argument("--save-session", help="Optional path to save/update the review session JSON")
+    review_parser.add_argument("--proposal-db", help="Optional SQLite path to persist the generated material proposal")
+    review_parser.add_argument("--application-id", help="Optional application ID to attach to the generated proposal")
+
+    proposal_parser = subparsers.add_parser("proposal", help="Human-confirmed material proposal operations")
+    proposal_subparsers = proposal_parser.add_subparsers(dest="proposal_command")
+    proposal_show = proposal_subparsers.add_parser("show", help="Show a persisted material proposal")
+    proposal_show.add_argument("proposal_id")
+    proposal_show.add_argument("--db", help="ApplicationStore SQLite path")
+    proposal_show.add_argument("--json", action="store_true")
+    proposal_list = proposal_subparsers.add_parser("list", help="List persisted material proposals")
+    proposal_list.add_argument("--status", choices=["draft", "accepted", "rejected", "conflicted"])
+    proposal_list.add_argument("--application-id")
+    proposal_list.add_argument("--company")
+    proposal_list.add_argument("--role")
+    proposal_list.add_argument("--db", help="ApplicationStore SQLite path")
+    proposal_list.add_argument("--json", action="store_true")
+    proposal_accept = proposal_subparsers.add_parser("accept", help="Accept selected proposal patches into a new profile")
+    proposal_accept.add_argument("proposal_id")
+    proposal_accept.add_argument("--profile", required=True)
+    proposal_accept.add_argument("--jd", required=True)
+    proposal_accept.add_argument("--output", required=True)
+    proposal_accept.add_argument("--patch-ids", help="Comma-separated patch indexes; default accepts all")
+    proposal_accept.add_argument("--db", help="ApplicationStore SQLite path")
+    proposal_accept.add_argument("--json", action="store_true")
+    proposal_accept.add_argument("--build-resume", action="store_true")
+    proposal_accept.add_argument(
+        "--resume-theme",
+        default="modern-navy",
+        choices=[
+            "modern-navy",
+            "silicon-clean",
+            "classic-tech",
+            "asu-dense",
+            "sidebar-clean",
+            "academic-postgraduate",
+            "engineering-sb2nov",
+            "modern-corporate",
+            "ats-plain",
+            "academic-latex",
+            "academic-typst",
+            "ats-docx",
+        ],
+    )
+    proposal_accept.add_argument("--resume-output-dir")
+    proposal_reject = proposal_subparsers.add_parser("reject", help="Reject a persisted material proposal")
+    proposal_reject.add_argument("proposal_id")
+    proposal_reject.add_argument("--db", help="ApplicationStore SQLite path")
+    proposal_reject.add_argument("--json", action="store_true")
+
+    application_parser = subparsers.add_parser("application", help="Persistent application tracking operations")
+    application_subparsers = application_parser.add_subparsers(dest="application_command")
+    app_add = application_subparsers.add_parser("add", help="Create an application record")
+    app_add.add_argument("application_id")
+    app_add.add_argument("--company", required=True)
+    app_add.add_argument("--role", required=True)
+    app_add.add_argument("--status", default="pending")
+    app_add.add_argument("--channel", default="官网")
+    app_add.add_argument("--target-level")
+    app_add.add_argument("--portal-url")
+    app_add.add_argument("--recruiter-contact")
+    app_add.add_argument("--notes")
+    app_add.add_argument("--db")
+    app_add.add_argument("--json", action="store_true")
+    app_list = application_subparsers.add_parser("list", help="List application records")
+    app_list.add_argument("--status")
+    app_list.add_argument("--db")
+    app_list.add_argument("--json", action="store_true")
+    app_show = application_subparsers.add_parser("show", help="Show an application record")
+    app_show.add_argument("application_id")
+    app_show.add_argument("--db")
+    app_show.add_argument("--json", action="store_true")
+    app_status = application_subparsers.add_parser("status", help="Transition application status")
+    app_status.add_argument("application_id")
+    app_status.add_argument("status")
+    app_status.add_argument("--note")
+    app_status.add_argument("--db")
+    app_status.add_argument("--json", action="store_true")
+    app_snapshot = application_subparsers.add_parser("snapshot", help="Show the evidence snapshot")
+    app_snapshot.add_argument("application_id")
+    app_snapshot.add_argument("--db")
+    app_snapshot.add_argument("--json", action="store_true")
+    app_outcome = application_subparsers.add_parser("outcome", help="Record an application process outcome")
+    app_outcome.add_argument("application_id")
+    app_outcome.add_argument("--stage", required=True, help="applied|screening|written_test|interview|offer|closed")
+    app_outcome.add_argument("--result", required=True, help="advanced|rejected|withdrawn|no_response|offer_received|other")
+    app_outcome.add_argument("--feedback", default="")
+    app_outcome.add_argument("--reflection", default="")
+    app_outcome.add_argument("--next-action", default="")
+    app_outcome.add_argument("--tags", default="", help="Comma-separated feedback tags")
+    app_outcome.add_argument("--occurred-at", help="Timestamp (YYYY-MM-DD HH:MM), defaults to now")
+    app_outcome.add_argument("--db")
+    app_outcome.add_argument("--json", action="store_true")
+    app_outcomes = application_subparsers.add_parser("outcomes", help="List recorded outcomes")
+    app_outcomes.add_argument("application_id", nargs="?", help="Omit to list outcomes across applications")
+    app_outcomes.add_argument("--db")
+    app_outcomes.add_argument("--json", action="store_true")
+    app_insights = application_subparsers.add_parser("insights", help="Aggregate outcome feedback across applications")
+    app_insights.add_argument("--db")
+    app_insights.add_argument("--json", action="store_true")
+    app_versions = application_subparsers.add_parser("versions", help="List application-linked resume versions")
+    app_versions.add_argument("application_id", nargs="?", help="Omit to list versions across applications")
+    app_versions.add_argument("--db")
+    app_versions.add_argument("--json", action="store_true")
+    app_version_diff = application_subparsers.add_parser("version-diff", help="Compare two resume version metadata records")
+    app_version_diff.add_argument("before_version_id")
+    app_version_diff.add_argument("after_version_id")
+    app_version_diff.add_argument("--db")
+    app_version_diff.add_argument("--json", action="store_true")
+
+    rendercv_parser = subparsers.add_parser("rendercv", help="Import/export RenderCV JSON data")
+    rendercv_subparsers = rendercv_parser.add_subparsers(dest="rendercv_command")
+    rendercv_import = rendercv_subparsers.add_parser("import", help="Import RenderCV JSON as an OfferGet profile")
+    rendercv_import.add_argument("input", help="RenderCV JSON input; YAML must first be exported by RenderCV as JSON")
+    rendercv_import.add_argument("--output", required=True)
+    rendercv_import.add_argument("--json", action="store_true")
+    rendercv_export = rendercv_subparsers.add_parser("export", help="Export an OfferGet profile to RenderCV JSON")
+    rendercv_export.add_argument("profile")
+    rendercv_export.add_argument("--output", required=True)
+    rendercv_export.add_argument("--json", action="store_true")
 
     # `offerget resume ...`
     subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")
@@ -233,6 +390,9 @@ Examples:
         "fact": fact_parser,
         "defense": defense_parser,
         "baoyan": baoyan_parser,
+        "proposal": proposal_parser,
+        "application": application_parser,
+        "rendercv": rendercv_parser,
     }
 
     return parser
@@ -253,6 +413,43 @@ def main():
 
     if args.command == "review":
         cmd_career_review(args)
+    elif args.command == "proposal":
+        dispatch = {
+            "show": cmd_proposal_show,
+            "list": cmd_proposal_list,
+            "accept": cmd_proposal_accept,
+            "reject": cmd_proposal_reject,
+        }
+        handler = dispatch.get(args.proposal_command)
+        if handler:
+            handler(args)
+        else:
+            parser.subparsers["proposal"].print_help()
+    elif args.command == "application":
+        dispatch = {
+            "add": cmd_application_add,
+            "list": cmd_application_list,
+            "show": cmd_application_show,
+            "status": cmd_application_status,
+            "snapshot": cmd_application_snapshot,
+            "outcome": cmd_application_outcome,
+            "outcomes": cmd_application_outcomes,
+            "insights": cmd_application_insights,
+            "versions": cmd_application_versions,
+            "version-diff": cmd_application_version_diff,
+        }
+        handler = dispatch.get(args.application_command)
+        if handler:
+            handler(args)
+        else:
+            parser.subparsers["application"].print_help()
+    elif args.command == "rendercv":
+        dispatch = {"import": cmd_rendercv_import, "export": cmd_rendercv_export}
+        handler = dispatch.get(args.rendercv_command)
+        if handler:
+            handler(args)
+        else:
+            parser.subparsers["rendercv"].print_help()
     elif args.command == "jd":
         dispatch = {
             "decode": cmd_jd_decode,

@@ -112,16 +112,8 @@ Benchmark measurements conducted using `examples/synthetic_intern_profile.json` 
 
 ---
 
-## 5. Repository Governance & Zero-Deletion Audit
+## 5. Release Readiness & System Governance
 
-- **Scope**: 26 external repositories under `E:\github\简历\`.
-- **Governing Document**: `docs/ABSORPTION_LEDGER.md`.
-- **Status Classification**:
-  - `retained`: 17 repositories (containing independent Web UIs, audio pipelines, or desktop apps).
-  - `partial-absorption`: 3 repositories (`King-of-Pigeon`, `resume-jd-optimizer-cn`, `ResumeSkills`).
-  - `archive-candidate`: 6 repositories (`ASu-resume-skills`, `ats-optimized-resume-agent-skill`, `baoyan-skill`, `baoyan-skills`, `defense-beating-simulator`, `job-description-skill`).
-  - `delete-approved`: **0 repositories**.
-- **Audit Verification**:
-  - All 26 source repositories remain completely untouched on disk.
-  - Zero `git commit`, `git push`, `git reset`, or `git clean` operations performed.
-  - Offline git bundle recovery commands documented for all 6 archive candidates.
+- **Deterministic Quality**: 100% test pass rate across core unit tests, ApexResume visual rendering tests, and CLI end-to-end self-test.
+- **Pure Local Execution**: All rule auditing, multi-offer matrix scoring, and factual verification run completely on local compute with zero external LLM API dependencies.
+- **License**: Released under the [CC BY-NC-SA 4.0 License](LICENSE).
