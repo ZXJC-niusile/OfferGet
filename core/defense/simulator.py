@@ -394,8 +394,15 @@ class DefenseSimulator:
     def load_profile(self, profile_context: Union[dict, str, Path]) -> None:
         """Loads and indexes the candidate's Single Source of Truth (SSOT) profile."""
         if isinstance(profile_context, (str, Path)):
-            path = Path(profile_context)
-            if path.exists():
+            is_file = False
+            try:
+                path = Path(profile_context)
+                if path.exists() and path.is_file():
+                    is_file = True
+            except (OSError, ValueError):
+                is_file = False
+
+            if is_file:
                 with open(path, "r", encoding="utf-8") as f:
                     self.profile_data = json.load(f)
             else:
@@ -538,8 +545,15 @@ class DefenseSimulator:
 
         if isinstance(project_input, str):
             # Check if it's a file path
-            path = Path(project_input)
-            if path.exists() and path.is_file():
+            is_file = False
+            try:
+                path = Path(project_input)
+                if path.exists() and path.is_file():
+                    is_file = True
+            except (OSError, ValueError):
+                is_file = False
+
+            if is_file:
                 try:
                     with open(path, "r", encoding="utf-8") as f:
                         content = f.read()

@@ -182,8 +182,15 @@ class FactVerificationGuard:
             self.evidence_index = master_profile
             self.master_profile = master_profile.profile
         elif isinstance(master_profile, (str, Path)):
-            path = Path(master_profile)
-            if path.exists():
+            is_file = False
+            try:
+                path = Path(master_profile)
+                if path.exists() and path.is_file():
+                    is_file = True
+            except (OSError, ValueError):
+                is_file = False
+
+            if is_file:
                 with open(path, "r", encoding="utf-8") as f:
                     raw_dict = json.load(f)
             else:
