@@ -172,24 +172,40 @@ class BrowserRenderer:
 
             pages = self.count_pages(temp_rendered_pdf)
 
-            try:
-                from core.atomic_writer import safe_save_file
-            except ImportError:
-                repo_root = Path(__file__).resolve().parent.parent.parent
-                if str(repo_root) not in sys.path:
-                    sys.path.insert(0, str(repo_root))
-                from core.atomic_writer import safe_save_file
+            safe_save_func = None
+            repo_root = Path(__file__).resolve().parent.parent.parent
+            atomic_path = repo_root / "core" / "atomic_writer.py"
+            if atomic_path.exists():
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("offerget_core_atomic_writer", str(atomic_path))
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        safe_save_func = getattr(mod, "safe_save_file", None)
+                except Exception:
+                    pass
 
-            res = safe_save_file(pdf_file, temp_rendered_pdf, allow_shadow=True)
-            if not res.success:
-                return False, 0, f"Failed to save PDF to {pdf_file}: {res.error_message}"
+            if safe_save_func is None:
+                try:
+                    from core.atomic_writer import safe_save_file as safe_save_func
+                except Exception:
+                    pass
 
-            if res.is_shadow:
-                msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
+            if safe_save_func is not None:
+                res = safe_save_func(pdf_file, temp_rendered_pdf, allow_shadow=True)
+                if not res.success:
+                    return False, 0, f"Failed to save PDF to {pdf_file}: {res.error_message}"
+
+                if res.is_shadow:
+                    msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
+                else:
+                    msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
+
+                return True, pages, msg
             else:
-                msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
-
-            return True, pages, msg
+                shutil.move(str(temp_rendered_pdf), str(pdf_file))
+                return True, pages, f"Successfully rendered {pages} page(s) ({pdf_file.stat().st_size} bytes)"
         except subprocess.TimeoutExpired:
             return False, 0, f"Rendering timed out after {timeout_seconds}s"
         except Exception as e:
