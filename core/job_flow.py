@@ -2,7 +2,7 @@
 OfferGet Job Flow Orchestration Engine (core/job_flow.py)
 =========================================================
 Implements the competition track 2 closed-loop job-seeking pipeline:
-1. canonical JD breakdown (`jd_breakdown`) via modules.jd_analyst.decoder
+1. canonical JD breakdown (`jd_breakdown`) via core.jd_analyst.decoder
 2. candidate matching & fact-grounded resume recommendations (`resume_advice`) via profile_adapter
 3. exactly 3 targeted interview questions (`interview_questions`) via predictor.predict_targeted_questions
 4. one round of structured answer feedback (`answer_feedback`) via InterviewDebriefEngine

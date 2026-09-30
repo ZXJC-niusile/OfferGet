@@ -181,7 +181,9 @@ python cli.py ats audit examples/candidate_profile.json \
 
 #### Step 5: 事实防伪校验 (严格拦截夸大虚报)
 ```bash
-python cli.py fact verify examples/candidate_profile.json
+# 针对定制经历句子进行真值源 (SSOT) 防伪比对
+python cli.py fact verify "主导 1024 卡 H800 集群预训练，端到端 MFU 优化至 54.2%，提前 3 周交付。" \
+  --profile examples/candidate_profile.json
 ```
 
 #### Step 6: 生成中英双语战略战报 HTML

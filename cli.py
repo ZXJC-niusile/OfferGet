@@ -186,7 +186,8 @@ Examples:
     defense_subparsers = defense_parser.add_subparsers(dest="defense_command", help="Defense subcommands")
 
     defense_sim_parser = defense_subparsers.add_parser("simulate", help="Simulate project defense interrogation against claims")
-    defense_sim_parser.add_argument("target", help="Project description text, claim list, or file path")
+    defense_sim_parser.add_argument("target", nargs="?", default=None, help="Project description text, claim list, or file path")
+    defense_sim_parser.add_argument("--project", dest="project_opt", default=None, help="Project description text, claim list, or file path")
     defense_sim_parser.add_argument("--profile", help="Path to SSOT candidate_profile.json")
     defense_sim_parser.add_argument("--intensity", default="开始挑刺", choices=["先热个身", "开始挑刺", "严刑拷打", "warmup", "critical", "hell"], help="Interrogation intensity level")
     defense_sim_parser.add_argument("--scenario", default="技术 / 简历面试", help="Defense scenario")
@@ -217,7 +218,8 @@ Examples:
     baoyan_adv_parser.add_argument("--json", action="store_true", help="Output raw JSON")
 
     baoyan_check_parser = baoyan_subparsers.add_parser("checklist", help="Generate summer camp / re-examination checklist")
-    baoyan_check_parser.add_argument("--profile", required=True, help="Path to academic_profile.json")
+    baoyan_check_parser.add_argument("profile_pos", nargs="?", default=None, help="Path to academic_profile.json")
+    baoyan_check_parser.add_argument("--profile", default=None, help="Path to academic_profile.json")
     baoyan_check_parser.add_argument("--stage", default="夏令营", choices=["夏令营", "预推免", "九推", "统考复试"], help="Application stage")
     baoyan_check_parser.add_argument("--track", default="直博", choices=["直博", "学硕", "专硕"], help="Target track")
     baoyan_check_parser.add_argument("--json", action="store_true", help="Output raw JSON")

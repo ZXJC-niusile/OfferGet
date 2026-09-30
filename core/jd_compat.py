@@ -1,6 +1,6 @@
 """Canonical Ingress and compatibility gateway for Job Description processing.
 
-The canonical typed models live in ``modules.jd_analyst.models``.
+The canonical typed models live in ``core.jd_analyst.models``.
 Ingress gateway, conversion, and legacy compatibility APIs are consolidated here.
 """
 

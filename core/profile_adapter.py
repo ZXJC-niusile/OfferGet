@@ -196,7 +196,7 @@ class ProfileContext:
         return self.get_canonical_profile()
 
     def to_analyst_candidate(self) -> Any:
-        """Project this ProfileContext into modules.jd_analyst.models.CandidateProfile."""
+        """Project this ProfileContext into core.jd_analyst.models.CandidateProfile."""
         return self.get_canonical_profile()
 
     def to_advisor_candidate(self) -> Any:

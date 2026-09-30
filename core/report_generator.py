@@ -489,7 +489,7 @@ def generate_report(
 ) -> str:
     """
     Renders high-fidelity Offer Strategy Report HTML by dispatching to
-    modules.jd_analyst.reporter.OfferStrategyReporter, maintaining fallback support
+    core.jd_analyst.reporter.OfferStrategyReporter, maintaining fallback support
     for non-default custom templates, and verifying bilingual & security gates.
 
     Guarantees:

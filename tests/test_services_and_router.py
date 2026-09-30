@@ -330,7 +330,7 @@ class TestServices(unittest.TestCase):
             risks = report_service.validate_report_security(generated_path)
             self.assertEqual(risks, [], f"Security gate detected risks: {risks}")
 
-            content = open(generated_path, encoding="utf-8").read()
+            content = Path(generated_path).read_text(encoding="utf-8")
             self.assertIn("王工", content)
             self.assertIn("大模型强化学习专家", content)
 

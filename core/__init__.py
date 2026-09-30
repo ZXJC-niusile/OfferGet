@@ -13,7 +13,6 @@ __version__ = "1.0.0"
 
 # 1. Eager Core Infrastructure Imports
 from core import cli_helpers
-from core import services
 from core import registry
 
 # 2. PEP 562 Lazy Loading Registry for Heavy Vertical Domains

@@ -125,7 +125,7 @@ class TestReportGenerator(unittest.TestCase):
         )
 
         self.assertTrue(os.path.exists(result_path))
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("DeepTech AI", content)
         self.assertIn("大模型系统架构师", content)
         self.assertIn("张无忌", content)
@@ -188,7 +188,7 @@ class TestReportGenerator(unittest.TestCase):
             output_path=out_file,
         )
 
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
 
         # None of the injected script tags should exist in raw unescaped form
         self.assertNotIn("<script>alert('pwn_comp')</script>", content)
@@ -221,7 +221,7 @@ class TestReportGenerator(unittest.TestCase):
             output_path=out_file,
         )
 
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("硬门槛未通过，需人工复核", content)
         self.assertIn("Hard Threshold Vetoed", content)
 
@@ -245,7 +245,7 @@ class TestReportGenerator(unittest.TestCase):
             output_path=out_file,
         )
 
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("92", content)
         self.assertIn("85", content)
         self.assertIn("建议在证据复核后投递", content)
@@ -271,7 +271,7 @@ class TestReportGenerator(unittest.TestCase):
         )
 
         self.assertTrue(os.path.exists(result_path))
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("具身智能算法专家", content)
         self.assertIn("智元具身机器人", content)
 
@@ -284,7 +284,7 @@ class TestReportGenerator(unittest.TestCase):
             output_path=out_file,
         )
 
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
 
         # Check required bilingual sections
         self.assertIn("整体匹配度与通关判定", content)
@@ -360,7 +360,7 @@ class TestReportGenerator(unittest.TestCase):
         )
 
         self.assertTrue(os.path.exists(result_path))
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("Custom Report for DeepTech AI - 大模型系统架构师", content)
         self.assertIn("Candidate: 张无忌", content)
         self.assertIn("Match Score: 88%", content)
@@ -375,7 +375,7 @@ class TestReportGenerator(unittest.TestCase):
             output_path=out_file,
         )
         self.assertTrue(os.path.exists(result_path))
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("整体匹配度与通关判定", content)
         self.assertIn("DeepTech AI", content)
 
@@ -422,7 +422,7 @@ class TestReportGenerator(unittest.TestCase):
             output_path=out_file,
         )
 
-        content = open(result_path, encoding="utf-8").read()
+        content = Path(result_path).read_text(encoding="utf-8")
         self.assertIn("External Custom Override DeepTech AI", content)
         # Should NOT use canonical OfferStrategyReporter
         self.assertNotIn("整体匹配度与通关判定", content)

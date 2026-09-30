@@ -32,6 +32,8 @@ review*.json
 *.jpg
 *.jpeg
 *.png
+*.db
+*.sqlite
 
 
 # Local anonymization maps and derived profiles

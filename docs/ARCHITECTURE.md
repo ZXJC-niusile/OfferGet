@@ -2,15 +2,14 @@
 
 ## 一、 核心设计哲学与治理底线
 
-OfferGet 是一个“高确定性、零幻觉、强证据约束”的求职与学术推免战略操作系统。
-在吸收了 ASu-resume-skills、resume-jd-optimizer-cn、ApexResume、King-of-Pigeon、applyr 等外部开源项目的规则与协议后，确立以下系统级治理准则：
+OfferGet 是一个“高确定性、零幻觉、强证据约束”的求职与学术推免战略操作系统，确立以下系统级治理准则：
 
 1. **唯一事实源 (Single Source of Truth, SSOT)**:
    - 候选人画像与底稿事实由 `core/profile_adapter.py` 的 `ProfileContext` 与 `ProfileEvidenceIndex` 唯一承载。
-   - 岗位要求规范由 `modules.jd_analyst.models.DecodedJD` 唯一承载，入站网关统一为 `core.jd_compat.to_canonical()`。
-2. **外部项目只作规范与测试资产参考，不复制运行时实现**:
-   - `D:\User Hub\GitHub\简历` 下的 26 个外部项目严格保持只读，`delete-approved = 0`。
-   - 仅吸收其分层数据契约（Schema）、测试用例集（Fixtures）与评分量表，不在内部无序堆砌第三方运行时。
+   - 岗位要求规范由 `core.jd_analyst.models.DecodedJD` 唯一承载，入站网关统一为 `core.jd_compat.to_canonical()`。
+2. **纯粹确定性规则与零外部依赖**:
+   - 核心规则审计、四维打分、算术对账与字数压缩均采用本地确定性算法，不依赖外部付费大模型 API。
+   - 展现层、编排层与核心层之间实行清晰解耦。
 3. **严格分层与单向依赖**:
    - 展现层（Presentation）$\longrightarrow$ 应用服务层（Application Services）$\longrightarrow$ 领域核心（Domain Core）$\longleftarrow$ 适配层（Adapters）
    - 基础设施层（Infrastructure）为各层提供纯净的 I/O、哈希与存储支持，禁止领域逻辑倒灌。
