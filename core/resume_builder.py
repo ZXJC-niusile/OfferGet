@@ -480,7 +480,17 @@ class ResumeBuilder:
         write_text_atomic(typ_src, typ_path)
 
         pdf_path = out_dir / "resume_academic_typst.pdf"
-        self.academic_exporter.compile_typst(typ_path, pdf_path)
+        compiled = self.academic_exporter.compile_typst(typ_path, pdf_path)
+        if not compiled or not pdf_path.exists():
+            html_src = self.academic_exporter.generate_latex_html_preview(
+                vm,
+                reserve_photo=photo,
+                photo_path=eff_photo_path,
+                lang="zh",
+            )
+            html_path = out_dir / "resume_academic_typst.html"
+            write_text_atomic(html_src, html_path)
+            self.renderer.render_pdf(html_path, pdf_path)
 
         return {"typ": typ_path, "pdf": pdf_path}
 

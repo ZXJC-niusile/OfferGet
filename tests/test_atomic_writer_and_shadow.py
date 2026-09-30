@@ -348,7 +348,7 @@ def test_generate_shadow_path_default_format(tmp_path: Path):
     p = tmp_path / "resume.pdf"
     shadow = generate_shadow_path(p)
 
-    assert shadow.parent == p.parent
+    assert shadow.parent.resolve() == p.parent.resolve()
     assert shadow.suffix == ".pdf"
     assert shadow.stem.startswith("resume_shadow_")
 
