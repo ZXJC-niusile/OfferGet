@@ -33,6 +33,13 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "ResumeBuilder": ("core.resume_builder", "ResumeBuilder"),
     "audit_resume_quality": ("core.resume_builder", "audit_resume_quality"),
 
+    # core.layout_solver
+    "LayoutConfig": ("core.layout_solver", "LayoutConfig"),
+    "LayoutSolveResult": ("core.layout_solver", "LayoutSolveResult"),
+    "solve_layout": ("core.layout_solver", "solve_layout"),
+    "generate_micro_typography_css": ("core.layout_solver", "generate_micro_typography_css"),
+    "inject_micro_typography": ("core.layout_solver", "inject_micro_typography"),
+
     # core.jd_compat
     "decode_jd": ("core.jd_compat", "decode_jd"),
 
@@ -69,6 +76,12 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "FactVerificationGuard": ("core.fact_guard", "FactVerificationGuard"),
     "verify_resume_facts": ("core.fact_guard", "verify_resume_facts"),
 
+    # core.diff_ledger
+    "DiffLedger": ("core.diff_ledger", "DiffLedger"),
+    "DiffEntry": ("core.diff_ledger", "DiffEntry"),
+    "DiffCategory": ("core.diff_ledger", "DiffCategory"),
+    "DiffSeverity": ("core.diff_ledger", "DiffSeverity"),
+
     # core.baoyan_auditor
     "BaoyanAuditor": ("core.baoyan_auditor", "BaoyanAuditor"),
     "audit_baoyan_entry": ("core.baoyan_auditor", "audit_baoyan_entry"),
@@ -102,12 +115,16 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "QUANTIFIED_PATTERNS": ("core.lexicon", "QUANTIFIED_PATTERNS"),
     "NON_METRIC_TECH_PATTERNS": ("core.lexicon", "NON_METRIC_TECH_PATTERNS"),
     "INFLATION_PATTERNS": ("core.lexicon", "INFLATION_PATTERNS"),
-    "FORBIDDEN_BUZZWORDS": ("core.lexicon", "FORBIDDEN_BUZZWORDS"),
-    "AI_BUZZWORDS_LEXICON": ("core.lexicon", "AI_BUZZWORDS_LEXICON"),
+    # core.atomic_writer
+    "SafeSaveResult": ("core.atomic_writer", "SafeSaveResult"),
+    "safe_save_file": ("core.atomic_writer", "safe_save_file"),
+    "atomic_write": ("core.atomic_writer", "atomic_write"),
+    "is_file_locked": ("core.atomic_writer", "is_file_locked"),
 }
 
 _SUBMODULES: set[str] = {
     "academic_exporter",
+    "atomic_writer",
     "advisor_matcher",
     "anonymizer",
     "application_tracker",
@@ -197,6 +214,10 @@ __all__ = [
     "deanonymize_text",
     "FactVerificationGuard",
     "verify_resume_facts",
+    "DiffLedger",
+    "DiffEntry",
+    "DiffCategory",
+    "DiffSeverity",
     "BaoyanAuditor",
     "audit_baoyan_entry",
     "compress_baoyan_entry",
@@ -223,5 +244,9 @@ __all__ = [
     "INFLATION_PATTERNS",
     "FORBIDDEN_BUZZWORDS",
     "AI_BUZZWORDS_LEXICON",
+    "SafeSaveResult",
+    "safe_save_file",
+    "atomic_write",
+    "is_file_locked",
     "__version__",
 ]

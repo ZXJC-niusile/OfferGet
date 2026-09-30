@@ -22,6 +22,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
@@ -602,6 +603,7 @@ class AcademicExporter:
         photo_height: Optional[int] = None,
         lang: str = "zh",
         section_titles: Optional[Dict[str, str]] = None,
+        layout_config: Optional[Any] = None,
     ) -> str:
         """
         Generates single-page A4 HTML styled cleanly like LaTeX, with photo placeholder.
@@ -947,6 +949,11 @@ class AcademicExporter:
             html += "</ul>\n"
 
         html += "</body>\n</html>"
+        try:
+            from core.layout_solver import inject_micro_typography
+            html = inject_micro_typography(html, config=layout_config)
+        except Exception:
+            pass
         return html
 
     def compile_typst(self, typ_path: str | Path, pdf_path: str | Path) -> bool:
@@ -955,22 +962,33 @@ class AcademicExporter:
         pdf_file = Path(pdf_path).resolve()
         pdf_file.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            import typst
-            typst.compile(typ_file, output=str(pdf_file))
-            return True
-        except Exception:
-            pass
+        from core.atomic_writer import safe_save_file
 
-        typst_cli = shutil.which("typst")
-        if typst_cli:
+        with tempfile.TemporaryDirectory(prefix="typst_out_") as tmp_dir:
+            temp_pdf = Path(tmp_dir) / "output.pdf"
+            compiled = False
+
             try:
-                res = subprocess.run([typst_cli, "compile", str(typ_file), str(pdf_file)], capture_output=True)
-                return res.returncode == 0
+                import typst
+                typst.compile(typ_file, output=str(temp_pdf))
+                compiled = temp_pdf.exists() and temp_pdf.stat().st_size > 0
             except Exception:
-                return False
+                pass
 
-        return False
+            if not compiled:
+                typst_cli = shutil.which("typst")
+                if typst_cli:
+                    try:
+                        res = subprocess.run([typst_cli, "compile", str(typ_file), str(temp_pdf)], capture_output=True)
+                        compiled = res.returncode == 0 and temp_pdf.exists() and temp_pdf.stat().st_size > 0
+                    except Exception:
+                        pass
+
+            if compiled:
+                save_res = safe_save_file(dest_path=pdf_file, content=temp_pdf, allow_shadow=True)
+                return save_res.success
+
+            return False
 
     def compile_latex(self, tex_path: str | Path, pdf_path: str | Path) -> bool:
         """Compiles LaTeX file to PDF using xelatex if available."""
@@ -982,15 +1000,31 @@ class AcademicExporter:
         if not xelatex_cli:
             return False
 
-        try:
-            res = subprocess.run(
-                [xelatex_cli, "-interaction=nonstopmode", f"-output-directory={tex_file.parent}", str(tex_file)],
-                capture_output=True,
-                timeout=60
-            )
-            compiled_pdf = tex_file.with_suffix(".pdf")
-            if compiled_pdf.exists() and compiled_pdf != pdf_file:
-                shutil.move(str(compiled_pdf), str(pdf_file))
-            return res.returncode == 0
-        except Exception:
-            return False
+        from core.atomic_writer import safe_save_file
+
+        with tempfile.TemporaryDirectory(prefix="latex_out_") as tmp_dir:
+            try:
+                res = subprocess.run(
+                    [xelatex_cli, "-interaction=nonstopmode", f"-output-directory={tmp_dir}", str(tex_file)],
+                    cwd=str(tex_file.parent),
+                    capture_output=True,
+                    timeout=60,
+                )
+                compiled_pdf = Path(tmp_dir) / f"{tex_file.stem}.pdf"
+                if not compiled_pdf.exists():
+                    fallback_pdf = tex_file.with_suffix(".pdf")
+                    if fallback_pdf.exists() and fallback_pdf.resolve() != pdf_file.resolve():
+                        compiled_pdf = fallback_pdf
+
+                if compiled_pdf.exists() and compiled_pdf.stat().st_size > 0:
+                    save_res = safe_save_file(dest_path=pdf_file, content=compiled_pdf, allow_shadow=True)
+                    if compiled_pdf != Path(tmp_dir) / f"{tex_file.stem}.pdf":
+                        try:
+                            compiled_pdf.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    return save_res.success
+                return False
+            except Exception:
+                return False
+

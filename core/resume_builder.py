@@ -233,6 +233,7 @@ class ResumeBuilder:
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
         anonymize: Optional[str] = None,
+        layout_config: Optional[Any] = None,
     ) -> Dict[str, Path]:
         """Builds HTML + CSS based resume theme, optionally applying single-page AutoFit."""
         prof = self._resolve_profile(anonymize)
@@ -247,6 +248,12 @@ class ResumeBuilder:
             theme_name=theme_name,
             template_dir=self.template_dir,
         )
+
+        try:
+            from core.layout_solver import inject_micro_typography
+            populated_html = inject_micro_typography(populated_html, config=layout_config)
+        except Exception:
+            pass
 
         clean_theme_name = theme_name.replace("-", "_")
         html_path = out_dir / f"resume_{clean_theme_name}.html"
@@ -278,6 +285,16 @@ class ResumeBuilder:
             self.renderer.render_pdf(html_path, pdf_path)
 
         return {"html": html_path, "pdf": pdf_path}
+
+    def solve_resume_layout(
+        self,
+        html_content: str,
+        overflow_px: float = 0.0,
+        config: Optional[Any] = None,
+    ) -> Any:
+        """DOM/AST adaptive layout solver and micro-typography integration."""
+        from core.layout_solver import solve_layout
+        return solve_layout(html_content, overflow_px=overflow_px, config=config)
 
     def build_ats_plain(
         self,
