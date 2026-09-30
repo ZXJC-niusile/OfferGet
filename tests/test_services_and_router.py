@@ -575,6 +575,45 @@ class TestServices(unittest.TestCase):
         self.assertIn("interview_review_snapshot", result)
         self.assertEqual(result["validated_proposal"]["summary"]["text"], proposal["summary"]["text"])
 
+    def test_scan_unsubmitted_placeholders(self):
+        from core.input_router import scan_unsubmitted_placeholders
+        raw_template = {
+            "candidate": {
+                "name": "{{CANDIDATE_NAME}}",
+                "phone": "{{PHONE}}",
+                "email": "",
+            },
+            "experience": [
+                {
+                    "company": "测试公司",
+                    "role": "产品实习生",
+                    "bullets": ["负责核心功能测试，达成提升指标 {{METRIC_RATE}}%"]
+                }
+            ]
+        }
+        res = scan_unsubmitted_placeholders(raw_template)
+        self.assertTrue(res["has_placeholders"])
+        self.assertIn("candidate.name", res["missing_fields"])
+        self.assertIn("candidate.email", res["missing_fields"])
+        self.assertIn("candidate.phone", res["missing_fields"])
+        self.assertIn("CANDIDATE_NAME", [p["token"] for p in res["placeholders"]])
+        self.assertIn("METRIC_RATE", [p["token"] for p in res["placeholders"]])
+        self.assertIn("⚠️ 检测到未提交的关键信息与占位字段", res["proactive_inquiry"])
+
+        # When profile is clean with real data
+        clean_profile = {
+            "candidate": {
+                "name": "张三",
+                "phone": "+86 138-0000-0000",
+                "email": "zhangsan@example.com",
+                "title": "产品经理",
+            },
+            "experience": []
+        }
+        clean_res = scan_unsubmitted_placeholders(clean_profile)
+        self.assertFalse(clean_res["has_placeholders"])
+        self.assertEqual(len(clean_res["missing_fields"]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

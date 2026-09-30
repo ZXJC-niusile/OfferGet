@@ -332,6 +332,82 @@ class InputRouteResult:
         return self.decision.raise_if_invalid()
 
 
+def scan_unsubmitted_placeholders(profile_data: Any) -> Dict[str, Any]:
+    """Scans candidate profile for unsubmitted placeholders and missing core fields.
+
+    Finds {{...}}, <...>, [待填...] tokens, as well as missing essential candidate fields
+    (name, phone, email, title, etc.), and generates a proactive inquiry prompt for the agent/user.
+    """
+    import re
+    parsed = parse_input(profile_data, expected_type="json") if profile_data is not None else {}
+    if not isinstance(parsed, dict):
+        return {
+            "has_placeholders": False,
+            "placeholders": [],
+            "missing_fields": ["profile_data"],
+            "proactive_inquiry": "未提供有效的简历数据，请提供您的真实简历信息或档案文件。",
+        }
+
+    placeholders: List[Dict[str, str]] = []
+    missing_fields: List[str] = []
+
+    def _walk(obj: Any, path: str = ""):
+        if isinstance(obj, str):
+            matches = re.findall(r"\{\{([^}]+)\}\}|<([^>]+)>|\[(待[填补][^\]]*)\]", obj)
+            for m in matches:
+                token = next(filter(bool, m))
+                placeholders.append({
+                    "path": path,
+                    "token": token,
+                    "raw": obj,
+                })
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                _walk(v, f"{path}.{k}" if path else k)
+        elif isinstance(obj, (list, tuple)):
+            for idx, item in enumerate(obj):
+                _walk(item, f"{path}[{idx}]")
+
+    _walk(parsed)
+
+    candidate = parsed.get("candidate", {})
+    if isinstance(candidate, dict):
+        for req in ["name", "phone", "email", "title"]:
+            val = str(candidate.get(req, "")).strip()
+            if not val or val.startswith("{{") or val.startswith("<") or val.startswith("[待"):
+                if f"candidate.{req}" not in missing_fields:
+                    missing_fields.append(f"candidate.{req}")
+
+    has_placeholders = len(placeholders) > 0 or len(missing_fields) > 0
+
+    inquiry_lines = []
+    if has_placeholders:
+        inquiry_lines.append("### ⚠️ 检测到未提交的关键信息与占位字段")
+        inquiry_lines.append("为确保简历真实性并符合 ATS 事实核验质检门禁（严禁伪造事实或指标漂移），在继续生成前请补充以下真实信息：\n")
+        
+        seen_tokens = set()
+        idx = 1
+        if missing_fields:
+            inquiry_lines.append(f"{idx}. **缺失核心字段**：{', '.join(missing_fields)}")
+            idx += 1
+            
+        for p in placeholders:
+            tok = p["token"]
+            if tok not in seen_tokens:
+                seen_tokens.add(tok)
+                inquiry_lines.append(f"{idx}. **待填占位符** `{{{{{tok}}}}}` (位于 `{p['path']}`)")
+                idx += 1
+
+        inquiry_lines.append("\n👉 请直接回复提供真实数据，或明确告知“确认使用匿名占位符进行格式测试”。")
+
+    return {
+        "has_placeholders": has_placeholders,
+        "placeholders": placeholders,
+        "missing_fields": missing_fields,
+        "proactive_inquiry": "\n".join(inquiry_lines),
+    }
+
+
 def detect_and_route_input(
     jd: Optional[Any] = None,
     profile: Optional[Any] = None,
@@ -355,4 +431,5 @@ __all__ = [
     "InputRouteResult",
     "parse_input",
     "detect_and_route_input",
+    "scan_unsubmitted_placeholders",
 ]

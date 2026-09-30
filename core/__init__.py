@@ -11,6 +11,12 @@ from typing import Any, Dict, List, Tuple
 
 __version__ = "1.0.0"
 
+# Extend core namespace path to seamlessly absorb ApexResume core modules
+from pathlib import Path
+_apex_core_dir = Path(__file__).resolve().parent.parent / "ApexResume" / "core"
+if _apex_core_dir.is_dir() and str(_apex_core_dir) not in __path__:
+    __path__.append(str(_apex_core_dir))
+
 # 1. Eager Core Infrastructure Imports
 from core import cli_helpers
 from core import registry

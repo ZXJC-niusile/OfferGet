@@ -165,8 +165,8 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
         profile = {
             "candidate": {
                 "name": "范增煜",
-                "phone": "+86 183-9708-4690",
-                "email": "3027812108@qq.com",
+                "phone": "+86 138-0000-0000",
+                "email": "candidate@example.com",
                 "location": "杭州",
                 "school": "青岛理工大学",
                 "degree": "土木工程 本科在读",
