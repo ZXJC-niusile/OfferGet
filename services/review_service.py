@@ -16,8 +16,8 @@ class CareerReviewService:
 
     def run_review(
         self,
-        jd_text: Union[str, Path],
-        profile_dict: Dict[str, Any],
+        jd_text: Union[str, Path, Dict[str, Any]],
+        profile_dict: Union[Dict[str, Any], str, Path],
         answers_dict: Optional[Dict[str, Any]] = None,
         listing_age_days: int = 15,
         build_resume: bool = False,
@@ -28,20 +28,39 @@ class CareerReviewService:
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Executes full career review pipeline with optional resume building."""
-        if isinstance(jd_text, dict):
-            raw_jd = str(jd_text.get("raw_text") or jd_text.get("clean_text") or "")
-        elif isinstance(jd_text, Path):
-            raw_jd = jd_text.read_text(encoding="utf-8")
-        else:
-            from core.cli_helpers import read_text
+        import time
+        from datetime import datetime
+        from core.input_router import detect_and_route_input, parse_input
+        from core.run_context import RunContext, compute_fingerprint
 
-            raw_jd = read_text(str(jd_text or ""))
+        # Automatically route and parse inputs (handles filepaths, dicts, and raw strings)
+        parsed_jd, parsed_profile, route_decision = detect_and_route_input(
+            jd=jd_text,
+            profile=profile_dict,
+            fail_fast=False,
+        )
+
+        # Validate pipeline routing
+        if not route_decision.is_valid:
+            route_decision.raise_if_invalid()
+        route_decision.raise_if_blocked("career_review")
+
+        # Resolve raw JD string
+        if isinstance(parsed_jd, dict):
+            raw_jd = str(parsed_jd.get("raw_text") or parsed_jd.get("clean_text") or parsed_jd)
+        else:
+            raw_jd = str(parsed_jd or "")
+
+        # Initialize RunContext for deterministic telemetry & tracing
+        run_ctx = RunContext()
+        run_ctx.fingerprint = compute_fingerprint({"jd": raw_jd, "profile": parsed_profile})
+        start_time = time.perf_counter()
 
         from core.job_flow import run_career_review
 
-        return run_career_review(
+        result = run_career_review(
             jd_text=raw_jd,
-            profile_dict=profile_dict,
+            profile_dict=parsed_profile,
             answers_dict=answers_dict,
             listing_age_days=listing_age_days,
             build_resume=build_resume,
@@ -49,30 +68,57 @@ class CareerReviewService:
             resume_output_dir=resume_output_dir,
             reserve_photo=reserve_photo,
             session_data=session_data,
-            **kwargs,
         )
+
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        run_ctx.record_stage(
+            stage_name="career_review",
+            elapsed_ms=elapsed_ms,
+            summary="Career review execution completed",
+        )
+
+        # Enforce contract from core/interview_review_contract.py if note / proposal provided
+        interview_note = kwargs.get("interview_note") or kwargs.get("note")
+        interview_proposal = kwargs.get("interview_proposal") or kwargs.get("proposal")
+        if interview_note and interview_proposal:
+            from core.interview_review_contract import (
+                build_interview_review_snapshot,
+                validate_interview_review_proposal,
+            )
+            snapshot = build_interview_review_snapshot(interview_note)
+            validated_proposal = validate_interview_review_proposal(interview_proposal, snapshot)
+            result["interview_review_snapshot"] = snapshot
+            result["validated_proposal"] = validated_proposal
+
+        # Attach telemetry, execution timestamp, and run context to result
+        result["telemetry"] = run_ctx.to_dict()
+        result["execution_timestamp"] = datetime.now().isoformat()
+        result["run_context"] = run_ctx.to_dict()
+
+        return result
 
     def create_session(
         self,
-        jd_text: Union[str, Path],
-        profile_dict: Dict[str, Any],
+        jd_text: Union[str, Path, Dict[str, Any]],
+        profile_dict: Union[Dict[str, Any], str, Path],
         review_result: Dict[str, Any],
         base_session: Optional[Dict[str, Any]] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
         """Creates a verifiable lightweight JSON session snapshot."""
-        if isinstance(jd_text, dict):
-            raw_jd = str(jd_text.get("raw_text") or jd_text.get("clean_text") or "")
-        elif isinstance(jd_text, Path):
-            raw_jd = jd_text.read_text(encoding="utf-8")
-        else:
-            from core.cli_helpers import read_text
+        from core.input_router import parse_input
 
-            raw_jd = read_text(str(jd_text or ""))
+        parsed_jd = parse_input(jd_text, expected_type="text")
+        if isinstance(parsed_jd, dict):
+            raw_jd = str(parsed_jd.get("raw_text") or parsed_jd.get("clean_text") or "")
+        else:
+            raw_jd = str(parsed_jd or "")
+        parsed_profile = parse_input(profile_dict, expected_type="json")
+
         from core.job_flow import create_review_session
 
         return create_review_session(
-            raw_jd, profile_dict, review_result, base_session=base_session, **kwargs
+            raw_jd, parsed_profile, review_result, base_session=base_session, **kwargs
         )
 
     def validate_session(

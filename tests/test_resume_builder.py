@@ -495,8 +495,59 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertEqual(vm_ctx.edu_school, "清华大学 (Tsinghua University)")
         self.assertEqual(vm_ctx.title, "大模型预训练工程师")
 
+    def test_build_html_theme_adaptive_fill_and_diff_ledger(self):
+        """Tests that build_html_theme uses LayoutSolver underflow expansion and saves DiffLedger files."""
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
+        out_files = builder.build_html_theme(
+            theme_name="classic-tech",
+            output_dir=self.test_dir,
+            autofit=True,
+            adaptive_fill=True,
+            diff_ledger=True,
+            overflow_px=-80.0,
+        )
+
+        self.assertIn("html", out_files)
+        self.assertIn("pdf", out_files)
+        self.assertIn("diff_ledger_md", out_files)
+        self.assertIn("diff_ledger_json", out_files)
+
+        self.assertTrue(out_files["diff_ledger_md"].exists())
+        self.assertTrue(out_files["diff_ledger_json"].exists())
+
+        md_text = out_files["diff_ledger_md"].read_text(encoding="utf-8")
+        self.assertIn("改动溯源与口径对齐报告", md_text)
+        self.assertIn("测试候选人", md_text)
+
+        html_text = out_files["html"].read_text(encoding="utf-8")
+        self.assertIn("offerget-micro-typography", html_text)
+
+    def test_cmd_resume_build_cli_flags(self):
+        """Tests cmd_resume_build CLI command with --diff-ledger and --adaptive-fill."""
+        from presentation.commands.resume_cmd import cmd_resume_build
+
+        out_sub = self.test_dir / "cli_out"
+        cmd_resume_build([
+            str(self.profile_json_path),
+            "--theme", "classic-tech",
+            "--output-dir", str(out_sub),
+            "--diff-ledger",
+            "--adaptive-fill",
+        ])
+
+        html_path = out_sub / "resume_classic_tech.html"
+        pdf_path = out_sub / "resume_classic_tech.pdf"
+        diff_md = out_sub / "resume_diff_ledger.md"
+        diff_json = out_sub / "resume_diff_ledger.json"
+
+        self.assertTrue(html_path.exists())
+        self.assertTrue(pdf_path.exists())
+        self.assertTrue(diff_md.exists())
+        self.assertTrue(diff_json.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 

@@ -64,6 +64,7 @@ from presentation.commands import (
     cmd_resume_passthrough,
     cmd_selftest,
     cmd_doctor,
+    cmd_diff_audit,
 )
 
 
@@ -181,6 +182,16 @@ Examples:
     fact_verify_parser.add_argument("target", help="Tailored resume text, bullet, or file path")
     fact_verify_parser.add_argument("--profile", required=True, help="Path to SSOT candidate_profile.json")
     fact_verify_parser.add_argument("--json", action="store_true", help="Output raw JSON report")
+
+    # `offerget diff ...`
+    diff_parser = subparsers.add_parser("diff", help="Diff Ledger & change traceability operations")
+    diff_subparsers = diff_parser.add_subparsers(dest="diff_command", help="Diff subcommands")
+
+    diff_audit_parser = diff_subparsers.add_parser("audit", help="Audit changes between baseline profile and tailored resume")
+    diff_audit_parser.add_argument("baseline_file", help="Path to SSOT baseline candidate profile JSON")
+    diff_audit_parser.add_argument("tailored_file", help="Path to tailored profile JSON, Markdown, or HTML file")
+    diff_audit_parser.add_argument("--output-dir", default=None, help="Directory to save resume_diff_ledger.md and .json")
+    diff_audit_parser.add_argument("--json", action="store_true", help="Output raw JSON Diff Ledger")
 
     # `offerget defense ...`
     defense_parser = subparsers.add_parser("defense", help="Project defense interrogation & red-team simulator")
@@ -392,6 +403,7 @@ Examples:
         "offer": offer_parser,
         "anon": anon_parser,
         "fact": fact_parser,
+        "diff": diff_parser,
         "defense": defense_parser,
         "baoyan": baoyan_parser,
         "proposal": proposal_parser,
@@ -506,6 +518,15 @@ def main():
             cmd_fact_verify(args)
         else:
             parser.subparsers["fact"].print_help()
+    elif args.command == "diff":
+        dispatch = {
+            "audit": cmd_diff_audit,
+        }
+        handler = dispatch.get(args.diff_command)
+        if handler:
+            handler(args)
+        else:
+            parser.subparsers["diff"].print_help()
     elif args.command == "defense":
         if args.defense_command == "simulate":
             cmd_defense_simulate(args)

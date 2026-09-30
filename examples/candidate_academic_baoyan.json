@@ -1,0 +1,106 @@
+{
+  "profile_version": "2.0.0",
+  "profile_type": "academic_baoyan",
+  "candidate": {
+    "name": "陆宇辰",
+    "en_name": "Yuchen Lu",
+    "gender": "男",
+    "political_status": "中共预备党员",
+    "university": "浙江大学",
+    "college": "计算机科学与技术学院 (College of Computer Science and Technology)",
+    "major": "计算机科学与技术 (拔尖人才培养计划)",
+    "enrollment_year": 2021,
+    "expected_graduation": 2025,
+    "email": "yuchen.lu@zju.edu.cn",
+    "phone": "+86 138-1234-5678",
+    "location": "浙江·杭州",
+    "homepage": "https://yuchen-lu.github.io"
+  },
+  "academic_standing": {
+    "gpa": 3.91,
+    "max_gpa": 4.0,
+    "rank": "2/160",
+    "rank_percent": "1.2%",
+    "cet6": 635,
+    "english": {
+      "cet6": 635,
+      "cet4": 668,
+      "toefl": 110
+    },
+    "core_courses": [
+      { "course_name": "高级数据结构与算法分析", "grade": 98, "credits": 4.5 },
+      { "course_name": "计算机系统导论", "grade": 99, "credits": 4.0 },
+      { "course_name": "操作系统原理", "grade": 97, "credits": 4.0 },
+      { "course_name": "分布式系统与云计算", "grade": 99, "credits": 3.5 },
+      { "course_name": "深度学习与并行计算", "grade": 96, "credits": 3.5 }
+    ]
+  },
+  "honors": [
+    {
+      "name": "国家奖学金",
+      "level": "national",
+      "year": 2024,
+      "quota_ratio": "< 0.2%",
+      "description": "专业排名前 1%，教育部颁发本专科国家奖学金。"
+    },
+    {
+      "name": "美国大学生数学建模竞赛一等奖 (M奖)",
+      "level": "international",
+      "year": 2024,
+      "role": "队长兼主力算法",
+      "description": "全球前 6%，负责非线性调度建模与分布式仿真实验。"
+    }
+  ],
+  "publications": [
+    {
+      "paper_id": "PUB-01",
+      "title": "SpecKV: Fast and Memory-Efficient Speculative Key-Value Cache Eviction for Long-Context LLMs",
+      "venue": "NeurIPS 2024",
+      "ccf_rank": "CCF-A",
+      "author_role": "first_author",
+      "status": "published",
+      "authors": ["陆宇辰", "陈建平 教授"],
+      "is_first_author": true,
+      "summary": "针对长上下文大语言模型生成中 KV Cache 显存暴涨与内存带宽墙瓶颈，提出投机式键值驱逐机制，在保持困惑度零损失下推理吞吐提升 2.1x。",
+      "individual_contribution": "独立设计投机驱逐通信协议与置换策略，编写 Triton/CUDA 自定义稀疏内核算子，在 8x A100 物理集群完成完整基准评测并执笔手稿。"
+    },
+    {
+      "paper_id": "PUB-02",
+      "title": "AdaOffload: Adaptive Memory-Constrained Model Offloading on Heterogeneous Clusters",
+      "venue": "IEEE ICDCS 2025",
+      "ccf_rank": "CCF-A",
+      "author_role": "first_author",
+      "status": "under_review",
+      "authors": ["陆宇辰", "李明睿 教授"],
+      "is_first_author": true,
+      "summary": "针对异构边缘-云节点内存受限环境，设计基于动态规划分支定界的模型权重自适应卸载与激活重计算管线。",
+      "individual_contribution": "建立显存与带宽受限的约束优化规划模型，搭建端到端异构物理实验台，负责全文方法与评估章节撰写。"
+    }
+  ],
+  "projects": [
+    {
+      "name": "面向超长上下文的高效分布式 KV-Cache 压缩与换页机制研究",
+      "role": "课题负责人 (独立研究)",
+      "individual_contribution": "独立重写 vLLM 底层 PagedAttention 算子以支持动态秩自适应量化与快速驱逐换页，在 8x A100 物理集群真实负载下进行基准压测，相比原始 vLLM 实现 2.6x 显存换页带宽提升。",
+      "experiment_type": "real_experiment",
+      "tags": ["real_experiment", "distributed_systems", "vllm"]
+    }
+  ],
+  "target_schools": [
+    {
+      "school_name": "清华大学",
+      "college": "计算机科学与技术系",
+      "track": "直博",
+      "target_advisor": "陈建平 教授",
+      "research_direction": "分布式系统与大模型系统架构"
+    },
+    {
+      "school_name": "北京大学",
+      "college": "计算机学院",
+      "track": "直博",
+      "target_advisor": "李明睿 教授",
+      "research_direction": "AI 体系结构与异构计算系统"
+    }
+  ],
+  "statement": "自进入浙江大学计算机科学与技术拔尖班以来，我始终保持对系统级计算机体系结构与大规模分布式系统优化的浓厚学术兴趣。本科前三年，我学分绩点达 3.91/4.0，专业排名 2/160（前 1.2%），英语六级 635 分，先后荣获国家奖学金与美国大学生数学建模竞赛一等奖（M奖）。在科研探索方面，我聚焦长上下文大语言模型推理中的系统瓶颈，作为第一作者在顶会 NeurIPS 2024 发表 CCF-A 论文，提出投机式键值驱逐机制并重写 Triton 算子，在 8 卡 A100 物理集群真实测试中实现 2.1x 推理吞吐提升；另有一篇关于异构集群显存卸载调度的论文在审。展望直博阶段的研究生涯，我渴望加入顶尖系统结构课题组，深入探索大规模万卡集群高效容错调度、软硬件协同体系结构及新一代大模型系统软件底座，攻坚计算机系统关键挑战，产出具有国际影响力的顶尖成果。"
+}

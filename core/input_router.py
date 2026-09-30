@@ -8,9 +8,11 @@ across OfferGet native pipelines.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, List, Optional, Sequence, Union
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 
 class InputMode(str, Enum):
@@ -225,4 +227,132 @@ class InputRouter:
         )
 
 
-__all__ = ["InputMode", "RouteDecision", "InputRouter", "InvalidInputError"]
+def parse_input(
+    input_val: Any,
+    expected_type: Optional[str] = None,
+) -> Any:
+    """Parses input from a file path, raw string, dict, or data object.
+
+    Args:
+        input_val: File path (str or Path), raw JSON or text string, dict, or object.
+        expected_type: Optional hint ('json', 'text', 'dict').
+
+    Returns:
+        Parsed dict (if JSON/profile) or str (if text/JD), or the original object.
+    """
+    if input_val is None:
+        return None
+
+    # If it's already a dict or list or dataclass/model
+    if isinstance(input_val, (dict, list)):
+        return input_val
+    if hasattr(input_val, "raw_profile") or hasattr(input_val, "normalized_profile"):
+        return input_val
+    if hasattr(input_val, "to_dict") and callable(input_val.to_dict):
+        return input_val
+
+    # If it's a Path or str
+    if isinstance(input_val, (str, Path)):
+        p = Path(input_val)
+        try:
+            if p.exists() and p.is_file():
+                text = p.read_text(encoding="utf-8")
+                if p.suffix.lower() == ".json" or expected_type in ("json", "dict"):
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError:
+                        return text
+                stripped = text.strip()
+                if (stripped.startswith("{") and stripped.endswith("}")) or (stripped.startswith("[") and stripped.endswith("]")):
+                    try:
+                        return json.loads(stripped)
+                    except Exception:
+                        pass
+                return text
+        except (OSError, ValueError):
+            pass
+
+        # Raw string handling
+        s = str(input_val).strip()
+        if expected_type in ("json", "dict") or ((s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]"))):
+            try:
+                return json.loads(s)
+            except Exception:
+                pass
+        return str(input_val)
+
+    return input_val
+
+
+@dataclass
+class InputRouteResult:
+    """Container holding parsed inputs and the routing decision."""
+
+    jd: Any
+    profile: Any
+    decision: RouteDecision
+
+    def __iter__(self):
+        return iter((self.jd, self.profile, self.decision))
+
+    @property
+    def mode(self) -> str:
+        return self.decision.mode
+
+    @property
+    def is_valid(self) -> bool:
+        return self.decision.is_valid
+
+    @property
+    def executable_stages(self) -> List[str]:
+        return self.decision.executable_stages
+
+    @property
+    def blocked_stages(self) -> List[str]:
+        return self.decision.blocked_stages
+
+    @property
+    def missing_inputs(self) -> List[str]:
+        return self.decision.missing_inputs
+
+    @property
+    def next_steps(self) -> List[str]:
+        return self.decision.next_steps
+
+    def can_execute(self, stage: str) -> bool:
+        return self.decision.can_execute(stage)
+
+    def is_blocked(self, stage: str) -> bool:
+        return self.decision.is_blocked(stage)
+
+    def raise_if_blocked(self, stage: str) -> None:
+        return self.decision.raise_if_blocked(stage)
+
+    def raise_if_invalid(self) -> None:
+        return self.decision.raise_if_invalid()
+
+
+def detect_and_route_input(
+    jd: Optional[Any] = None,
+    profile: Optional[Any] = None,
+    fail_fast: bool = False,
+) -> InputRouteResult:
+    """Automatically detects and routes JD and profile inputs (filepath or raw string/dict).
+
+    Can be used directly as a RouteDecision proxy or unpacked as a 3-tuple (parsed_jd, parsed_profile, decision).
+    """
+    parsed_jd = parse_input(jd, expected_type="text") if jd is not None else None
+    parsed_profile = parse_input(profile, expected_type="json") if profile is not None else None
+    decision = InputRouter.route(jd=parsed_jd, profile=parsed_profile, fail_fast=fail_fast)
+    return InputRouteResult(jd=parsed_jd, profile=parsed_profile, decision=decision)
+
+
+__all__ = [
+    "InputMode",
+    "RouteDecision",
+    "InputRouter",
+    "InvalidInputError",
+    "InputRouteResult",
+    "parse_input",
+    "detect_and_route_input",
+]

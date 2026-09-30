@@ -440,7 +440,143 @@ class TestServices(unittest.TestCase):
             self.assertTrue(hasattr(s, name), f"services missing {name}")
             self.assertIs(getattr(cs, name), getattr(s, name))
 
+    def test_parse_input_and_detect_and_route_input(self):
+        """Tests parse_input and detect_and_route_input across filepaths, raw strings, and dicts."""
+        from core.input_router import parse_input, detect_and_route_input, InputRouteResult
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tf_json:
+            tf_json.write('{"candidate": {"name": "张三"}, "skills": ["Python"]}')
+            json_file = tf_json.name
+
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf_txt:
+            tf_txt.write("职位：算法工程师\n要求：熟悉 Python")
+            txt_file = tf_txt.name
+
+        try:
+            # 1. parse_input from filepaths
+            p_json = parse_input(json_file)
+            self.assertIsInstance(p_json, dict)
+            self.assertEqual(p_json["candidate"]["name"], "张三")
+
+            p_txt = parse_input(txt_file)
+            self.assertIsInstance(p_txt, str)
+            self.assertIn("算法工程师", p_txt)
+
+            # 2. parse_input from raw strings and dicts
+            p_raw_json = parse_input('{"name": "李四"}')
+            self.assertIsInstance(p_raw_json, dict)
+            self.assertEqual(p_raw_json["name"], "李四")
+
+            d_in = {"a": 1}
+            self.assertIs(parse_input(d_in), d_in)
+
+            # 3. detect_and_route_input with filepaths
+            route_res = detect_and_route_input(jd=txt_file, profile=json_file)
+            self.assertIsInstance(route_res, InputRouteResult)
+            self.assertTrue(route_res.can_execute("career_review"))
+            self.assertTrue(route_res.can_execute("jd_decode"))
+
+            # Unpack as tuple
+            p_jd, p_prof, dec = route_res
+            self.assertIn("算法工程师", p_jd)
+            self.assertEqual(p_prof["candidate"]["name"], "张三")
+            self.assertTrue(dec.is_valid)
+        finally:
+            if os.path.exists(json_file):
+                os.remove(json_file)
+            if os.path.exists(txt_file):
+                os.remove(txt_file)
+
+    def test_career_review_service_with_filepaths_and_run_context(self):
+        """Tests that CareerReviewService.run_review automatically resolves filepaths and attaches RunContext telemetry."""
+        service = CareerReviewService()
+
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as tf_json:
+            import json
+            json.dump(self.sample_profile, tf_json, ensure_ascii=False)
+            prof_path = tf_json.name
+
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as tf_txt:
+            tf_txt.write(self.sample_jd)
+            jd_path = tf_txt.name
+
+        try:
+            result = service.run_review(
+                jd_text=jd_path,
+                profile_dict=prof_path,
+                listing_age_days=5,
+                build_resume=False,
+            )
+
+            self.assertEqual(result["schema_version"], "career-review.v1")
+            self.assertIn("run_context", result)
+            self.assertIn("telemetry", result)
+            self.assertIn("execution_timestamp", result)
+
+            telemetry = result["telemetry"]
+            self.assertIn("run_id", telemetry)
+            self.assertIn("fingerprint", telemetry)
+            self.assertIn("traces", telemetry)
+            self.assertTrue(len(telemetry["traces"]) > 0)
+            self.assertEqual(telemetry["traces"][0]["stage_name"], "career_review")
+            self.assertGreater(telemetry["total_elapsed_ms"], 0.0)
+        finally:
+            if os.path.exists(prof_path):
+                os.remove(prof_path)
+            if os.path.exists(jd_path):
+                os.remove(jd_path)
+
+    def test_career_review_service_with_interview_contract_validation(self):
+        """Tests that CareerReviewService enforces interview_review_contract when note and proposal are passed."""
+        service = CareerReviewService()
+
+        note = {
+            "company": "测试科技",
+            "position": "强化学习研究员",
+            "round": "一面",
+            "date": "2026-09-30",
+            "questions": "请谈谈千亿大模型强化学习对齐经验",
+            "self_reflection": "说明了基于 DPO 优化模型胜率提升 25%",
+            "difficulty_points": "分布式并行调试",
+            "mood": "良好",
+        }
+        proposal = {
+            "summary": {
+                "text": "候选人说明了基于 DPO 优化模型胜率提升 25%",
+                "evidence_refs": [{
+                    "source": "interview_note",
+                    "path": "/self_reflection",
+                    "excerpt": "基于 DPO 优化模型胜率提升 25%",
+                }],
+            },
+            "observations": [{
+                "id": "obs-1",
+                "text": "候选人提到了胜率提升 25%",
+                "evidence_refs": [{
+                    "source": "interview_note",
+                    "path": "/self_reflection",
+                    "excerpt": "胜率提升 25%",
+                }],
+            }],
+            "clarifications": [],
+            "practice_focuses": [],
+            "next_questions": [],
+        }
+
+        result = service.run_review(
+            jd_text=self.sample_jd,
+            profile_dict=self.sample_profile,
+            interview_note=note,
+            interview_proposal=proposal,
+            build_resume=False,
+        )
+
+        self.assertIn("validated_proposal", result)
+        self.assertIn("interview_review_snapshot", result)
+        self.assertEqual(result["validated_proposal"]["summary"]["text"], proposal["summary"]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

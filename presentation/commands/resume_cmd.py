@@ -61,6 +61,23 @@ def cmd_resume_build(args_list=None):
         help="Privacy anonymization level ('standard' or 'strict')",
     )
     build_parser.add_argument("--no-autofit", action="store_true", help="Disable single-page AutoFit compaction")
+    build_parser.add_argument(
+        "--diff-ledger",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Produce change traceability report (Diff Ledger) (default: True)",
+    )
+    build_parser.add_argument(
+        "--adaptive-fill",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Adaptively expand vertical margins/typography on non-full pages (default: True)",
+    )
+    build_parser.add_argument(
+        "--baseline",
+        default=None,
+        help="Path to baseline candidate profile JSON for diff audit",
+    )
 
     if isinstance(args_list, argparse.Namespace):
         parsed = args_list
@@ -74,6 +91,15 @@ def cmd_resume_build(args_list=None):
 
     out_dir = Path(parsed.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    baseline_data = None
+    if parsed.baseline:
+        b_path = Path(parsed.baseline)
+        if not b_path.exists():
+            emit_stderr(f"[-] Error: Baseline profile file not found: {b_path}")
+            sys.exit(1)
+        from core.cli_helpers import load_json
+        baseline_data = load_json(str(b_path))
 
     builder = ResumeBuilder(
         profile_path,
@@ -94,20 +120,45 @@ def cmd_resume_build(args_list=None):
     print(f"[*] Photo Slot:  {photo_status}")
     print(f"[*] Anonymize:   {parsed.anonymize or 'Disabled'}")
     print(f"[*] AutoFit:     {'Disabled' if parsed.no_autofit else 'Enabled'}")
+    print(f"[*] Adaptive:    {'Enabled' if parsed.adaptive_fill else 'Disabled'}")
+    print(f"[*] Diff Ledger: {'Enabled' if parsed.diff_ledger else 'Disabled'}")
     print("-" * 68)
 
     photo = not parsed.no_photo
     autofit = not parsed.no_autofit
+    adaptive_fill = bool(parsed.adaptive_fill)
+    diff_ledger = bool(parsed.diff_ledger)
 
     if parsed.theme == "all":
-        results = builder.build_all(out_dir, photo=photo, autofit=autofit)
+        results = builder.build_all(
+            out_dir,
+            photo=photo,
+            autofit=autofit,
+            adaptive_fill=adaptive_fill,
+            diff_ledger=diff_ledger,
+            baseline_profile=baseline_data,
+        )
         for theme_name, files in results.items():
             pdf_name = files.get("pdf", Path("")).name
             print(f"  ✓ [{theme_name:<16}] -> {pdf_name}")
     else:
-        files = builder.build_theme(parsed.theme, out_dir, photo=photo, autofit=autofit)
+        files = builder.build_theme(
+            parsed.theme,
+            out_dir,
+            photo=photo,
+            autofit=autofit,
+            adaptive_fill=adaptive_fill,
+            diff_ledger=diff_ledger,
+            baseline_profile=baseline_data,
+        )
         pdf_name = files.get("pdf", Path("")).name
         print(f"  ✓ [{parsed.theme:<16}] -> {pdf_name}")
+
+    if diff_ledger:
+        diff_md = out_dir / "resume_diff_ledger.md"
+        diff_json = out_dir / "resume_diff_ledger.json"
+        if diff_md.exists() and diff_json.exists():
+            print(f"  ✓ [diff-ledger     ] -> {diff_md.name} & {diff_json.name}")
 
     print("=" * 68)
     print(f"🎉 Successfully built resume variant(s) in {out_dir}")

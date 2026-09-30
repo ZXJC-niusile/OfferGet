@@ -649,3 +649,54 @@ def test_11_custom_entries_and_metadata():
     d = ledger.to_dict()
     assert d["metadata"]["batch_id"] == "BATCH-2026"
     assert d["entries"][0]["metadata"]["fingerprint"] == "abc123xyz"
+
+
+def test_12_cmd_diff_audit_cli(sample_candidate_profile, capsys):
+    """Test cmd_diff_audit presentation command with terminal output, --json, and --output-dir."""
+    import argparse
+    from presentation.commands.diff_cmd import cmd_diff_audit
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        t_dir = Path(temp_dir)
+        baseline_file = t_dir / "baseline.json"
+        tailored_file = t_dir / "tailored.json"
+        out_sub = t_dir / "out_diff"
+
+        with open(baseline_file, "w", encoding="utf-8") as f:
+            json.dump(sample_candidate_profile, f, ensure_ascii=False)
+        with open(tailored_file, "w", encoding="utf-8") as f:
+            json.dump(sample_candidate_profile, f, ensure_ascii=False)
+
+        # 1. Test markdown terminal output & writing to --output-dir
+        args = argparse.Namespace(
+            baseline_file=str(baseline_file),
+            tailored_file=str(tailored_file),
+            output_dir=str(out_sub),
+            json=False,
+        )
+        cmd_diff_audit(args)
+        captured = capsys.readouterr()
+        assert "# 改动溯源与口径对齐报告" in captured.out
+        assert "Diff Ledger report saved" in captured.out
+
+        # Verify files on disk
+        md_file = out_sub / "resume_diff_ledger.md"
+        json_file = out_sub / "resume_diff_ledger.json"
+        assert md_file.exists()
+        assert json_file.exists()
+        assert "范增煜" in md_file.read_text(encoding="utf-8")
+
+        # 2. Test --json flag
+        args_json = argparse.Namespace(
+            baseline_file=str(baseline_file),
+            tailored_file=str(tailored_file),
+            output_dir=None,
+            json=True,
+        )
+        cmd_diff_audit(args_json)
+        captured_json = capsys.readouterr()
+        parsed = json.loads(captured_json.out)
+        assert "summary" in parsed
+        assert parsed["candidate_name"] == "范增煜"
+        assert parsed["summary"]["total_entries"] > 0
+

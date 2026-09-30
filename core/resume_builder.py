@@ -234,6 +234,10 @@ class ResumeBuilder:
         autofit: bool = True,
         anonymize: Optional[str] = None,
         layout_config: Optional[Any] = None,
+        adaptive_fill: bool = True,
+        diff_ledger: bool = True,
+        baseline_profile: Optional[Union[Dict[str, Any], Any]] = None,
+        **kwargs: Any,
     ) -> Dict[str, Path]:
         """Builds HTML + CSS based resume theme, optionally applying single-page AutoFit."""
         prof = self._resolve_profile(anonymize)
@@ -249,11 +253,34 @@ class ResumeBuilder:
             template_dir=self.template_dir,
         )
 
-        try:
-            from core.layout_solver import inject_micro_typography
-            populated_html = inject_micro_typography(populated_html, config=layout_config)
-        except Exception:
-            pass
+        from core.layout_solver import LayoutConfig, solve_layout
+        from core.diff_ledger import DiffLedger
+
+        cfg = layout_config or LayoutConfig()
+        overflow_px = float(kwargs.get("overflow_px", 0.0))
+
+        # Detect overflow / underflow via renderer if available and overflow_px not explicitly supplied
+        if "overflow_px" not in kwargs and self.renderer:
+            try:
+                with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as tmp_measure:
+                    tmp_measure.write(populated_html)
+                    tmp_measure_path = Path(tmp_measure.name)
+                try:
+                    measured_h, oflow = self.renderer.measure_overflow(tmp_measure_path, a4_target_height=cfg.a4_height_px)
+                    if oflow != 0:
+                        overflow_px = float(oflow)
+                    elif measured_h < cfg.a4_height_px - 20:
+                        overflow_px = float(measured_h - cfg.a4_height_px)
+                finally:
+                    tmp_measure_path.unlink(missing_ok=True)
+            except Exception:
+                overflow_px = 0.0
+
+        if not adaptive_fill and overflow_px < 0:
+            overflow_px = 0.0
+
+        solve_res = solve_layout(populated_html, overflow_px=overflow_px, config=cfg)
+        populated_html = solve_res.html
 
         clean_theme_name = theme_name.replace("-", "_")
         html_path = out_dir / f"resume_{clean_theme_name}.html"
@@ -284,7 +311,47 @@ class ResumeBuilder:
             write_text_atomic(populated_html, html_path)
             self.renderer.render_pdf(html_path, pdf_path)
 
-        return {"html": html_path, "pdf": pdf_path}
+        result_paths: Dict[str, Path] = {"html": html_path, "pdf": pdf_path}
+
+        if diff_ledger:
+            effective_baseline = baseline_profile or self.raw_profile or prof
+            cand_name = (
+                prof.get("candidate", {}).get("name")
+                or prof.get("name")
+                or ""
+            )
+            layout_meta = {
+                "solved": solve_res.solved,
+                "body_font_pt": solve_res.body_font_pt,
+                "line_height": solve_res.line_height,
+                "section_margin_pt": solve_res.section_margin_pt,
+                "item_gap_pt": solve_res.item_gap_pt,
+                "page_padding_y_mm": solve_res.page_padding_y_mm,
+                "orphans_mitigated": solve_res.orphans_mitigated,
+                "abbreviations_prevented": solve_res.abbreviations_prevented,
+                "applied_compressions": solve_res.applied_compressions,
+                "is_expanded_to_fill": solve_res.is_expanded_to_fill,
+            }
+            fact_guard_res = None
+            try:
+                from core.fact_guard import FactVerificationGuard
+                guard = FactVerificationGuard(effective_baseline)
+                fact_guard_res = guard.verify_facts(prof)
+            except Exception:
+                pass
+
+            ledger = DiffLedger.from_fact_guard_result(
+                guard_result=fact_guard_res,
+                baseline_profile=effective_baseline,
+                tailored_data=prof,
+                candidate_name=cand_name,
+                layout_metadata=layout_meta,
+            )
+            saved = ledger.save(out_dir, base_name="resume")
+            result_paths["diff_ledger_md"] = saved["markdown"]
+            result_paths["diff_ledger_json"] = saved["json"]
+
+        return result_paths
 
     def solve_resume_layout(
         self,
@@ -418,6 +485,9 @@ class ResumeBuilder:
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
         anonymize: Optional[str] = None,
+        adaptive_fill: bool = True,
+        diff_ledger: bool = True,
+        baseline_profile: Optional[Union[Dict[str, Any], Any]] = None,
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds a specific theme by name."""
@@ -431,16 +501,20 @@ class ResumeBuilder:
                 photo_path=eff_photo_path,
                 autofit=autofit,
                 anonymize=anonymize,
+                adaptive_fill=adaptive_fill,
+                diff_ledger=diff_ledger,
+                baseline_profile=baseline_profile,
+                **kwargs,
             )
         elif theme_normalized == "ats-plain":
-            return self.build_ats_plain(
+            res = self.build_ats_plain(
                 output_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
             )
         elif theme_normalized in ("academic-latex", "latex"):
-            return self.build_academic_latex(
+            res = self.build_academic_latex(
                 output_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
@@ -448,19 +522,47 @@ class ResumeBuilder:
                 **kwargs,
             )
         elif theme_normalized in ("academic-typst", "typst"):
-            return self.build_academic_typst(
+            res = self.build_academic_typst(
                 output_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
             )
         elif theme_normalized in ("ats-docx", "docx"):
-            return self.build_ats_docx(
+            res = self.build_ats_docx(
                 output_dir,
                 anonymize=anonymize,
             )
         else:
             raise ValueError(f"Unknown resume theme '{theme}'. Choices: {self.THEMES}")
+
+        if diff_ledger and "diff_ledger_md" not in res:
+            out_dir = Path(output_dir).resolve()
+            effective_baseline = baseline_profile or self.raw_profile or self.profile
+            cand_name = (
+                self.profile.get("candidate", {}).get("name")
+                or self.profile.get("name")
+                or ""
+            )
+            fact_guard_res = None
+            try:
+                from core.fact_guard import FactVerificationGuard
+                guard = FactVerificationGuard(effective_baseline)
+                fact_guard_res = guard.verify_facts(self.profile)
+            except Exception:
+                pass
+            from core.diff_ledger import DiffLedger
+            ledger = DiffLedger.from_fact_guard_result(
+                guard_result=fact_guard_res,
+                baseline_profile=effective_baseline,
+                tailored_data=self.profile,
+                candidate_name=cand_name,
+            )
+            saved = ledger.save(out_dir, base_name="resume")
+            res["diff_ledger_md"] = saved["markdown"]
+            res["diff_ledger_json"] = saved["json"]
+
+        return res
 
     def build_ats_docx(
         self,
@@ -485,6 +587,10 @@ class ResumeBuilder:
         autofit: bool = True,
         anonymize: Optional[str] = None,
         include_docx: bool = False,
+        adaptive_fill: bool = True,
+        diff_ledger: bool = True,
+        baseline_profile: Optional[Union[Dict[str, Any], Any]] = None,
+        **kwargs,
     ) -> Dict[str, Dict[str, Path]]:
         """Builds all 6 standard resume variants (or all 7 if include_docx=True)."""
         themes = self.THEMES if include_docx else self.PDF_THEMES
@@ -497,6 +603,10 @@ class ResumeBuilder:
                 photo_path=photo_path,
                 autofit=autofit,
                 anonymize=anonymize,
+                adaptive_fill=adaptive_fill,
+                diff_ledger=diff_ledger,
+                baseline_profile=baseline_profile,
+                **kwargs,
             )
         return results
 
