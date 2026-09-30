@@ -370,6 +370,42 @@ class TestLayoutSolver(unittest.TestCase):
         self.assertIn("text-wrap: balance;", preview_html)
         self.assertIn("Probability&nbsp;and&nbsp;Mathematical&nbsp;Statistics", preview_html)
 
+    def test_underflow_springs_expansion(self):
+        """Underflow (negative overflow: content underfills page) triggers elastic expansion to fill the page."""
+        cfg = LayoutConfig(
+            target_body_font_pt=10.0,
+            target_line_height=1.45,
+            target_section_margin_pt=14.0,
+            max_section_margin_pt=20.0,
+            target_item_gap_pt=6.0,
+            max_item_gap_pt=10.0,
+        )
+        res = solve_layout("<p>Short resume content</p>", overflow_px=-80.0, config=cfg)
+        self.assertTrue(res.solved)
+        self.assertTrue(res.is_expanded_to_fill)
+        self.assertGreater(res.section_margin_pt, 14.0)
+        self.assertGreater(res.item_gap_pt, 6.0)
+        self.assertGreater(res.line_height, 1.45)
+        self.assertFalse(res.requires_page_expansion_prompt)
+
+    def test_unsolvable_overflow_triggers_page_expansion_prompt(self):
+        """Massive overflow exceeding single-page compression capacity triggers user multi-page prompt."""
+        cfg = LayoutConfig(
+            min_body_font_pt=9.5,
+            target_body_font_pt=10.0,
+            min_section_margin_pt=10.0,
+            min_item_gap_pt=4.0,
+            min_line_height=1.35,
+        )
+        # 1000px overflow cannot be safely compressed into 1 page at 9.5pt floor
+        res = solve_layout("<p>Massive 5-page resume content</p>", overflow_px=1000.0, config=cfg)
+        self.assertFalse(res.solved)
+        self.assertTrue(res.requires_page_expansion_prompt)
+        self.assertIsNotNone(res.page_expansion_prompt_message)
+        self.assertIn("双页排版", res.page_expansion_prompt_message)
+        self.assertIn("9.5pt", res.page_expansion_prompt_message)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -62,6 +62,8 @@ class LayoutConfig:
 
     min_page_padding_y_mm: float = 6.0
     target_page_padding_y_mm: float = 8.5
+    max_page_padding_y_mm: float = 14.0
+    max_body_font_pt: float = 10.5
 
     # Micro-typography tuning ranges
     letter_spacing_min_em: float = -0.015
@@ -86,6 +88,8 @@ class LayoutConfig:
             )
         if self.target_body_font_pt < self.min_body_font_pt:
             self.target_body_font_pt = self.min_body_font_pt
+        if self.max_body_font_pt < self.target_body_font_pt:
+            self.max_body_font_pt = self.target_body_font_pt
         if self.min_line_height < 1.20:
             self.min_line_height = 1.20
         if self.max_line_height < self.min_line_height:
@@ -111,6 +115,9 @@ class LayoutSolveResult:
     orphans_mitigated: int
     css_rules: str
     html: str
+    is_expanded_to_fill: bool = False
+    requires_page_expansion_prompt: bool = False
+    page_expansion_prompt_message: Optional[str] = None
 
 
 # ==============================================================================
@@ -425,6 +432,72 @@ class SpringsGlueBudgeter:
         word_spacing_em = config.target_word_spacing_em
         body_font_pt = config.target_body_font_pt
 
+        # Underflow handling: expand springs to gracefully fill the A4 page without white void
+        if overflow_px < -5.0:
+            underflow_px = abs(float(overflow_px))
+            applied_expansions: List[str] = []
+
+            # Underflow Stage 1: Expand section margins (target -> max)
+            sec_expand_pt = config.max_section_margin_pt - config.target_section_margin_pt
+            sec_exp_cap = sec_expand_pt * PT_TO_PX * max(1, num_sections)
+            if sec_exp_cap > 0 and underflow_px > 0:
+                allocated = min(underflow_px, sec_exp_cap)
+                sec_margin_pt += allocated / (PT_TO_PX * max(1, num_sections))
+                underflow_px -= allocated
+                applied_expansions.append(f"Underflow Stage 1 Section Margins: Expanded to {sec_margin_pt:.2f}pt")
+
+            # Underflow Stage 2: Expand item gaps (target -> max)
+            item_expand_pt = config.max_item_gap_pt - config.target_item_gap_pt
+            item_exp_cap = item_expand_pt * PT_TO_PX * max(1, num_items)
+            if item_exp_cap > 0 and underflow_px > 0:
+                allocated = min(underflow_px, item_exp_cap)
+                item_gap_pt += allocated / (PT_TO_PX * max(1, num_items))
+                underflow_px -= allocated
+                applied_expansions.append(f"Underflow Stage 2 Item Gaps: Expanded to {item_gap_pt:.2f}pt")
+
+            # Underflow Stage 3: Expand line height (target -> max)
+            lh_expand = config.max_line_height - config.target_line_height
+            lh_exp_cap = lh_expand * (body_font_pt * PT_TO_PX) * max(1, num_lines)
+            if lh_exp_cap > 0 and underflow_px > 0:
+                allocated = min(underflow_px, lh_exp_cap)
+                line_height += allocated / ((body_font_pt * PT_TO_PX) * max(1, num_lines))
+                underflow_px -= allocated
+                applied_expansions.append(f"Underflow Stage 3 Line Height: Expanded to {line_height:.3f}")
+
+            # Underflow Stage 4: Expand page padding Y (target -> max)
+            pad_expand_mm = config.max_page_padding_y_mm - config.target_page_padding_y_mm
+            pad_exp_cap = pad_expand_mm * 2 * MM_TO_PX
+            if pad_exp_cap > 0 and underflow_px > 0:
+                allocated = min(underflow_px, pad_exp_cap)
+                page_padding_y_mm += allocated / (2 * MM_TO_PX)
+                underflow_px -= allocated
+                applied_expansions.append(f"Underflow Stage 4 Page Padding: Expanded to {page_padding_y_mm:.2f}mm")
+
+            # Underflow Stage 5: Expand body font size (target -> max)
+            font_expand_pt = config.max_body_font_pt - config.target_body_font_pt
+            font_exp_cap = font_expand_pt * PT_TO_PX * max(1, num_lines) * line_height
+            if font_exp_cap > 0 and underflow_px > 0:
+                allocated = min(underflow_px, font_exp_cap)
+                body_font_pt += allocated / (PT_TO_PX * max(1, num_lines) * line_height)
+                underflow_px -= allocated
+                applied_expansions.append(f"Underflow Stage 5 Font Size: Expanded to {body_font_pt:.2f}pt")
+
+            return {
+                "solved": True,
+                "body_font_pt": round(body_font_pt, 2),
+                "line_height": round(line_height, 3),
+                "section_margin_pt": round(sec_margin_pt, 2),
+                "item_gap_pt": round(item_gap_pt, 2),
+                "page_padding_y_mm": round(page_padding_y_mm, 2),
+                "letter_spacing_em": round(letter_spacing_em, 3),
+                "word_spacing_em": round(word_spacing_em, 3),
+                "overflow_px_remaining": -round(underflow_px, 2),
+                "applied_compressions": applied_expansions,
+                "is_expanded_to_fill": True,
+                "requires_page_expansion_prompt": False,
+                "page_expansion_prompt_message": None,
+            }
+
         if remaining_overflow <= 0:
             return {
                 "solved": True,
@@ -437,6 +510,9 @@ class SpringsGlueBudgeter:
                 "word_spacing_em": word_spacing_em,
                 "overflow_px_remaining": 0.0,
                 "applied_compressions": ["Zero overflow: all parameters maintained at ideal targets."],
+                "is_expanded_to_fill": False,
+                "requires_page_expansion_prompt": False,
+                "page_expansion_prompt_message": None,
             }
 
         # Stage 1: Section Margins (target: 14pt -> min: 10pt)
@@ -559,6 +635,14 @@ class SpringsGlueBudgeter:
         # Strict baseline assertion
         body_font_pt = max(config.min_body_font_pt, body_font_pt)
         solved = (remaining_overflow <= 1e-3)
+        requires_prompt = not solved
+        prompt_msg = (
+            f"当前简历内容量超出单页优质排版极限（剩余溢出 {remaining_overflow:.1f}px）。"
+            f"正文字号已达 {config.min_body_font_pt}pt 最低底线，是否为您扩展为双页排版？"
+            if requires_prompt else None
+        )
+        if requires_prompt:
+            applied_compressions.append(f"Overflow Limit Reached: {prompt_msg}")
 
         return {
             "solved": solved,
@@ -571,6 +655,9 @@ class SpringsGlueBudgeter:
             "word_spacing_em": round(word_spacing_em, 3),
             "overflow_px_remaining": round(remaining_overflow, 2),
             "applied_compressions": applied_compressions,
+            "is_expanded_to_fill": False,
+            "requires_page_expansion_prompt": requires_prompt,
+            "page_expansion_prompt_message": prompt_msg,
         }
 
 
@@ -734,6 +821,9 @@ def solve_layout(
         orphans_mitigated=orphans_count,
         css_rules=css_rules,
         html=processed_html,
+        is_expanded_to_fill=budget.get("is_expanded_to_fill", False),
+        requires_page_expansion_prompt=budget.get("requires_page_expansion_prompt", False),
+        page_expansion_prompt_message=budget.get("page_expansion_prompt_message", None),
     )
 
 
