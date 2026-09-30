@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Security-Reversible%20Anonymization-blue.svg" alt="Security">
   <img src="https://img.shields.io/badge/Integrity-Fact%20Verification%20Guard-red.svg" alt="Integrity">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-brightgreen.svg" alt="License"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-orange.svg" alt="License: CC BY-NC-SA 4.0"></a>
 </p>
 
 ---
@@ -321,6 +321,6 @@ python cli.py selftest
 
 ## 📄 许可证 (License)
 
-本项目遵循 **[MIT License](LICENSE)** 协议开源。无论学术研究、个人求职还是商业集成，均可免费自由使用、修改与分发。
+本项目遵循 **[CC BY-NC-SA 4.0](LICENSE)** (Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International) 协议开源。
 
 > **免责声明**：OfferGet 致力于提升求职者与升学学子的真实表达质量与职场信息对称度。系统提供的匹配得分、时薪测算、合同陷阱提示及防守策略仅作为个人材料准备与决策辅助工具，不构成任何形式的法律建议、保研录取承诺或招聘保证。用户对其提交的一切申请材料真实性与法律后果负全责。
