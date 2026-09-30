@@ -132,3 +132,41 @@ def test_decline_offer_letter():
     assert "录用沟通与致谢" in letter.subject
     assert "银河金融" in letter.body_text
     assert "高频低延时内核架构" in letter.body_text
+
+
+def test_boss_intro_writer():
+    letter = CareerCommunicationKit.boss_intro(
+        candidate_name="王五",
+        target_role="数据分析师",
+        experience_summary="3年消费金融数据分析经验",
+        core_actions=["搭建全链路风控看板", "重构核心流失漏斗"],
+        verified_outcomes=["看板响应耗时降低60%", "核心客群留存率提升12%"],
+        target_company_interest="团队在即时风控特征计算上的实践",
+    )
+    assert letter.letter_type == LetterType.BOSS_INTRO
+    assert "王五" in letter.subject
+    assert "数据分析师" in letter.body_text
+    assert "消费金融" in letter.body_text
+    assert "留存率提升12%" in letter.body_text
+    assert 60 < len(letter.body_text) < 220
+
+
+def test_headhunter_intro_writer():
+    letter = CareerCommunicationKit.headhunter_intro(
+        candidate_name="赵六",
+        current_or_recent_title="高级后端架构师",
+        years_of_experience="6年",
+        core_focus_areas=["高并发交易中台", "分布式存储治理", "DDD领域驱动设计"],
+        representative_impact=[
+            "主导双十一万级 QPS 订单结算重构，全链路 P99 降至 25ms",
+            "主导万级分库分表与 TiDB 平滑迁移，零资损保障",
+        ],
+        target_job_preferences="期望base北京，关注独角兽核心中台或大厂核心研发线",
+        potential_risks_or_boundaries="跳槽频率极低（6年2段）；统招一本学历；暂不考虑单休与大小周团队",
+    )
+    assert letter.letter_type == LetterType.HEADHUNTER_INTRO
+    assert "人才自荐卡" in letter.subject
+    assert "高并发交易中台" in letter.body_text
+    assert "暂不考虑单休与大小周" in letter.body_text
+    assert "TiDB" in letter.body_text
+

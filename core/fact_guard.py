@@ -459,265 +459,128 @@ class FactVerificationGuard:
     def _index_verified_metrics_dict(
         self, verified_metrics: Dict[str, Any], claim_id: str, context_keywords: Set[str]
     ) -> None:
-        """Indexes explicit verified_metrics key-values into structured anchors."""
+        """Indexes explicit verified_metrics key-values into structured anchors using declarative pattern matching."""
+        pct_rule_topics = [
+            ("mfu", "mfu", {"mfu", "flops", "utilization", "利用率", "算力利用率"}),
+            ("uptime", "uptime", {"uptime", "可用率", "训练可用率", "在线率"}),
+            ("availability", "uptime", {"uptime", "可用率", "训练可用率", "在线率"}),
+            ("cost", "cost_reduction", {"成本", "降本", "cost", "单token"}),
+            ("latency", "latency_reduction", {"延迟", "latency", "p99", "p99延迟"}),
+            ("vram", "vram_reduction", {"显存", "vram", "显存消耗", "memory"}),
+            ("memory", "vram_reduction", {"显存", "vram", "显存消耗", "memory"}),
+            ("gsm8k", "gsm8k_gain", {"gsm8k", "数学", "推理", "准确率"}),
+            ("math", "math_gain", {"math", "代码推理", "准确率"}),
+        ]
+
         for key, val in verified_metrics.items():
             val_str = str(val).strip()
 
-            # 1. Cluster size (e.g. 1024)
+            # Cluster size
             if "cluster" in key or key == "cluster_size":
                 m = re.search(r"(\d+)", val_str)
                 if m:
                     num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "cluster_size",
-                        "keywords": list(context_keywords | {"卡", "gpu", "gpus", "h800", "h100", "集群", "cluster", "node", "节点"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{int(num)} 卡",
-                        "unit": "卡",
-                        "metric_type": "cluster_size"
-                    })
-                    self.all_verified_numbers.add(num)
+                    self._add_anchor(claim_id, key, "cluster_size", context_keywords | {"卡", "gpu", "gpus", "h800", "h100", "集群", "cluster", "node", "节点"}, num, f"{int(num)} 卡", "卡", "cluster_size")
 
-            # 2. MFU metrics (e.g. mfu_before: 38.5%, mfu_after: 54.2%)
-            elif "mfu" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    subtopic = "mfu_before" if "before" in key else "mfu_after"
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "mfu",
-                        "subtopic": subtopic,
-                        "keywords": list(context_keywords | {"mfu", "flops", "utilization", "利用率", "算力利用率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # 3. Downtime metrics (e.g. downtime_before: 2.4h/day, downtime_after: <8min/day)
+            # Downtime
             elif "downtime" in key:
                 if "before" in key:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:小时|h|hours?)", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "downtime_before",
-                            "keywords": list(context_keywords | {"downtime", "中断", "故障", "有效中断", "日均中断", "慢卡", "慢节点"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{num} 小时",
-                            "unit": "小时",
-                            "metric_type": "time_hours"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "downtime_before", context_keywords | {"downtime", "中断", "故障", "有效中断", "日均中断", "慢卡", "慢节点"}, num, f"{num} 小时", "小时", "time_hours")
                 else:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:分钟|min|minutes?)", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "downtime_after",
-                            "keywords": list(context_keywords | {"downtime", "中断", "故障", "压减至", "以内"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{num} 分钟",
-                            "unit": "分钟",
-                            "metric_type": "time_minutes"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "downtime_after", context_keywords | {"downtime", "中断", "故障", "压减至", "以内"}, num, f"{num} 分钟", "分钟", "time_minutes")
 
-            # 4. Uptime (e.g. 99.4%)
-            elif "uptime" in key or "availability" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "uptime",
-                        "keywords": list(context_keywords | {"uptime", "可用率", "训练可用率", "在线率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # 5. Annual Savings / Compute Cost (e.g. 38,000,000 RMB / 3800 万元)
+            # Currency savings
             elif "savings" in key or "annual_savings" in key:
-                # Dynamically parse value and unit from val_str
-                # e.g., "38,000,000 RMB" -> 3800.0 万元 (normalized to 万元 for comparison) or "3800 万元"
                 raw_num = val_str.replace(",", "").strip()
                 m_curr = re.search(r"(\d+(?:\.\d+)?)\s*(万元|万|亿元|M\s*RMB|m\s*rmb|million\s*rmb|RMB|usd|美元)?", raw_num, re.IGNORECASE)
                 if m_curr:
                     amount = float(m_curr.group(1))
                     curr_unit = (m_curr.group(2) or "").strip().lower()
-                    # Normalize to 万元
                     if "亿" in curr_unit:
                         baseline_wan = amount * 10000.0
                     elif "million" in curr_unit or "m rmb" in curr_unit or curr_unit.startswith("m"):
-                        # e.g. 38M RMB, 38m -> 38 * 100 = 3800 万元
                         baseline_wan = amount * 100.0
                     elif "万" in curr_unit:
                         baseline_wan = amount
-                    elif amount >= 10000.0:  # e.g. 38,000,000 RMB -> 3800 万元
+                    elif amount >= 10000.0:
                         baseline_wan = amount / 10000.0
                     else:
                         baseline_wan = amount
 
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "savings",
-                        "keywords": list(context_keywords | {"节省", "降本", "成本", "开销", "savings", "cost", "算力开销", "云算力", "万元"}),
-                        "baseline_value": baseline_wan,
-                        "baseline_raw": f"{int(baseline_wan) if baseline_wan.is_integer() else baseline_wan} 万元",
-                        "unit": "万元",
-                        "metric_type": "currency"
-                    })
-                    self.all_verified_numbers.add(baseline_wan)
+                    self._add_anchor(claim_id, key, "savings", context_keywords | {"节省", "降本", "成本", "开销", "savings", "cost", "算力开销", "云算力", "万元"}, baseline_wan, f"{int(baseline_wan) if baseline_wan.is_integer() else baseline_wan} 万元", "万元", "currency")
                     self.all_verified_numbers.add(amount)
                     if baseline_wan > 0:
                         self.all_verified_numbers.add(baseline_wan * 10000.0)
                         self.all_verified_numbers.add(baseline_wan / 100.0)
 
-            elif "cost" in key:
-                m_pct = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m_pct:
-                    num = float(m_pct.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "cost_reduction",
-                        "keywords": list(context_keywords | {"成本", "降本", "cost", "单token"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # 6. Latency / TTFT metrics
-            elif "latency" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "latency_reduction",
-                        "keywords": list(context_keywords | {"延迟", "latency", "p99", "p99延迟"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
+            # TTFT
             elif "ttft" in key:
                 if "before" in key:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*(?:秒|s|sec)", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "ttft_before",
-                            "keywords": list(context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{num}s",
-                            "unit": "s",
-                            "metric_type": "time_s"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "ttft_before", context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}, num, f"{num}s", "s", "time_s")
                 else:
                     m = re.search(r"(\d+(?:\.\d+)?)\s*ms", val_str, re.IGNORECASE)
                     if m:
                         num = float(m.group(1))
-                        self.baseline_anchors.append({
-                            "anchor_id": f"{claim_id}:{key}",
-                            "topic": "ttft_after",
-                            "keywords": list(context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}),
-                            "baseline_value": num,
-                            "baseline_raw": f"{int(num)}ms",
-                            "unit": "ms",
-                            "metric_type": "time_ms"
-                        })
-                        self.all_verified_numbers.add(num)
+                        self._add_anchor(claim_id, key, "ttft_after", context_keywords | {"ttft", "首字", "首字响应", "首字延迟"}, num, f"{int(num)}ms", "ms", "time_ms")
 
-            # 7. Time saved (e.g. 3 weeks)
+            # Time saved
             elif "time" in key:
                 m = re.search(r"(\d+)\s*(?:周|weeks?)", val_str, re.IGNORECASE)
                 if m:
                     num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "time_saved",
-                        "keywords": list(context_keywords | {"提前", "节省时间", "周", "weeks", "里程碑"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{int(num)} 周",
-                        "unit": "周",
-                        "metric_type": "time_weeks"
-                    })
-                    self.all_verified_numbers.add(num)
+                    self._add_anchor(claim_id, key, "time_saved", context_keywords | {"提前", "节省时间", "周", "weeks", "里程碑"}, num, f"{int(num)} 周", "周", "time_weeks")
 
-            # 8. VRAM Reduction & Benchmark gains
-            elif "vram" in key or "memory" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "vram_reduction",
-                        "keywords": list(context_keywords | {"显存", "vram", "显存消耗", "memory"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            elif "gsm8k" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "gsm8k_gain",
-                        "keywords": list(context_keywords | {"gsm8k", "数学", "推理", "准确率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            elif "math" in key:
-                m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
-                if m:
-                    num = float(m.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:{key}",
-                        "topic": "math_gain",
-                        "keywords": list(context_keywords | {"math", "代码推理", "准确率"}),
-                        "baseline_value": num,
-                        "baseline_raw": f"{num}%",
-                        "unit": "%",
-                        "metric_type": "percentage"
-                    })
-                    self.all_verified_numbers.add(num)
-
-            # Model params (e.g. 230B MoE, 64B, 32B)
+            # Model params
             elif "model_params" in key or "params" in key:
                 for pm in re.finditer(r"(\d+)\s*[bB]", val_str):
                     p_num = float(pm.group(1))
-                    self.baseline_anchors.append({
-                        "anchor_id": f"{claim_id}:model_param_{int(p_num)}B",
-                        "topic": "model_params",
-                        "keywords": list(context_keywords | {"参数", "dense", "moe", "基座大模型"}),
-                        "baseline_value": p_num,
-                        "baseline_raw": f"{int(p_num)}B",
-                        "unit": "B",
-                        "metric_type": "model_param"
-                    })
-                    self.all_verified_numbers.add(p_num)
+                    self._add_anchor(claim_id, f"model_param_{int(p_num)}B", "model_params", context_keywords | {"参数", "dense", "moe", "基座大模型"}, p_num, f"{int(p_num)}B", "B", "model_param")
+
+            # General percentage metrics
+            else:
+                for trigger_key, topic, kw in pct_rule_topics:
+                    if trigger_key in key:
+                        m = re.search(r"(\d+(?:\.\d+)?)\s*%", val_str)
+                        if m:
+                            num = float(m.group(1))
+                            subtopic = f"{topic}_{'before' if 'before' in key else 'after'}" if "before" in key or "after" in key else None
+                            self._add_anchor(claim_id, key, topic, context_keywords | kw, num, f"{num}%", "%", "percentage", subtopic=subtopic)
+                            break
+
+    def _add_anchor(
+        self,
+        claim_id: str,
+        key: str,
+        topic: str,
+        keywords: Set[str],
+        baseline_value: float,
+        baseline_raw: str,
+        unit: str,
+        metric_type: str,
+        subtopic: Optional[str] = None,
+    ) -> None:
+        anchor: Dict[str, Any] = {
+            "anchor_id": f"{claim_id}:{key}",
+            "topic": topic,
+            "keywords": list(keywords),
+            "baseline_value": baseline_value,
+            "baseline_raw": baseline_raw,
+            "unit": unit,
+            "metric_type": metric_type,
+        }
+        if subtopic:
+            anchor["subtopic"] = subtopic
+        self.baseline_anchors.append(anchor)
+        self.all_verified_numbers.add(baseline_value)
 
     def _extract_and_index_text_metrics(
         self, text: str, source_id: str, extra_keywords: Optional[Set[str]] = None

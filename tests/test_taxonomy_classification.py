@@ -142,6 +142,21 @@ def test_education_branding_normalization(modeler):
             "ai_product",
             "AI 产品经理",
         ),
+        (
+            "测试开发工程师，负责自动化测试体系建设，掌握 Selenium、Pytest 框架及 JMeter 接口性能压测，降低线上漏测率。",
+            "qa_test_engineer",
+            "测试开发与质量保障",
+        ),
+        (
+            "资深 UI/UX 设计师，负责移动端与 Web 端的视觉设计与交互设计，主导 Figma 设计系统组件库规范。",
+            "ui_ux_design",
+            "UI/UX 设计",
+        ),
+        (
+            "用户增长策略专家，通过转化漏斗与裂变活动设计推动用户留存，利用 A/B 实验持续压降 CAC 并提升 LTV。",
+            "growth_strategy",
+            "用户增长",
+        ),
     ],
 )
 def test_role_taxonomy_classification(jd_text, expected_role_key, expected_title_sub):

@@ -425,6 +425,22 @@ class TestServices(unittest.TestCase):
         for cmd in (cmd_jd_decode, cmd_jd_match, cmd_jd_report, cmd_resume_build, cmd_career_review, cmd_selftest):
             self.assertTrue(callable(cmd))
 
+    def test_services_package_exports_and_facade_identity(self):
+        """Verifies that all domain services are exported and match core.services."""
+        import services as s
+        import core.services as cs
+
+        expected_services = [
+            "JDService", "ProfileService", "MatchService", "CareerReviewService",
+            "ResumeService", "ResumeVersionService", "OfferService", "ProposalService",
+            "ApplicationOutcomeService", "ReportService", "CommunicationService",
+            "AcademicService", "ApplicationGuardService",
+        ]
+        for name in expected_services:
+            self.assertTrue(hasattr(s, name), f"services missing {name}")
+            self.assertIs(getattr(cs, name), getattr(s, name))
+
 
 if __name__ == "__main__":
     unittest.main()
+

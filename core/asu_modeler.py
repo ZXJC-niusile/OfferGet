@@ -233,27 +233,19 @@ class AsuModeler:
         change_type: ChangeType = ChangeType.RELATIVE_PERCENT,
         tolerance: float = 0.5
     ) -> Tuple[bool, str]:
-        """
-        Strict deterministic arithmetic check with tolerance <= 0.5%.
-        """
+        """Strict deterministic arithmetic check with tolerance <= 0.5% using canonical MetricRecalculator."""
+        from core.evidence.metrics import MetricRecalculator
+
         if numerator is not None and denominator is not None and displayed_percent is not None:
-            if denominator == 0:
-                return False, "分母不可为 0"
-            expected_pct = (numerator / denominator) * 100.0
-            if abs(expected_pct - displayed_percent) > tolerance:
-                return False, f"比例算术不符：{numerator}/{denominator} 预期为 {expected_pct:.2f}%，展示为 {displayed_percent}%"
+            res = MetricRecalculator.validate_ratio(numerator, denominator, displayed_percent, tolerance=tolerance)
+            if not res.is_valid:
+                return False, f"比例算术不符：{res.error_message}"
 
         if baseline is not None and result is not None and displayed_change is not None:
-            if change_type == ChangeType.RELATIVE_PERCENT:
-                if baseline == 0:
-                    return False, "基线为 0 无法计算相对增长率"
-                expected_change = ((result - baseline) / baseline) * 100.0
-                if abs(expected_change - displayed_change) > tolerance:
-                    return False, f"相对百分比算术不符：基线 {baseline} 到结果 {result} 预期提升 {expected_change:.2f}%，展示为 {displayed_change}%"
-            elif change_type == ChangeType.PERCENTAGE_POINTS:
-                expected_change = result - baseline
-                if abs(expected_change - displayed_change) > tolerance:
-                    return False, f"百分点变化算术不符：{baseline} 到 {result} 差值为 {expected_change:.2f} 个百分点，展示为 {displayed_change}"
+            ct_str = change_type.value if hasattr(change_type, "value") else str(change_type)
+            res = MetricRecalculator.validate_change(baseline, result, ct_str, displayed_change, tolerance=tolerance)
+            if not res.is_valid:
+                return False, f"变化值算术不符：{res.error_message}"
 
         return True, "算术一致性校验通过"
 

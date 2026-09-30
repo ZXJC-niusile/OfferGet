@@ -101,7 +101,7 @@ _LAZY_EXPORTS: Dict[str, Tuple[str, str]] = {
     "OfferStrategyReporter": ("modules.jd_analyst.reporter", "OfferStrategyReporter"),
     "MultiOfferComparator": ("core.offer_comparator", "MultiOfferComparator"),
     "CareerCommunicationKit": ("core.communication_kit", "CareerCommunicationKit"),
-    "PostInterviewDebriefEngine": ("core.post_interview", "PostInterviewDebriefEngine"),
+    "PostInterviewDebriefEngine": ("core.interview_debrief", "PostInterviewDebriefEngine"),
     "DuplicateApplicationGuard": ("core.duplicate_guard", "DuplicateApplicationGuard"),
     "BibTexPublicationParser": ("core.academic_sync", "BibTexPublicationParser"),
     "CampPresentationPlanner": ("core.academic_sync", "CampPresentationPlanner"),

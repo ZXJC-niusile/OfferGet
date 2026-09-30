@@ -653,5 +653,269 @@ class TestResumeVersions(unittest.TestCase):
             self.assertEqual(hashes["profile"], sha256_file(artifact))
 
 
+class TestDuplicateApplicationGuard(unittest.TestCase):
+    """Integrated tests for duplicate application and collision guard."""
+
+    def test_company_normalizer(self):
+        from core.duplicate_guard import CompanyEntityNormalizer
+        self.assertEqual(CompanyEntityNormalizer.normalize("北京字跳网络技术有限公司"), "bytedance")
+        self.assertEqual(CompanyEntityNormalizer.normalize("抖音-商业化技术部"), "bytedance")
+        self.assertEqual(CompanyEntityNormalizer.normalize("飞书 Lark"), "bytedance")
+        self.assertEqual(CompanyEntityNormalizer.normalize("淘宝天猫商业集团"), "alibaba")
+        self.assertEqual(CompanyEntityNormalizer.normalize("腾讯科技（深圳）有限公司"), "tencent")
+        self.assertEqual(CompanyEntityNormalizer.normalize("美团快驴事业部"), "meituan")
+
+    def test_job_fingerprint(self):
+        from core.duplicate_guard import JobFingerprint
+        jd1 = "负责后端高并发架构设计，熟悉 Golang 与 Redis，具有分布式锁实战经验。"
+        jd2 = "参与后端架构设计，负责高并发微服务开发，深入使用 Golang 和 Redis 分布式锁。"
+        jd3 = "主要负责前端 Vue3 移动端 H5 页面交互与 CSS 动画优化。"
+        self.assertGreater(JobFingerprint.jaccard_similarity(jd1, jd2), 0.35)
+        self.assertLess(JobFingerprint.jaccard_similarity(jd1, jd3), 0.1)
+
+    def test_duplicate_guard_scenarios(self):
+        from core.duplicate_guard import (
+            ApplicationChannel,
+            ApplicationRecord as GuardRecord,
+            DuplicateApplicationGuard,
+        )
+        # 1. Collision
+        history1 = [
+            GuardRecord(
+                record_id="rec_001",
+                company_name="字节跳动",
+                role_title="高级后端工程师",
+                channel=ApplicationChannel.HEADHUNTER,
+                applied_date="2026-09-01",
+                status="interviewing",
+                recruiter_info="猎头 Alex",
+            )
+        ]
+        res1 = DuplicateApplicationGuard.check_application(
+            new_company="抖音",
+            new_role="后端研发",
+            new_channel=ApplicationChannel.DIRECT_CAREERS_SITE,
+            applied_date="2026-09-15",
+            history=history1,
+        )
+        self.assertTrue(res1.has_collision)
+        self.assertEqual(res1.risk_level, "HIGH_RISK_BLOCK")
+        self.assertEqual(res1.normalized_company, "bytedance")
+        self.assertTrue(any("渠道撞单风险" in r for r in res1.reasons))
+
+        # 2. Cooldown
+        history2 = [
+            GuardRecord(
+                record_id="rec_002",
+                company_name="美团",
+                role_title="分布式存储专家",
+                channel=ApplicationChannel.DIRECT_CAREERS_SITE,
+                applied_date="2026-08-01",
+                status="rejected",
+            )
+        ]
+        res2 = DuplicateApplicationGuard.check_application(
+            new_company="北京三快科技有限公司",
+            new_role="基础设施存储专家",
+            new_channel=ApplicationChannel.INTERNAL_REFERRAL,
+            applied_date="2026-09-15",
+            history=history2,
+            cooldown_days=180,
+        )
+        self.assertTrue(res2.has_collision)
+        self.assertEqual(res2.risk_level, "LOW_WARNING")
+        self.assertGreater(res2.cooldown_days_remaining, 100)
+        self.assertTrue(any("冷冻期拦截" in r for r in res2.reasons))
+
+        # 3. Safe case
+        history3 = [
+            GuardRecord(
+                record_id="rec_003",
+                company_name="腾讯",
+                role_title="云原生架构师",
+                channel=ApplicationChannel.INTERNAL_REFERRAL,
+                applied_date="2025-01-01",
+                status="offered",
+            )
+        ]
+        res3 = DuplicateApplicationGuard.check_application(
+            new_company="百度",
+            new_role="云原生架构师",
+            new_channel=ApplicationChannel.INTERNAL_REFERRAL,
+            applied_date="2026-09-15",
+            history=history3,
+        )
+        self.assertFalse(res3.has_collision)
+        self.assertEqual(res3.risk_level, "NONE")
+
+
+class TestMaterialProposal(unittest.TestCase):
+    """Tests for MaterialProposal lifecycle, acceptance, drift detection, and persistence."""
+
+    def setUp(self):
+        self.profile = {
+            "candidate": {"name": "张三"},
+            "experience": [{"company": "公司A", "role": "工程师", "bullets": ["完成接口开发"]}],
+        }
+        self.jd = "职位：后端工程师\n职责：负责接口开发"
+
+    def test_partial_acceptance_and_roundtrip(self):
+        from core.material_proposal import (
+            MaterialProposal,
+            MaterialProposalStatus,
+            profile_fingerprint,
+            jd_fingerprint,
+        )
+        proposal = MaterialProposal(
+            proposal_id="PROP-1",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+            patches=[{"validation_status": "applied", "after": "A"}, {"validation_status": "applied", "after": "B"}],
+        )
+        accepted = proposal.accept(self.profile, self.jd, patch_ids=[1])
+        self.assertEqual([p["after"] for p in accepted], ["B"])
+        self.assertEqual(proposal.status, MaterialProposalStatus.ACCEPTED)
+        restored = MaterialProposal.from_dict(proposal.to_dict())
+        self.assertEqual(restored.accepted_patch_ids, [1])
+
+    def test_source_drift_conflicts_before_acceptance(self):
+        from core.material_proposal import MaterialProposal, MaterialProposalStatus
+        proposal = MaterialProposal(
+            proposal_id="PROP-2",
+            source_profile_hash="p",
+            source_jd_hash="j",
+            patches=[{"after": "A"}],
+        )
+        with self.assertRaises(ValueError):
+            proposal.accept(self.profile, self.jd)
+        self.assertEqual(proposal.status, MaterialProposalStatus.CONFLICTED)
+
+    def test_accept_creates_new_profile_and_checks_before_text(self):
+        from core.material_proposal import (
+            MaterialProposal,
+            apply_material_proposal,
+            profile_fingerprint,
+            jd_fingerprint,
+        )
+        proposal = MaterialProposal(
+            proposal_id="PROP-3",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+            patches=[{
+                "target_path": "experience[0].bullets[0]",
+                "before": "完成接口开发",
+                "after": "完成接口开发并补充错误处理",
+                "validation_status": "applied",
+            }],
+        )
+        updated = apply_material_proposal(proposal, self.profile, self.jd)
+        self.assertEqual(updated["experience"][0]["bullets"][0], "完成接口开发并补充错误处理")
+        self.assertEqual(self.profile["experience"][0]["bullets"][0], "完成接口开发")
+
+    def test_review_emits_human_confirmation_proposal(self):
+        from core.job_flow import run_career_review
+        from core.material_proposal import MaterialProposal, MaterialProposalStatus
+        result = run_career_review(self.jd, self.profile)
+        proposal = MaterialProposal.from_dict(result["material_proposal"])
+        self.assertEqual(proposal.status, MaterialProposalStatus.DRAFT)
+        self.assertEqual(proposal.proposal_hash, proposal.compute_hash())
+
+    def test_persistence_filters_by_application_and_status(self):
+        from core.material_proposal import MaterialProposal, profile_fingerprint, jd_fingerprint
+        proposal = MaterialProposal(
+            proposal_id="PROP-LIST",
+            application_id="APP-1",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with ApplicationStore(Path(tmp) / "store.db") as store:
+                store.save(ApplicationRecord("APP-1", "公司A", "工程师"))
+                store.save_material_proposal(proposal)
+                self.assertEqual(len(store.list_material_proposals("draft", "APP-1")), 1)
+                self.assertEqual(len(store.list_material_proposals(company="公司A", role="工程师")), 1)
+                self.assertEqual(len(store.list_material_proposals("accepted", "APP-1")), 0)
+
+    def test_persistence_rejects_orphan_application(self):
+        from core.material_proposal import MaterialProposal, profile_fingerprint, jd_fingerprint
+        proposal = MaterialProposal(
+            proposal_id="PROP-ORPHAN",
+            application_id="MISSING",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with ApplicationStore(Path(tmp) / "store.db") as store:
+                with self.assertRaises(ValueError):
+                    store.save_material_proposal(proposal)
+
+
+class TestProposalService(unittest.TestCase):
+    def setUp(self):
+        self.profile = {
+            "candidate": {"name": "张三"},
+            "experience": [{"company": "公司A", "role": "工程师", "bullets": ["完成接口开发"]}],
+        }
+        self.jd = "职位：后端工程师\n职责：负责接口开发"
+
+    def _proposal(self, proposal_id="PROP-SVC"):
+        from core.material_proposal import MaterialProposal, profile_fingerprint, jd_fingerprint
+        return MaterialProposal(
+            proposal_id=proposal_id,
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+            application_id="APP-SVC",
+            patches=[{
+                "target_path": "experience[0].bullets[0]",
+                "before": "完成接口开发",
+                "after": "完成接口开发并补充错误处理",
+                "validation_status": "applied",
+            }],
+        )
+
+    def test_service_roundtrip_accept_and_reject(self):
+        from core.material_proposal import MaterialProposalStatus
+        from core.services import ProposalService
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "svc.db"
+            output = Path(tmp) / "nested" / "out.json"
+            with ProposalService(db_path) as service:
+                service.store.save(ApplicationRecord("APP-SVC", "公司A", "工程师"))
+                service.save(self._proposal())
+                self.assertEqual(len(service.list(application_id="APP-SVC")), 1)
+                result = service.accept("PROP-SVC", self.profile, self.jd, output)
+                self.assertTrue(output.exists())
+                self.assertEqual(result["proposal"]["status"], "accepted")
+                service.save(self._proposal("PROP-SVC2"))
+                rejected = service.reject("PROP-SVC2")
+                self.assertEqual(rejected.status, MaterialProposalStatus.REJECTED)
+                with self.assertRaises(KeyError):
+                    service.accept("MISSING", self.profile, self.jd, output)
+                with self.assertRaises(KeyError):
+                    service.reject("MISSING")
+
+    def test_service_accept_failure_persists_conflict(self):
+        from core.material_proposal import MaterialProposalStatus
+        from core.services import ProposalService
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "svc.db"
+            output = Path(tmp) / "out.json"
+            with ProposalService(db_path) as service:
+                service.store.save(ApplicationRecord("APP-SVC", "公司A", "工程师"))
+                service.save(self._proposal())
+                drifted = {
+                    "candidate": {"name": "张三"},
+                    "experience": [{"company": "公司A", "role": "工程师", "bullets": ["完成接口开发（已复审）"]}],
+                }
+                with self.assertRaises(ValueError):
+                    service.accept("PROP-SVC", drifted, self.jd, output)
+                stored = service.get("PROP-SVC")
+                self.assertEqual(stored.status, MaterialProposalStatus.CONFLICTED)
+                self.assertEqual(stored.conflict_reason, "source_profile_changed")
+                self.assertFalse(output.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
+
+

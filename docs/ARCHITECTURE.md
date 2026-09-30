@@ -50,14 +50,14 @@ OfferGet 是一个“高确定性、零幻觉、强证据约束”的求职与�
 │   - core/resume_view_model.py: 简历排版视图模型                        │
 └──────────────────┬───────────────────────────────────┬─────────────────┘
                    │                                   │
-┌──────────────────▼──────────────────┐ ┌──────────────▼─────────────────┐
-│     Adapters Layer (适配层)         │ │  Infrastructure Layer (基础设施) │
-│ - adapters/jd_legacy.py:            │ │ - core/artifacts.py: 原子写入   │
-│   旧字典格式兼容、重水化            │ │ - core/paths.py: 资源路径定位   │
-│ - adapters/profile_legacy.py:       │ │ - core/fingerprints.py: 确定性  │
-│   历史非标画像别名与字段映射        │ │   SHA-256 结构体与内容指纹      │
-│ - adapters/rendercv_adapter.py:     │ │ - core/application_tracker.py: │
-│   RenderCV 导入导出转换器           │ │   SQLite Schema v2 持久化引擎 │
+┌─────────────────────────────────────┐ ┌─────────────────────────────────┐
+│  Compatibility Gateway (入站与兼容) │ │  Infrastructure Layer (基础设施) │
+│ - core/jd_compat.py:                │ │ - core/artifacts.py: 原子写入   │
+│   JD 入站网关、旧字典格式兼容        │ │ - core/paths.py: 资源路径定位   │
+│ - core/profile_adapter.py:          │ │ - core/fingerprints.py: 确定性  │
+│   候选人非标画像别名与字段标准化    │ │   SHA-256 结构体与内容指纹      │
+│ - core/rendercv_adapter.py:         │ │ - core/application_tracker.py: │
+│   RenderCV 导入导出转换器           │ │   SQLite Schema v7 持久化引擎 │
 └─────────────────────────────────────┘ │ - ApexResume/: 排版基础引擎     │
                                         └─────────────────────────────────┘
 ```
@@ -66,11 +66,11 @@ OfferGet 是一个“高确定性、零幻觉、强证据约束”的求职与�
 
 ## 三、 Canonical 与 Legacy API 映射规范
 
-| 领域 / 职责 | Canonical 规范入口 (主路径) | Legacy 兼容入口 (适配器/保留) | 说明 |
+| 领域 / 职责 | Canonical 规范入口 (主路径) | Legacy 兼容入口 (保留) | 说明 |
 |:---|:---|:---|:---|
-| **JD 解析入站** | `core.jd_compat.to_canonical(input)` | `adapters.jd_legacy.decode_legacy(text)` / `core.jd_compat.decode_legacy` | 接收 str, Path, dict, 统一输出 `DecodedJD` |
-| **JD 匹配评估** | `JDMatcher.match(canonical_jd, profile)` | `adapters.jd_legacy.match_legacy(jd_dict, prof_dict)` | Canonical 结果包含强弱要求判定与预测 |
-| **候选人画像** | `ProfileContext.from_profile(data)` | `adapters.profile_legacy.normalize_legacy_profile(data)` | 全流程只解析构建一次，多处防御性投影 |
+| **JD 解析入站** | `core.jd_compat.to_canonical(input)` | `core.jd_compat.decode_legacy(text)` | 接收 str, Path, dict, 统一输出 `DecodedJD` |
+| **JD 匹配评估** | `JDMatcher.match(canonical_jd, profile)` | `core.jd_compat.match_legacy(jd_dict, prof_dict)` | Canonical 结果包含强弱要求判定与预测 |
+| **候选人画像** | `ProfileContext.from_profile(data)` | `core.profile_adapter.normalize_candidate_profile(data)` | 全流程只解析构建一次，多处防御性投影 |
 | **证据事实项** | `ProfileEvidenceIndex.claims` (`EvidenceClaim`) | 历史散落字典 `profile["projects"][i]["highlights"]` | 底稿中的客观事实凭证 |
 | **简历主张审计** | `core.evidence.AuditClaim` / `EvidenceAuditor` | 历史基于整段文字的模糊正则匹配 | 从简历提取并核验的原子命题 |
 | **证据推进状态** | `core.evidence.graph.EvidenceGraph` | `job_flow.py` 内联状态判断 | 单向单调跃迁状态机与 `can_apply()` 门禁 |

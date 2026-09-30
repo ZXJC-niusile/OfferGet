@@ -143,7 +143,7 @@ class CareerReviewService:
         profile_evidence_index: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """Debriefs real-world interview transcript, diagnoses blindspots, and generates (N+1) checklist."""
-        from core.post_interview import PostInterviewDebriefEngine
+        from core.interview_debrief import PostInterviewDebriefEngine
 
         return PostInterviewDebriefEngine.debrief(
             transcript_text=transcript_text,

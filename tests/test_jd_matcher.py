@@ -233,6 +233,38 @@ class TestJDMatcher(unittest.TestCase):
             self.assertTrue(len(g.actionable_advice) > 5)
             self.assertTrue(len(g.gap_explanation) > 3)
 
+    def test_expanded_adjacent_skills_matching(self):
+        """Test non-AI adjacent stacks (Kafka/RocketMQ, Vue/React, etc.) provide partial credit."""
+        matcher = self.matcher
+        self.assertIn("rocketmq", matcher.ADJACENT_SKILLS["kafka"])
+        self.assertIn("vue", matcher.ADJACENT_SKILLS["react"])
+        self.assertIn("spark streaming", matcher.ADJACENT_SKILLS["flink"])
+        self.assertIn("powerbi", matcher.ADJACENT_SKILLS["tableau"])
+
+        jd = DecodedJD(
+            raw_text="需要精通 Kafka 消息队列",
+            job_title="后端工程师",
+            company_or_dept="基础架构部",
+            hard_thresholds=[],
+            core_skills=[
+                CoreSkill(name="Kafka", category="middleware", importance="must_have", domain="后端开发")
+            ],
+            implicit_signals=[],
+        )
+        cand = CandidateProfile(
+            name="李四",
+            education_level="本科",
+            years_of_experience=3.0,
+            skills=["RocketMQ", "Java", "MySQL"],
+            project_descriptions=["基于 RocketMQ 实现异步解耦与流量削峰"],
+            raw_resume_text="熟练掌握 RocketMQ 消息队列中间件",
+        )
+
+        res = matcher.match(jd, cand)
+        self.assertGreater(res.must_have_score, 0.4)
+        self.assertLess(res.must_have_score, 0.9)
+
 
 if __name__ == "__main__":
     unittest.main()
+

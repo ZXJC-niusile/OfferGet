@@ -89,9 +89,9 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "Publication": ("core.advisor_matcher", "Publication"),
     "match_advisor_and_draft_email": ("core.advisor_matcher", "match_advisor_and_draft_email"),
 
-    # core.defense_simulator
-    "DefenseSimulator": ("core.defense_simulator", "DefenseSimulator"),
-    "simulate_project_defense": ("core.defense_simulator", "simulate_project_defense"),
+    # core.defense
+    "DefenseSimulator": ("core.defense", "DefenseSimulator"),
+    "simulate_project_defense": ("core.defense", "simulate_project_defense"),
 
     # core.lexicon
     "VERB_HIERARCHY": ("core.lexicon", "VERB_HIERARCHY"),

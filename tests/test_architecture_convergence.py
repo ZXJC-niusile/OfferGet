@@ -25,7 +25,7 @@ from core.defense import (
     EvidenceStatus,
     RiskBasis,
 )
-import core.defense_simulator as legacy_defense_facade
+import core.defense as defense_pkg
 
 # Step 3 imports
 from core.jd_compat import DecodedJD, to_canonical, DecodedJDCompat
@@ -124,18 +124,18 @@ class TestArchitectureConvergence(unittest.TestCase):
         sim_new = UnifiedDefenseSimulator()
         self.assertIsNotNone(sim_new)
 
-        # 2. Legacy facade points to the unified engine
-        self.assertIs(legacy_defense_facade.EvidenceStatus, EvidenceStatus)
-        self.assertIs(legacy_defense_facade.RiskBasis, RiskBasis)
-        self.assertIs(legacy_defense_facade.DefenseSimulator, UnifiedDefenseSimulator)
+        # 2. Package facade points to the unified engine
+        self.assertIs(defense_pkg.EvidenceStatus, EvidenceStatus)
+        self.assertIs(defense_pkg.RiskBasis, RiskBasis)
+        self.assertIs(defense_pkg.DefenseSimulator, UnifiedDefenseSimulator)
 
-        # 3. Run defense simulation via facade
+        # 3. Run defense simulation via package
         profile = {
             "projects": [
                 {"name": "分布式架构", "bullets": ["设计高并发架构，QPS 提升 10 倍"]}
             ]
         }
-        sim = legacy_defense_facade.DefenseSimulator()
+        sim = defense_pkg.DefenseSimulator()
         res = sim.simulate(profile)
         self.assertIsNotNone(res)
         self.assertEqual(res.project_name, "分布式架构")

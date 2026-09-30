@@ -389,5 +389,73 @@ class TestBaoyanPipeline(unittest.TestCase):
             generate_camp_checklist(self.profile_data, track="本科生")
 
 
+class TestAcademicSync(unittest.TestCase):
+    """Tests for academic publication sync and camp presentation planning."""
+
+    def test_bibtex_parser_conference_and_ccf(self):
+        from core.academic_sync import BibTexPublicationParser
+        bib = """
+@inproceedings{li2025fast,
+  title = {{Fast distributed consensus via adaptive speculation}},
+  author = {Li, Ming and Zhang, Wei and Wang, Gang},
+  booktitle = {Proceedings of the 2025 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year = {2025},
+  doi = {10.1109/CVPR.2025.0001},
+  presentation = {Oral}
+}
+@article{zhang2024scaling,
+  title = {Scaling large language models efficiently},
+  author = {Wei Zhang and Ming Li},
+  journal = {ACM Transactions on Computer Systems (TOCS)},
+  year = {2024},
+  doi = {10.1145/3600000}
+}
+"""
+        pubs = BibTexPublicationParser.parse_string(bib, candidate_name="Ming Li")
+        self.assertEqual(len(pubs), 2)
+        p1 = pubs[0]
+        self.assertEqual(p1.cite_key, "li2025fast")
+        self.assertEqual(p1.title, "Fast distributed consensus via adaptive speculation")
+        self.assertEqual(p1.entry_type, "inproceedings")
+        self.assertEqual(p1.year, 2025)
+        self.assertEqual(p1.ccf_rank, "CCF-A")
+        self.assertEqual(p1.presentation_type, "Oral")
+        self.assertTrue(p1.is_first_or_corresponding)
+        self.assertEqual(p1.doi, "10.1109/CVPR.2025.0001")
+
+        p2 = pubs[1]
+        self.assertEqual(p2.cite_key, "zhang2024scaling")
+        self.assertEqual(p2.entry_type, "article")
+        self.assertEqual(p2.year, 2024)
+        self.assertFalse(p2.is_first_or_corresponding)
+
+    def test_camp_presentation_planner(self):
+        from core.academic_sync import AcademicPublication, CampPresentationPlanner, CampPresentationPlan
+        pub = AcademicPublication(
+            cite_key="li2025fast",
+            entry_type="inproceedings",
+            title="Adaptive Speculative Execution for Distributed Systems",
+            authors=["Ming Li", "Wei Zhang"],
+            venue="USENIX ATC",
+            year=2025,
+            ccf_rank="CCF-A",
+        )
+        plan = CampPresentationPlanner.plan(
+            candidate_name="李明",
+            target_lab_or_institution="清华大学计算机系网络技术研究所",
+            target_direction="分布式系统与云原生底座",
+            publications=[pub],
+            key_projects=["高并发分布式KV引擎", "自研内核级旁路网关"],
+        )
+        self.assertIsInstance(plan, CampPresentationPlan)
+        self.assertEqual(plan.candidate_name, "李明")
+        self.assertEqual(plan.target_lab_or_institution, "清华大学计算机系网络技术研究所")
+        self.assertEqual(len(plan.slides), 4)
+        self.assertEqual(sum(s.allocated_seconds for s in plan.slides), 210)
+        self.assertIn("学术画像", plan.slides[0].slide_title)
+        self.assertIn("# 🎓 李明 - 夏令营/保研面试 4 页自述 PPT 规范方案", plan.markdown_outline)
+
+
 if __name__ == "__main__":
     unittest.main()
+

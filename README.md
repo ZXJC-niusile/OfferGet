@@ -88,7 +88,7 @@
   - `Claimed Skills`：仅在个人技能清单中提及、在实际项目无佐证的主张；
   - `Gap Skills`：岗位核心要求中尚未满足的技术缺口。
 
-### 4. 答辩红蓝对抗模拟与面试实录复盘 (`core/defense/` & `core/post_interview.py`)
+### 4. 答辩红蓝对抗模拟与面试实录复盘 (`core/defense/` & `core/interview_debrief.py`)
 - **Claim-Evidence 矩阵构建**：对项目陈述提取断言，划分为 `Material-supported（有据支撑）`、`Material-implied（合理推断）`、`Material-missing（缺乏依据）`。
 - **3 级拷打烈度压力测试**：
   - `先热个身`：事实摸底，询问基础配置与基线口径；
