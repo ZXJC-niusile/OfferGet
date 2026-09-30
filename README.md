@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Tests-580%2B%20passed%20locally-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-640%2B%20passed%20locally-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Security-Reversible%20Anonymization-blue.svg" alt="Security">
   <img src="https://img.shields.io/badge/Integrity-Fact%20Verification%20Guard-red.svg" alt="Integrity">
