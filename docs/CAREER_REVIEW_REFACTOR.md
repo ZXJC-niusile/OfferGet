@@ -1,5 +1,10 @@
 # OfferGet 轻量求职审查 Agent / Skill 重构与深磨技术报告 (Career Review Refactor Report)
 
+> **历史归档说明 (2026-10-01)**：本文档描述的重构**已全部实施完成**，仅作为设计决策的历史记录保留。
+> 其中 P0.A（经历边界与不确定诊断）、P0.B（ResumePatch 投递状态机）、P0.C（FactGuard 白名单旁路移除）三项修复
+> 均已落地于 `core/interview_debrief.py`、`core/job_flow.py`、`core/fact_guard.py`。
+> 文中提及的 `modules/jd_analyst/decoder.py` 现位于 `core/jd_analyst/decoder.py`（模块目录已重命名为 `core/`）。
+
 ## 一、项目定位与重构目标
 
 将 OfferGet 收敛为纯本地、零外部数据库、零外部 LLM API 依赖的**轻量求职 Agent / Skill**，聚焦高置信度全闭环：

@@ -43,7 +43,7 @@ from core.application_tracker import (
 )
 
 # Step 6 imports
-from core.baoyan_package import PersonalStatementBuilder
+from core.baoyan_pipeline import PersonalStatementBuilder
 
 
 class TestArchitectureConvergence(unittest.TestCase):

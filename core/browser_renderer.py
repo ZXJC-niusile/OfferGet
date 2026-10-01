@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ApexResume Cross-Platform Headless Browser PDF Renderer.
+"""OfferGet Cross-Platform Headless Browser PDF Renderer (core/browser_renderer.py).
 
 Automatically discovers Google Chrome, Microsoft Edge, and Chromium across
 Windows, macOS, and Linux without requiring external dependencies.
@@ -25,6 +25,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+import core.atomic_writer as atomic_writer
 
 CANDIDATE_PATHS = {
     "win32": [
@@ -193,7 +194,7 @@ class BrowserRenderer:
         if not html_file.exists():
             return False, 0, f"HTML file not found: {html_file}"
 
-        temp_user_data = tempfile.mkdtemp(prefix="apex_browser_")
+        temp_user_data = tempfile.mkdtemp(prefix="offerget_browser_")
         temp_rendered_pdf = Path(temp_user_data) / "rendered.pdf"
         file_url = html_file.as_uri()
 
@@ -224,40 +225,16 @@ class BrowserRenderer:
 
             pages = self.count_pages(temp_rendered_pdf)
 
-            safe_save_func = None
-            repo_root = Path(__file__).resolve().parent.parent.parent
-            atomic_path = repo_root / "core" / "atomic_writer.py"
-            if atomic_path.exists():
-                try:
-                    import importlib.util
-                    spec = importlib.util.spec_from_file_location("offerget_core_atomic_writer", str(atomic_path))
-                    if spec and spec.loader:
-                        mod = importlib.util.module_from_spec(spec)
-                        spec.loader.exec_module(mod)
-                        safe_save_func = getattr(mod, "safe_save_file", None)
-                except Exception:
-                    pass
+            res = atomic_writer.safe_save_file(pdf_file, temp_rendered_pdf, allow_shadow=True)
+            if not res.success:
+                return False, 0, f"Failed to save PDF to {pdf_file}: {res.error_message}"
 
-            if safe_save_func is None:
-                try:
-                    from core.atomic_writer import safe_save_file as safe_save_func
-                except Exception:
-                    pass
-
-            if safe_save_func is not None:
-                res = safe_save_func(pdf_file, temp_rendered_pdf, allow_shadow=True)
-                if not res.success:
-                    return False, 0, f"Failed to save PDF to {pdf_file}: {res.error_message}"
-
-                if res.is_shadow:
-                    msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
-                else:
-                    msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
-
-                return True, pages, msg
+            if res.is_shadow:
+                msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
             else:
-                shutil.move(str(temp_rendered_pdf), str(pdf_file))
-                return True, pages, f"Successfully rendered {pages} page(s) ({pdf_file.stat().st_size} bytes)"
+                msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
+
+            return True, pages, msg
         except subprocess.TimeoutExpired:
             return False, 0, f"Rendering timed out after {timeout_seconds}s"
         except Exception as e:
@@ -386,7 +363,6 @@ run().catch(() => {
             if pages <= 1:
                 return int(a4_target_height), 0
             else:
-                # Estimate overflow based on pages
                 return int(a4_target_height * pages), int(a4_target_height * (pages - 1))
         finally:
             Path(tmp_pdf).unlink(missing_ok=True)
@@ -394,7 +370,7 @@ run().catch(() => {
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("Usage: python render.py <input.html> <output.pdf> [--measure]")
+        print("Usage: python -m core.browser_renderer <input.html> <output.pdf> [--measure]")
         sys.exit(1)
 
     input_html = sys.argv[1]
@@ -402,19 +378,19 @@ if __name__ == "__main__":
     measure_flag = "--measure" in sys.argv
 
     renderer = BrowserRenderer()
-    print(f"[ApexResume] Using browser: {renderer.browser_path}")
+    print(f"[BrowserRenderer] Using browser: {renderer.browser_path}")
 
     if measure_flag:
         height, overflow = renderer.measure_overflow(input_html)
-        print(f"[ApexResume] Document scrollHeight: {height}px, A4 Target: 1123px, Overflow: {overflow}px")
+        print(f"[BrowserRenderer] Document scrollHeight: {height}px, A4 Target: 1123px, Overflow: {overflow}px")
 
     success, pages, msg = renderer.render_pdf(input_html, output_pdf)
     if success:
-        print(f"[ApexResume] {msg}")
+        print(f"[BrowserRenderer] {msg}")
         if pages > 1:
-            print(f"[ApexResume WARNING] Page count is {pages} (>1). Please run autofit to compress into 1 page.")
+            print(f"[BrowserRenderer WARNING] Page count is {pages} (>1). Please run autofit to compress into 1 page.")
             sys.exit(2)
         sys.exit(0)
     else:
-        print(f"[ApexResume ERROR] {msg}")
+        print(f"[BrowserRenderer ERROR] {msg}")
         sys.exit(1)

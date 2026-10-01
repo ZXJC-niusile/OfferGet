@@ -56,10 +56,13 @@ def _first_match(text: str, patterns: Iterable[str], default: str) -> str:
     return default
 
 
-def _extract_metadata(text: str) -> Dict[str, str]:
+def _extract_metadata(canonical: DecodedJD) -> Dict[str, str]:
+    """Role and company come from the canonical object (SSOT); only fields the
+    canonical model does not carry are regex-extracted from the raw text."""
+    text = canonical.raw_text
     return {
-        "role": _first_match(text, [r"(?:【岗位名称】|岗位名称|职位名称|岗位|职位|Job\s*Title)[：:\s]*([^\n\r]+)"], "未指定职位"),
-        "company": _first_match(text, [r"(?:【公司名称】|公司|雇主|Company)[：:\s]*([^\n\r]+)"], "未指定公司"),
+        "role": canonical.job_title or "未指定职位",
+        "company": canonical.company_or_dept or "未指定公司",
         "department": _first_match(text, [r"(?:【所属部门】|部门|团队|Department|Team)[：:\s]*([^\n\r]+)"], "未指定部门"),
         "location": _first_match(text, [r"(?:【工作地点】|工作地点|地点|Location)[：:\s]*([^\n\r]+)"], "未提供"),
         "comp_band": _first_match(text, [r"(?:【薪资范围】|薪资范围|薪资|Salary|Compensation)[：:\s]*([^\n\r]+)"], "未提供"),
@@ -79,11 +82,7 @@ def _layer(title: str, zh: str, en: str = "") -> Dict[str, str]:
 
 def canonical_to_legacy(canonical: DecodedJD) -> DecodedJDCompat:
     """Convert the canonical dataclass result to OfferGet's historical dict shape."""
-    meta = _extract_metadata(canonical.raw_text)
-    if canonical.job_title and canonical.job_title != "未指定职位":
-        meta["role"] = canonical.job_title
-    if canonical.company_or_dept and canonical.company_or_dept != "未指定公司":
-        meta["company"] = canonical.company_or_dept
+    meta = _extract_metadata(canonical)
     taxonomy_info = classify_role_taxonomy(canonical.raw_text)
 
     responsibilities = [item.description for item in canonical.core_responsibilities]

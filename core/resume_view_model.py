@@ -445,9 +445,13 @@ def resolve_theme_template(
     try:
         import importlib.resources as pkg_resources
 
-        ref = pkg_resources.files("ApexResume").joinpath("themes", f"{theme_normalized}.html")
-        if ref.is_file():
-            return ref.read_text(encoding="utf-8")
+        for pkg_name in ("themes", "offerget"):
+            try:
+                ref = pkg_resources.files(pkg_name).joinpath(f"{theme_normalized}.html")
+                if ref.is_file():
+                    return ref.read_text(encoding="utf-8")
+            except Exception:
+                pass
     except Exception:
         pass
 

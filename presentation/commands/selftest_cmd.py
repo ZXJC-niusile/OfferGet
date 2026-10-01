@@ -31,7 +31,7 @@ def cmd_selftest(args=None):
     print("              OfferGet Unified Environment Self-Test             ")
     print("=" * 68)
     print(f"[1/11] Python Runtime: {sys.version.split()[0]} ({sys.platform})")
-    from ApexResume.core.render import BrowserRenderer
+    from core.browser_renderer import BrowserRenderer
     diag = BrowserRenderer.diagnose_browser()
     if diag["found"]:
         print(f"      ✓ Headless Browser Detected: {diag['browser_path']}")
@@ -158,19 +158,20 @@ def cmd_selftest(args=None):
     assert "NeurIPS 2024" in email_body or "陈老师" in email_body, "Outreach email must be generated"
     print(f"      ✓ Advisor Matcher verified: Overlap {match_score}%, High-EQ outreach email drafted")
 
-    # 10. ApexResume Selftest
-    print("\n[11/11] Invoking ApexResume Independent Subsystem Self-Test...")
-    apex_cli = PROJECT_ROOT / "ApexResume" / "cli.py"
-    if not apex_cli.exists():
-        emit_stderr(f"[-] Error: ApexResume not found at {apex_cli}")
+    # 11. Resume Subsystem Test
+    print("\n[11/11] Running Resume & Rendering Subsystem Test Suite...")
+    import unittest
+    loader = unittest.TestLoader()
+    suite = loader.loadTestsFromNames([
+        "tests.test_apex_audit",
+        "tests.test_apex_autofit",
+    ])
+    runner = unittest.TextTestRunner(verbosity=1)
+    result = runner.run(suite)
+    if not result.wasSuccessful():
+        emit_stderr("[-] Resume subsystem test suite failed!")
         sys.exit(1)
 
-    cmd = [sys.executable, str(apex_cli), "selftest"]
-    proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT / "ApexResume"))
-    if proc.returncode != 0:
-        emit_stderr("[-] ApexResume self-test failed!")
-        sys.exit(proc.returncode)
-
     print("\n" + "=" * 68)
-    print("🎉 ALL TESTS PASSED! OfferGet & ApexResume Dual-Track System Fully Verified!")
+    print("🎉 ALL TESTS PASSED! OfferGet Unified System Fully Verified!")
     print("=" * 68)

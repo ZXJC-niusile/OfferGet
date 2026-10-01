@@ -11,12 +11,6 @@ from typing import Any, Dict, List, Tuple
 
 __version__ = "1.0.0"
 
-# Extend core namespace path to seamlessly absorb ApexResume core modules
-from pathlib import Path
-_apex_core_dir = Path(__file__).resolve().parent.parent / "ApexResume" / "core"
-if _apex_core_dir.is_dir() and str(_apex_core_dir) not in __path__:
-    __path__.append(str(_apex_core_dir))
-
 # 1. Eager Core Infrastructure Imports
 from core import cli_helpers
 from core import registry
@@ -38,6 +32,19 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     # core.resume_builder
     "ResumeBuilder": ("core.resume_builder", "ResumeBuilder"),
     "audit_resume_quality": ("core.resume_builder", "audit_resume_quality"),
+
+    # core.browser_renderer
+    "BrowserRenderer": ("core.browser_renderer", "BrowserRenderer"),
+    "BrowserNotFoundError": ("core.browser_renderer", "BrowserNotFoundError"),
+
+    # core.autofit
+    "AutoFitEngine": ("core.autofit", "AutoFitEngine"),
+    "TUNING_LADDER": ("core.autofit", "TUNING_LADDER"),
+    "TuneProfile": ("core.autofit", "TuneProfile"),
+
+    # core.resume_auditor
+    "ResumeAuditor": ("core.resume_auditor", "ResumeAuditor"),
+    "Finding": ("core.resume_auditor", "Finding"),
 
     # core.layout_solver
     "LayoutConfig": ("core.layout_solver", "LayoutConfig"),
@@ -142,6 +149,11 @@ _SUBMODULES: set[str] = {
     "baoyan_auditor",
     "baoyan_pipeline",
     "resume_parser",
+    "browser_renderer",
+    "autofit",
+    "resume_auditor",
+    "render",
+    "audit",
 
     "cli_helpers",
     "defense_simulator",

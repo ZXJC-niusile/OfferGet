@@ -38,20 +38,9 @@ from core.profile_adapter import normalize_candidate_profile
 from core.academic_exporter import AcademicExporter
 from core.security_gate import validate_output_security
 
-try:
-    from ApexResume.core.render import BrowserRenderer
-    from ApexResume.core.autofit import AutoFitEngine
-except ImportError:
-    from core.render import BrowserRenderer  # type: ignore
-    from core.autofit import AutoFitEngine    # type: ignore
-
-try:
-    from ApexResume.core.audit import ResumeAuditor
-except ImportError:
-    try:
-        from core.audit import ResumeAuditor  # type: ignore
-    except ImportError:
-        ResumeAuditor = None  # type: ignore
+from core.browser_renderer import BrowserRenderer
+from core.autofit import AutoFitEngine
+from core.resume_auditor import ResumeAuditor
 
 
 from core.resume_view_model import (

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ApexResume Smart Auto-Fit Compaction Engine.
+"""OfferGet Smart Auto-Fit Compaction Engine (core/autofit.py).
 
 Automatically calculates overflow pixels and dynamically fine-tunes CSS tokens
 (line-height, margins, padding, font-size) along a safe ladder of adjustments
@@ -13,7 +13,7 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     try:
@@ -22,7 +22,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from .render import BrowserRenderer
+from core.browser_renderer import BrowserRenderer
 
 
 @dataclass
@@ -54,11 +54,9 @@ class AutoFitEngine:
 
     def apply_profile_to_html(self, html_content: str, profile: TuneProfile) -> str:
         """Applies layout tuning variables to HTML content."""
-        # If template uses CSS root variables:
         has_css_vars = ":root" in html_content and "--body-line-height" in html_content
 
         if has_css_vars:
-            # Replace CSS variables
             replacements = {
                 r"--body-line-height:\s*[^;]+;": f"--body-line-height: {profile.line_height};",
                 r"--page-padding-y:\s*[^;]+;": f"--page-padding-y: {profile.padding_y_mm}mm;",
@@ -72,7 +70,6 @@ class AutoFitEngine:
                 res = re.sub(pat, val, res)
             return res
 
-        # Fallback: Inject or update style block
         override_style = f"""
 <style id="autofit-override">
   :root {{
@@ -188,7 +185,7 @@ class AutoFitEngine:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python autofit.py <input.html> [output.html] [--pdf output.pdf]")
+        print("Usage: python -m core.autofit <input.html> [output.html] [--pdf output.pdf]")
         sys.exit(1)
 
     in_html = sys.argv[1]
@@ -202,6 +199,6 @@ if __name__ == "__main__":
 
     engine = AutoFitEngine()
     success, message, details = engine.fit_to_single_page(in_html, out_html, out_pdf)
-    print(f"\n[ApexResume AutoFit Report]")
+    print(f"\n[AutoFit Report]")
     print(message)
     sys.exit(0 if success else 1)

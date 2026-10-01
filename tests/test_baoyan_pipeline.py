@@ -460,7 +460,7 @@ class TestBaoyanPackageBuilder(unittest.TestCase):
     """Tests for Baoyan package manifest, personal statement, and outreach builders."""
 
     def test_validate_config_and_manifest(self):
-        from core.baoyan_package import BaoyanPackageBuilder, PackageManifest
+        from core.baoyan_pipeline import BaoyanPackageBuilder, PackageManifest
         builder = BaoyanPackageBuilder()
         valid, errors = builder.validate_config({})
         self.assertFalse(valid)
@@ -502,7 +502,7 @@ class TestBaoyanPackageBuilder(unittest.TestCase):
         self.assertEqual(len(manifest.toc_entries), 4)
 
     def test_personal_statement_builder(self):
-        from core.baoyan_package import PersonalStatementBuilder
+        from core.baoyan_pipeline import PersonalStatementBuilder
         builder = PersonalStatementBuilder()
         profile_data = {
             "name": "王五",
@@ -522,7 +522,7 @@ class TestBaoyanPackageBuilder(unittest.TestCase):
         self.assertGreater(draft.word_count, 150)
 
     def test_taocixin_outreach_builder(self):
-        from core.baoyan_package import TaocixinOutreachBuilder
+        from core.baoyan_pipeline import TaocixinOutreachBuilder
         builder = TaocixinOutreachBuilder()
         letter = builder.build_email(
             applicant_name="赵六",

@@ -50,7 +50,7 @@ from core.defense.simulator import DefenseSimulator
 from core.baoyan_auditor import audit_baoyan_entry, compress_baoyan_entry
 from core.baoyan_pipeline import validate_academic_profile, generate_camp_checklist, BaoyanPipeline
 from core.advisor_matcher import AdvisorMatcher
-from ApexResume.core.render import BrowserRenderer
+from core.browser_renderer import BrowserRenderer
 
 
 class TestE2EIndustryCareerPipeline(unittest.TestCase):

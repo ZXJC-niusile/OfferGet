@@ -384,7 +384,7 @@ class TestConsumerModuleIntegration(unittest.TestCase):
 
     def test_05_apex_audit_and_validator_coverage_check(self):
         """Verify full SSOT identity and parity across QualityRuleRegistry, ApexResume, Validator, ATS, and Baoyan."""
-        import ApexResume.core.audit as apex_audit
+        import core.resume_auditor as apex_audit
         import core.validator as validator
         import core.ats_checker as ats_checker
         import core.baoyan_auditor as baoyan_auditor

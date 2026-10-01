@@ -24,12 +24,8 @@ from core.resume_view_model import (
 from core.security_gate import validate_output_security
 from core.academic_exporter import AcademicExporter, escape_latex, escape_typst
 
-try:
-    from ApexResume.core.render import BrowserRenderer
-    from ApexResume.core.autofit import AutoFitEngine
-except ImportError:
-    from core.render import BrowserRenderer  # type: ignore
-    from core.autofit import AutoFitEngine    # type: ignore
+from core.browser_renderer import BrowserRenderer
+from core.autofit import AutoFitEngine
 
 
 class TestResumeViewModel(unittest.TestCase):

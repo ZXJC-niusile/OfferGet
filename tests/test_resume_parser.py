@@ -162,3 +162,63 @@ def test_cli_profile_parse():
         assert out_json.exists()
         saved = json.loads(out_json.read_text(encoding="utf-8"))
         assert saved["candidate"]["name"] == "李华"
+
+
+# ---------------------------------------------------------------------------
+# Robustness regression tests: encoding, binary interception, sub-headings
+# ---------------------------------------------------------------------------
+
+import pytest
+
+from core.resume_parser import ResumeTextParser
+
+
+def test_parse_gbk_encoded_txt_resume():
+    """Legacy Notepad/WPS GBK exports must not crash with UnicodeDecodeError."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        txt_file = Path(tmp_dir) / "resume.txt"
+        txt_file.write_bytes(
+            "王五\n13900000000\n## 教育背景\n清华大学 · 计算机 · 本科 | 2020.09 - 2024.06".encode("gbk")
+        )
+        profile = parse_resume_to_profile(txt_file)
+        assert profile["candidate"]["name"] == "王五"
+        assert profile["education"][0]["school"] == "清华大学"
+
+
+def test_parse_utf8_bom_resume():
+    """A leading BOM must be stripped so it cannot pollute name matching."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        txt_file = Path(tmp_dir) / "resume.txt"
+        txt_file.write_bytes("李四\nlisi@example.com".encode("utf-8-sig"))
+        profile = parse_resume_to_profile(txt_file)
+        assert profile["candidate"]["name"] == "李四"
+
+
+def test_parse_rejects_binary_resume_files():
+    """PDF/DOCX inputs must fail with a clear message instead of crashing or emitting garbage."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pdf_file = Path(tmp_dir) / "resume.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 fake")
+        with pytest.raises(ValueError, match="binary resume format"):
+            parse_resume_to_profile(pdf_file)
+
+        docx_file = Path(tmp_dir) / "resume.docx"
+        docx_file.write_bytes(b"PK fake")
+        with pytest.raises(ValueError, match="binary resume format"):
+            ResumeTextParser.from_file(docx_file)
+
+
+def test_parse_preserves_subheading_entries():
+    """### sub-headings inside sections carry entry data and must not be dropped."""
+    md = (
+        "# 赵六\n"
+        "## 教育背景\n"
+        "### 2020.09 - 2024.06 | 清华大学 | 计算机系 (学士)\n"
+        "## 荣誉奖项\n"
+        "### 2021 国家奖学金\n"
+    )
+    profile = ResumeTextParser(md).parse()
+    assert len(profile["education"]) == 1
+    assert profile["education"][0]["school"] == "清华大学"
+    assert profile["education"][0]["degree"] == "学士"
+    assert profile["honors"] == ["国家奖学金"]

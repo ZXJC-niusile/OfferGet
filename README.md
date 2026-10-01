@@ -278,12 +278,13 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | :--- | :--- | :--- |
 | `python cli.py profile parse <resume>` | `[--output <json>] [--json]` | 自动解析 Markdown 或纯文本简历并导出为结构化 Profile |
 
-### 2. 岗位画像与 JD 分析 (`offerget jd`)
+### 2. 岗位画像与 JD 分析 (`offerget jd` / `gap`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py jd decode <jd.txt>` | `[--json]` | 5 图层穿透解码 JD，输出技术栈、潜台词与技术红旗 |
 | `python cli.py jd match <jd.txt>` | `--profile <path> [--json]` | 计算候选人画像与 JD 的加权匹配分及雷达分析（支持 `.md` / `.json`） |
 | `python cli.py jd report <jd.txt>` | `--profile <path> [--output <file>]` | 生成中英双语战略战报 HTML |
+| `python cli.py gap roi <jd...>` | `--profile <path> [--json]` | 计算 Skill Gap ROI：针对擦边机会量化补齐每项技能缺口的投入回报 |
 
 ### 3. 简历审计与防伪质检 (`offerget ats` / `fact` / `diff`)
 | 命令 | 核心参数与选项 | 功能说明 |
@@ -364,7 +365,7 @@ OfferGet 追求航空级的代码可靠性与工业级稳健度：
 # 1. 环境依赖诊断
 python cli.py doctor
 
-# 2. 运行系统级统一自检流水线 (OfferGet 618 项 + ApexResume 34 项 = 652 项 100% 绿灯)
+# 2. 运行系统级统一自检流水线 (全量 658 项测试 100% 绿灯)
 python cli.py selftest
 
 # 3. 运行端到端全链路集成测试 (E2E Integration)

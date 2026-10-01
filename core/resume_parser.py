@@ -14,6 +14,35 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+# Binary document formats that cannot be parsed as resume text.
+BINARY_RESUME_SUFFIXES = {
+    ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip", ".rar", ".7z",
+}
+
+
+def _read_resume_file(p: Path) -> str:
+    """Read a resume text file with robust encoding handling.
+
+    Prefers UTF-8 (stripping a BOM when present, so leading ``\\ufeff`` cannot
+    pollute name/intent matching) and falls back to GB18030 for legacy Chinese
+    Windows exports (Notepad/WPS .txt files), so a GBK resume no longer crashes
+    with UnicodeDecodeError.
+    """
+    if p.suffix.lower() in BINARY_RESUME_SUFFIXES:
+        raise ValueError(
+            f"Unsupported binary resume format '{p.suffix}': {p.name}. "
+            "ResumeTextParser only ingests Markdown/plain-text (.md/.txt) or JSON profiles; "
+            "请先将 PDF/DOCX 简历转换为 Markdown 或 TXT 格式后重试。"
+        )
+    data = p.read_bytes()
+    for encoding in ("utf-8-sig", "gb18030"):
+        try:
+            return data.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return data.decode("utf-8", errors="replace")
+
 
 class ResumeTextParser:
     """Parses Markdown or plain-text resumes into structured OfferGet profile dicts."""
@@ -79,8 +108,7 @@ class ResumeTextParser:
         p = Path(file_path)
         if not p.exists():
             raise FileNotFoundError(f"Resume file not found: {file_path}")
-        text = p.read_text(encoding="utf-8")
-        return cls(text)
+        return cls(_read_resume_file(p))
 
     def parse(self) -> Dict[str, Any]:
         """Main entry point to parse raw text/markdown into standard profile dictionary."""
@@ -231,6 +259,21 @@ class ResumeTextParser:
     # -------------------------------------------------------------------------
     # Section Splitting
     # -------------------------------------------------------------------------
+    def _content_line(self, line: str) -> str:
+        """Normalize a section body line for content parsers.
+
+        Markdown sub-headings inside a section often carry real entry data
+        (e.g. ``### 2020.09 - 2024.06 | 清华大学``), so heading markers are
+        stripped instead of dropping the whole line. Recognized nested section
+        titles (``## 荣誉奖项``) are swallowed to avoid polluting entries.
+        """
+        cleaned = line.strip()
+        if cleaned.startswith("#"):
+            cleaned = re.sub(r"^#{1,6}\s*", "", cleaned).strip()
+            if not cleaned or self._is_section_header(cleaned):
+                return ""
+        return cleaned
+
     def _is_section_header(self, line: str) -> Optional[str]:
         """Checks if a line represents a known section header; returns section name or None."""
         cleaned = re.sub(r"^[#\*\s\-【\[\(]+|[】\]\)\*\s]+$", "", line).strip()
@@ -269,8 +312,8 @@ class ResumeTextParser:
         """Parse lines in education section into list of education entries."""
         entries: List[Dict[str, Any]] = []
         for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
+            stripped = self._content_line(line)
+            if not stripped:
                 continue
 
             # Check if line contains school, major, degree, or time
@@ -336,8 +379,8 @@ class ResumeTextParser:
         }
 
         for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
+            stripped = self._content_line(line)
+            if not stripped:
                 continue
 
             cleaned = re.sub(r"^[-*•\d\.\s]+", "", stripped).strip()
@@ -491,8 +534,8 @@ class ResumeTextParser:
         """Parse list-based sections like Honors, Awards, Publications."""
         items: List[str] = []
         for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
+            stripped = self._content_line(line)
+            if not stripped:
                 continue
             cleaned = re.sub(r"^[-*•\d\.\s]+", "", stripped).strip()
             if cleaned:
@@ -503,8 +546,8 @@ class ResumeTextParser:
         """Parse narrative/summary section into a consolidated paragraph."""
         paragraphs: List[str] = []
         for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
+            stripped = self._content_line(line)
+            if not stripped:
                 continue
             cleaned = re.sub(r"^[-*•\s]+", "", stripped).strip()
             if cleaned:
@@ -517,7 +560,7 @@ def parse_resume_to_profile(text_or_path: Union[str, Path]) -> Dict[str, Any]:
     if isinstance(text_or_path, Path) or (isinstance(text_or_path, str) and os.path.exists(text_or_path)):
         p = Path(text_or_path)
         if p.is_file():
-            text = p.read_text(encoding="utf-8")
+            text = _read_resume_file(p)
             # If it's already JSON, parse directly
             if p.suffix.lower() == ".json":
                 try:

@@ -33,20 +33,7 @@ class Finding:
 
 
 # Import SSOT QualityRuleRegistry from OfferGet
-try:
-    from core.registry import QualityRuleRegistry
-except ImportError:
-    import importlib.util
-    _offerget_root = Path(__file__).resolve().parent.parent.parent
-    _registry_path = _offerget_root / "core" / "registry.py"
-    if _registry_path.exists():
-        spec = importlib.util.spec_from_file_location("offerget_core_registry", str(_registry_path))
-        _mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_mod)
-        QualityRuleRegistry = _mod.QualityRuleRegistry
-    else:
-        raise
-
+from core.registry import QualityRuleRegistry
 ROLE_RANKS = QualityRuleRegistry.ROLE_RANKS
 VERB_HIERARCHY = QualityRuleRegistry.VERB_HIERARCHY
 STRONG_VERBS_THRESHOLD = QualityRuleRegistry.STRONG_VERBS_THRESHOLD

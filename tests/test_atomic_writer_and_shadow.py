@@ -26,7 +26,7 @@ from core.atomic_writer import (
     is_sharing_violation_error,
     safe_save_file,
 )
-from ApexResume.core.render import BrowserRenderer
+from core.browser_renderer import BrowserRenderer
 from core.academic_exporter import AcademicExporter
 
 

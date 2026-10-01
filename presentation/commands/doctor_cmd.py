@@ -10,7 +10,7 @@ import sys
 from typing import Dict, Any
 
 from core.paths import get_project_root
-from ApexResume.core.render import BrowserRenderer
+from core.browser_renderer import BrowserRenderer
 
 
 def check_python_environment() -> Dict[str, Any]:

@@ -174,13 +174,137 @@ def cmd_resume_build(args_list=None):
     print("=" * 68)
 
 
-def cmd_resume_passthrough(unknown_args):
-    """Passes through any `offerget resume ...` command directly to ApexResume/cli.py."""
-    apex_cli = PROJECT_ROOT / "ApexResume" / "cli.py"
-    if not apex_cli.exists():
-        emit_stderr(f"[-] Error: ApexResume submodule not found at {apex_cli}")
+def cmd_resume_render(args_list):
+    """Render HTML resume to A4 PDF."""
+    parser = argparse.ArgumentParser(prog="offerget resume render", description="Render HTML resume to A4 PDF")
+    parser.add_argument("input_html", help="Path to input HTML file")
+    parser.add_argument("output_pdf", help="Path to output PDF file")
+    parser.add_argument("--measure", action="store_true", help="Measure scrollHeight and overflow pixels")
+    args = parser.parse_args(args_list)
+
+    from core.browser_renderer import BrowserRenderer
+
+    renderer = BrowserRenderer()
+    print(f"[OfferGet] Detected Browser: {renderer.browser_path}")
+    if args.measure:
+        h, overflow = renderer.measure_overflow(args.input_html)
+        print(f"[OfferGet] Document Height: {h}px (A4 Target: 1123px, Overflow: {overflow:+d}px)")
+
+    success, pages, msg = renderer.render_pdf(args.input_html, args.output_pdf)
+    if success:
+        print(f"[OfferGet SUCCESS] {msg}")
+        if pages > 1:
+            print(f"[OfferGet WARNING] Page count is {pages} (>1). Run 'offerget resume autofit {args.input_html}' to compress into 1 page.")
+            sys.exit(2)
+        sys.exit(0)
+    else:
+        emit_stderr(f"[OfferGet ERROR] {msg}")
         sys.exit(1)
 
-    cmd = [sys.executable, str(apex_cli)] + unknown_args
-    proc = subprocess.run(cmd, cwd=str(PROJECT_ROOT / "ApexResume"))
-    sys.exit(proc.returncode)
+
+def cmd_resume_autofit(args_list):
+    """Auto-fit HTML resume to single page."""
+    parser = argparse.ArgumentParser(prog="offerget resume autofit", description="Auto-fit HTML resume to single page")
+    parser.add_argument("input_html", help="Path to input HTML file")
+    parser.add_argument("output_html", nargs="?", default=None, help="Path to output HTML file")
+    parser.add_argument("--pdf", default=None, help="Optional output PDF path")
+    args = parser.parse_args(args_list)
+
+    from core.autofit import AutoFitEngine
+
+    engine = AutoFitEngine()
+    print("[OfferGet] Analyzing document geometry for single-page compaction...")
+    success, msg, details = engine.fit_to_single_page(
+        input_html_path=args.input_html,
+        output_html_path=args.output_html,
+        output_pdf_path=args.pdf,
+    )
+    print(f"\n[OfferGet AutoFit Result]\n{msg}")
+    if success:
+        if args.output_html:
+            print(f"[OfferGet] Saved compacted HTML: {args.output_html}")
+        if args.pdf:
+            print(f"[OfferGet] Rendered single-page PDF: {args.pdf}")
+        sys.exit(0)
+    else:
+        sys.exit(1)
+
+
+def cmd_resume_audit(args_list):
+    """Audit resume metrics, verbs, and anti-inflation."""
+    parser = argparse.ArgumentParser(prog="offerget resume audit", description="Audit resume metrics, verbs, and anti-inflation")
+    parser.add_argument("--claims", default=None, help="Path to atomic claims JSON")
+    parser.add_argument("--html", default=None, help="Path to rendered resume HTML")
+    parser.add_argument("--source", default=None, help="Path to raw source text draft for sandbox verification")
+    args = parser.parse_args(args_list)
+
+    from core.resume_auditor import ResumeAuditor
+
+    auditor = ResumeAuditor()
+    if not args.claims and not args.html:
+        emit_stderr("[OfferGet ERROR] Must specify at least one of --claims or --html to audit.")
+        sys.exit(1)
+
+    if args.claims:
+        print(f"[OfferGet] Auditing atomic claims in: {args.claims}")
+        auditor.audit_claims_file(args.claims)
+
+    if args.html:
+        print(f"[OfferGet] Auditing static HTML quality in: {args.html}")
+        auditor.audit_html_file(args.html)
+
+    if args.source:
+        if not args.html:
+            emit_stderr("[OfferGet ERROR] --source requires --html to be specified for sandbox verification.")
+            sys.exit(1)
+        print(f"[OfferGet] Running source draft sandbox verification: {args.html} vs {args.source}")
+        auditor.audit_source_sandbox(args.html, args.source)
+
+    res = auditor.summary()
+    print("\n========================================================")
+    print("            OfferGet Resume Verification Summary        ")
+    print("========================================================")
+    status_str = "PASSED" if res["passed"] else "FAILED (REVISION REQUIRED)"
+    print(f"Status:   {status_str}")
+    print(f"Findings: Critical={res['critical_count']} | Warning={res['warning_count']} | Info={res['info_count']}")
+
+    if any(res.get("depth_distribution", {}).values()) or any(res.get("result_distribution", {}).values()):
+        depths = ", ".join(f"{k}:{v}" for k, v in res.get("depth_distribution", {}).items() if v > 0) or "None"
+        results = ", ".join(f"{k}:{v}" for k, v in res.get("result_distribution", {}).items() if v > 0) or "None"
+        print(f"Tiers:    DataDepth=[{depths}] | ResultEvidence=[{results}]")
+    print()
+
+    for idx, f in enumerate(res["findings"], 1):
+        sev = f["severity"].upper()
+        cat = f["category"].upper()
+        prefix = "❌" if sev == "CRITICAL" else ("⚠️" if sev == "WARNING" else "ℹ️")
+        print(f"{prefix} [{idx}] [{sev}] [{cat}] {f['message']}")
+
+    sys.exit(0 if res["passed"] else 1)
+
+
+def cmd_resume_dispatch(args_list):
+    """Dispatches `offerget resume <subcommand>` to native handlers."""
+    if not args_list:
+        print("Usage: offerget resume <build|render|autofit|audit|selftest> [options]")
+        sys.exit(1)
+
+    subcmd = args_list[0]
+    rest = args_list[1:]
+    if subcmd == "build":
+        cmd_resume_build(rest)
+    elif subcmd == "render":
+        cmd_resume_render(rest)
+    elif subcmd == "autofit":
+        cmd_resume_autofit(rest)
+    elif subcmd == "audit":
+        cmd_resume_audit(rest)
+    elif subcmd == "selftest":
+        from presentation.commands.selftest_cmd import cmd_selftest
+        cmd_selftest()
+    else:
+        emit_stderr(f"[-] Unknown resume subcommand: {subcmd}")
+        sys.exit(1)
+
+
+cmd_resume_passthrough = cmd_resume_dispatch

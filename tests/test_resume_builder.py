@@ -12,10 +12,7 @@ from pathlib import Path
 from core.resume_builder import ResumeBuilder, audit_resume_quality
 from core.resume_view_model import ResumeViewModel
 
-try:
-    from ApexResume.core.render import BrowserRenderer
-except ImportError:
-    from core.render import BrowserRenderer  # type: ignore
+from core.browser_renderer import BrowserRenderer
 
 
 class FastBrowserRenderer(BrowserRenderer):

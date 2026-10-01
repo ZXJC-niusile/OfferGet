@@ -312,16 +312,16 @@ python cli.py baoyan advisor examples/sample_advisor.json --profile examples/aca
 # 17. 保研/推免全周期申请动态材料清单生成
 python cli.py baoyan checklist --profile examples/academic_profile.json --stage 夏令营 --track 直博
 
-# 18. 调用 ApexResume 简历子系统：确定性防伪审计
-python cli.py resume audit --claims ApexResume/examples/claims.json --html ApexResume/examples/sample-resume.html
+# 18. 简历子系统：确定性防伪审计
+python cli.py resume audit --claims examples/claims.json --html examples/sample-resume.html
 
-# 19. 调用 ApexResume 简历子系统：AutoFit 像素级单页压页与 PDF 导出
-python cli.py resume autofit ApexResume/examples/sample-resume.html output_fit.html --pdf my_resume.pdf
+# 19. 简历子系统：AutoFit 像素级单页压页与 PDF 导出
+python cli.py resume autofit examples/sample-resume.html output_fit.html --pdf my_resume.pdf
 
 # 20. 环境诊断与无头浏览器依赖检查 (Doctor)
 python cli.py doctor
 
-# 21. 全局统一环境与自动化测试套件自检（OfferGet 624 项 + ApexResume 34 项，共 658 项 100% 绿灯）
+# 21. 全局统一环境与自动化测试套件自检（共 658 项测试 100% 绿灯）
 python cli.py selftest
 
 
