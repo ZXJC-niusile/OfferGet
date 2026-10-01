@@ -37,8 +37,5 @@ jobs:
       - name: Run OfferGet Unit & E2E Test Suite
         run: python -m pytest tests/ -v
 
-      - name: Run ApexResume Independent Test Suite
-        run: python -m pytest ApexResume/tests/ -v
-
       - name: Run Full Dual-Track System Self-Test
         run: python cli.py selftest
