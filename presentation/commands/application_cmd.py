@@ -10,7 +10,7 @@ from core.application_tracker import (
     FEEDBACK_TAGS,
     OutcomeRecord,
 )
-from core.cli_helpers import emit_json, emit_stderr, fail_cli, open_application_store
+from core.cli_helpers import emit_json, fail_cli, open_application_store
 
 
 def _store(args) -> ApplicationStore:

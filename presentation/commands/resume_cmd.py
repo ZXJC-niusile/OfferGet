@@ -6,7 +6,6 @@ OfferGet Resume Command Handlers:
 
 from __future__ import annotations
 
-import os
 import sys
 import argparse
 import subprocess

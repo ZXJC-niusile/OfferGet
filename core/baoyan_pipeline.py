@@ -11,9 +11,8 @@ summer camp / re-examination checklists.
 from __future__ import annotations
 
 import json
-import os
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path

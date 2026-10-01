@@ -4,7 +4,7 @@ Data models and type definitions for JD Analyst subsystem.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional
 
 
 class ThresholdType(str, Enum):

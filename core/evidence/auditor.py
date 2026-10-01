@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import datetime
 import re
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Union
 
 from core.evidence.extractor import ClaimExtractor
 from core.evidence.metrics import MetricRecalculator
@@ -19,15 +19,12 @@ from core.evidence.models import (
     AuditReport,
     AuditSource,
     AuditTimelineItem,
-    MetricCheck,
 )
 from core.evidence.open_source import OpenSourceAuditor
-from core.evidence.schema import validate_report_data
 from core.profile_adapter import (
     ProfileContext,
     ProfileEvidenceIndex,
     build_profile_context,
-    build_profile_evidence_index,
 )
 
 

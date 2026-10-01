@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
-
-from core.paths import get_project_root
 
 from core.cli_helpers import (
     read_text,

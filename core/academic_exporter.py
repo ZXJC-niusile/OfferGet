@@ -18,13 +18,12 @@ Exports CandidateProfile SSOT to Native Academic LaTeX and Typst Resumes:
 from __future__ import annotations
 
 import base64
-import os
 import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 
 def _image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional[str]:

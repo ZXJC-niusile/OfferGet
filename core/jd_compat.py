@@ -10,7 +10,7 @@ import json
 import re
 from dataclasses import asdict
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Union
 
 from core.profile_adapter import (
     ProfileContext,
@@ -21,7 +21,6 @@ from core.registry import TaxonomyRegistry
 from core.jd_analyst.decoder import JDDecoder
 from core.jd_analyst.matcher import JDMatcher
 from core.jd_analyst.models import (
-    BusinessPainPoint,
     CandidateProfile,
     CoreResponsibility,
     CoreSkill,

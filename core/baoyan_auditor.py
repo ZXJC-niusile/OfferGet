@@ -7,7 +7,7 @@ OfferGet native academic integrity verification and multi-tier word budget optim
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -23,8 +23,6 @@ from core.lexicon import (
     FORBIDDEN_DOUBLE_HYPHEN,
     BAOYAN_LEAD_ROLES as LEAD_ROLES,
     BAOYAN_CORE_ROLES as CORE_ROLES,
-    BAOYAN_LEAD_OR_CORE_ROLES as LEAD_OR_CORE_ROLES,
-    BAOYAN_NON_LEAD_ROLES as NON_LEAD_ROLES,
     BAOYAN_ESCALATED_VERBS as ESCALATED_VERBS,
     BAOYAN_LEADER_ONLY_VERBS as LEADER_ONLY_VERBS,
     SIMULATION_TERMS,

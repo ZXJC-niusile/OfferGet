@@ -22,8 +22,7 @@ from __future__ import annotations
 
 import html
 import re
-import urllib.parse
-from typing import Any, List, Optional, Union
+from typing import Any, List
 
 __all__ = [
     "escape_html_text",

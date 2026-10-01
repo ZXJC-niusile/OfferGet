@@ -5,10 +5,8 @@ OfferGet Unified Environment Self-Test Command Handler:
 
 from __future__ import annotations
 
-import os
 import sys
 import subprocess
-from pathlib import Path
 
 from core.paths import get_project_root
 PROJECT_ROOT = get_project_root()

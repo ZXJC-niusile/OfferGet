@@ -7,7 +7,7 @@ and audit report data models conforming to OfferGet evidence specifications.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 
 # Allowed string literals matching OfferGet report schema

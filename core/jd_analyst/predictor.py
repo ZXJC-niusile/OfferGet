@@ -3,7 +3,7 @@ Predictor: Interview probability calculator & Top 20 interview questions predict
 """
 
 import re
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict
 from .models import (
     DecodedJD,
     MatcherResult,
@@ -13,7 +13,6 @@ from .models import (
     QuestionCategory,
     InterviewQuestion,
     PredictionResult,
-    TechDomain,
     GapState,
 )
 

@@ -3,7 +3,7 @@ JD Matcher: Weighted matching with hard threshold veto, 5-state gap matrix, and 
 """
 
 import re
-from typing import List, Dict, Set, Tuple, Optional
+from typing import List, Dict, Set, Tuple
 from .models import (
     DecodedJD,
     CandidateProfile,

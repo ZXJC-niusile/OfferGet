@@ -21,13 +21,12 @@ import logging
 import os
 import shutil
 import sys
-import tempfile
 import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 

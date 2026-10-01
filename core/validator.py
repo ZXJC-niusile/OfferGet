@@ -5,7 +5,7 @@ Audits HTML reports for bilingual twin parity and checks career narratives for A
 
 import os
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 
 from core.registry import QualityRuleRegistry

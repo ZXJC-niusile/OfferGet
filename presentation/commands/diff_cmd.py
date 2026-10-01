@@ -7,10 +7,9 @@ metric scope, credential fidelity, and adaptive layout actions.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from core.cli_helpers import (
     load_json,

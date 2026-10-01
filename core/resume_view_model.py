@@ -16,7 +16,6 @@ OfferGet native strongly-typed resume view model and decoupled renderers:
 from __future__ import annotations
 
 import base64
-import copy
 import re
 from dataclasses import dataclass, field
 from pathlib import Path

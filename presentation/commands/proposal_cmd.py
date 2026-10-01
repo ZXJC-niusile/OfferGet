@@ -7,7 +7,7 @@ from pathlib import Path
 
 from core.application_tracker import ApplicationStore, ResumeVersion
 from core.artifacts import inspect_artifacts
-from core.cli_helpers import emit_json, emit_stderr, fail_cli, load_json, open_application_store, read_text, write_json
+from core.cli_helpers import emit_json, fail_cli, load_json, open_application_store, read_text, write_json
 from core.material_proposal import apply_material_proposal, jd_fingerprint, profile_fingerprint
 from services.resume_service import ResumeService
 

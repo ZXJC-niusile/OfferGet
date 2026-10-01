@@ -6,7 +6,6 @@ Provides clean I/O separation, directory creation, and structured JSON output.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union

@@ -22,10 +22,9 @@ Eliminates naive, destructive layout compaction patterns:
 
 from __future__ import annotations
 
-import math
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Physical and Typography Constants (Standard 96 DPI screen/browser rendering)
 PT_TO_PX: float = 96.0 / 72.0          # 1.333333... px per pt

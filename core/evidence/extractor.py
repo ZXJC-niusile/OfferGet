@@ -6,11 +6,10 @@ Decomposes resume text, bullets, and structured experience into atomic AuditClai
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from core.evidence.models import AuditClaim, MetricCheck
 from core.evidence.open_source import OpenSourceAuditor
-from core.registry import MetricPatternRegistry, QualityRuleRegistry
 
 
 ROLE_TERMS_PATTERN = re.compile(

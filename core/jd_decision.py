@@ -10,17 +10,14 @@ Provides:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from core.jd_analyst.models import (
     CandidateProfile,
-    ChannelProbability,
-    ChannelType,
     DecodedJD,
     MatcherResult,
-    ProbabilityForecast,
 )
 from core.jd_analyst.decoder import JDDecoder
 from core.jd_analyst.predictor import InterviewProbabilityCalculator

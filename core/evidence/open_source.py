@@ -11,7 +11,7 @@ import re
 from enum import IntEnum
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.evidence.models import AuditClaim, AuditPattern
+from core.evidence.models import AuditPattern
 
 
 class OpenSourceContributionLevel(IntEnum):

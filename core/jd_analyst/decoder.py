@@ -3,7 +3,7 @@ JD Decoder: 5-Layer Deep Semantic Decoding for AI/LLM/Agent/Algorithm Roles.
 """
 
 import re
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Tuple, Any
 from .models import (
     DecodedJD,
     HardThreshold,

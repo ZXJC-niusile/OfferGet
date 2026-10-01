@@ -6,9 +6,7 @@ to prevent AI hallucination, metric inflation, and ungrounded claims.
 
 from __future__ import annotations
 
-import copy
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union

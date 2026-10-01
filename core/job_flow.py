@@ -16,9 +16,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
-import os
 import re
-import tempfile
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -27,7 +25,7 @@ from core.paths import get_project_root
 
 PROJECT_ROOT = get_project_root()
 
-from core.interview_debrief import InterviewDebriefEngine, QuestionDiagnosis
+from core.interview_debrief import InterviewDebriefEngine
 from core.jd_compat import profile_to_canonical
 from core.fact_guard import FactVerificationGuard
 from core.asu_modeler import AsuModeler
@@ -38,7 +36,6 @@ from core.profile_adapter import (
     build_profile_context,
     claim_ref,
     find_evidence,
-    iter_profile_claims,
 )
 from core.evidence.graph import EvidenceGraph, EvidenceNodeState
 from core.application_tracker import create_evidence_snapshot

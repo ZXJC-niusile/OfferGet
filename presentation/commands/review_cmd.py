@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 import sys
-from pathlib import Path
 
 from core.cli_helpers import (
     read_text,

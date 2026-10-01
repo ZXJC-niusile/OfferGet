@@ -20,7 +20,7 @@ Provides 4 orthogonal 100-point rubrics for enterprise hiring in China:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Optional
 
 from core.jd_analyst.models import CandidateProfile, DecodedJD, MatcherResult
 from core.registry import MetricPatternRegistry, QualityRuleRegistry

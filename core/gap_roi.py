@@ -14,18 +14,14 @@ from __future__ import annotations
 import os
 import re
 import json
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from core.jd_analyst.decoder import JDDecoder
 from core.jd_analyst.matcher import JDMatcher
 from core.jd_analyst.models import (
-    DecodedJD,
     CandidateProfile,
     GapState,
-    GapItem,
     SkillImportance,
-    TechDomain,
 )
 
 

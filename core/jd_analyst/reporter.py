@@ -7,7 +7,6 @@ Strictly zero external dependencies, robust CSS tab interactions, and
 
 import html as html_lib
 import os
-from typing import Dict, List, Optional
 
 from .models import (
     CandidateProfile,

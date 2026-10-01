@@ -26,7 +26,7 @@ import json
 import re
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 from core.artifacts import write_text_atomic
 from core.fingerprints import content_fingerprint

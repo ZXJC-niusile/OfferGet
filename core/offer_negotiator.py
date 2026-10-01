@@ -7,11 +7,8 @@ salary consistency auditing, and high-EQ tactical counter-offer generation.
 
 from __future__ import annotations
 
-import os
 import re
-import json
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 COMPLIANCE_DISCLAIMER = (
     "提示：以上条款分析基于常见劳动人事合规实践，可能存在一定合规风险，建议结合录用协议原文咨询专业劳动法执业律师或人事合规顾问。"

@@ -8,13 +8,12 @@ and strictly XSS-neutralized HTML Offer Strategy Reports.
 
 from __future__ import annotations
 
-import os
 import re
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from core.jd_compat import DecodedJDCompat, to_canonical
+from core.jd_compat import DecodedJDCompat
 from core.security_gate import escape_html_text, validate_output_security
 from core.validator import validate_bilingual_html
 from core.jd_analyst.models import (
@@ -34,7 +33,7 @@ from core.jd_analyst.models import (
 from core.jd_analyst.predictor import JDPredictor
 from core.jd_analyst.redflags import RedFlagDetector
 from core.jd_analyst.reporter import OfferStrategyReporter
-from core.paths import get_project_root, get_template_path
+from core.paths import get_project_root
 
 PROJECT_ROOT = get_project_root()
 

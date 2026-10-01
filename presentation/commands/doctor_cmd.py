@@ -6,10 +6,7 @@ and example assets with actionable cross-platform repair guidance.
 
 from __future__ import annotations
 
-import os
 import sys
-import shutil
-from pathlib import Path
 from typing import Dict, Any
 
 from core.paths import get_project_root
