@@ -15,15 +15,12 @@ Rooting out the AI resume rewrite black-box dilemma:
 from __future__ import annotations
 
 import json
-import os
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
-from core.registry import QualityRuleRegistry
+from typing import Any, Dict, List, Optional, Union
 
 
 # ---------------------------------------------------------------------------

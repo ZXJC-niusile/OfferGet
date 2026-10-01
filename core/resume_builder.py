@@ -21,11 +21,8 @@ Central orchestrator for multi-template resume generation, compiling, and compac
 
 from __future__ import annotations
 
-import base64
 import copy
-import hashlib
 import json
-import os
 import re
 import tempfile
 from pathlib import Path
@@ -39,12 +36,7 @@ PROJECT_ROOT = get_project_root()
 
 from core.profile_adapter import normalize_candidate_profile
 from core.academic_exporter import AcademicExporter
-from core.security_gate import (
-    escape_html_text,
-    escape_html_attribute,
-    sanitize_url,
-    validate_output_security,
-)
+from core.security_gate import validate_output_security
 
 try:
     from ApexResume.core.render import BrowserRenderer
@@ -66,7 +58,6 @@ from core.resume_view_model import (
     ResumeViewModel,
     HtmlThemeRenderer,
     AtsPlainRenderer,
-    _image_to_base64_data_uri,
 )
 
 

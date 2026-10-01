@@ -9,12 +9,11 @@ import copy
 import json
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from core.profile_adapter import (
     ProfileContext,
     ProfileEvidenceIndex,
-    build_profile_context,
     build_profile_evidence_index,
 )
 from core.lexicon import (
@@ -24,8 +23,6 @@ from core.lexicon import (
     WEAK_ACTION_VERBS_ZH,
     QUANTIFIED_PATTERNS,
     AI_BUZZWORDS_LEXICON,
-    VERB_HIERARCHY,
-    ROLE_RANKS,
     STANDARD_SECTIONS,
     FORMATTING_RISKS,
     DEFENSE_GUIDE_TEMPLATES,

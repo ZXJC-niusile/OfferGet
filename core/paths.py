@@ -6,10 +6,7 @@ across local dev checkouts, editable installations, and packaged runtimes.
 
 from __future__ import annotations
 
-import os
-import sys
 from pathlib import Path
-from typing import Optional, Union
 
 # Robust project root determination
 _CURRENT_FILE = Path(__file__).resolve()
