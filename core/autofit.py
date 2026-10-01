@@ -118,29 +118,41 @@ class AutoFitEngine:
         in_path = Path(input_html_path).resolve()
         raw_html = in_path.read_text(encoding="utf-8")
 
+        temp_files_to_clean: set[Path] = set()
+
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
             test_pdf = Path(tmp_pdf.name)
+            temp_files_to_clean.add(test_pdf)
 
         with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as tmp_html:
             test_html = Path(tmp_html.name)
+            temp_files_to_clean.add(test_html)
+
+        actual_pdf_path: Optional[Path] = None
 
         try:
             # First check step 0
             test_html.write_text(raw_html, encoding="utf-8")
-            ok, initial_pages, initial_msg = self.renderer.render_pdf(test_html, test_pdf)
+            render_res = self.renderer.render_pdf(test_html, test_pdf)
+            ok, initial_pages, initial_msg = render_res[0], render_res[1], render_res[2]
+            source_pdf = Path(getattr(render_res, "final_path", None) or test_pdf)
+            temp_files_to_clean.add(source_pdf)
 
             if not ok:
                 return False, f"Initial render failed: {initial_msg}", {"step": 0, "error": initial_msg}
+
+            if not source_pdf.is_file() or source_pdf.stat().st_size == 0:
+                err = "Initial render failed: Rendered PDF is missing or empty"
+                return False, err, {"step": 0, "error": err}
 
             if initial_pages == 1:
                 # Already fits perfectly
                 actual_html_path = None
                 if output_html_path:
                     actual_html_path = write_text_atomic(raw_html, output_html_path)
-                actual_pdf_path = None
                 is_shadow = False
                 if output_pdf_path:
-                    save_res = atomic_writer.safe_save_file(output_pdf_path, test_pdf, allow_shadow=True)
+                    save_res = atomic_writer.safe_save_file(output_pdf_path, source_pdf, allow_shadow=True)
                     if not save_res.success:
                         return False, f"Failed to save output PDF: {save_res.error_message}", {
                             "step": 0, "pages": 1, "error": save_res.error_message
@@ -166,18 +178,25 @@ class AutoFitEngine:
                 tuned_html = self.apply_profile_to_html(raw_html, profile)
                 test_html.write_text(tuned_html, encoding="utf-8")
 
-                ok, pages, step_msg = self.renderer.render_pdf(test_html, test_pdf)
+                render_res = self.renderer.render_pdf(test_html, test_pdf)
+                ok, pages, step_msg = render_res[0], render_res[1], render_res[2]
+                step_source_pdf = Path(getattr(render_res, "final_path", None) or test_pdf)
+                temp_files_to_clean.add(step_source_pdf)
                 last_pages = pages
                 last_msg = step_msg
+
                 if ok and pages == 1:
+                    if not step_source_pdf.is_file() or step_source_pdf.stat().st_size == 0:
+                        err = f"Rendered PDF for step {step_idx} is missing or empty"
+                        return False, err, {"step": step_idx, "pages": 1, "error": err}
+
                     # Success!
                     actual_html_path = None
                     if output_html_path:
                         actual_html_path = write_text_atomic(tuned_html, output_html_path)
-                    actual_pdf_path = None
                     is_shadow = False
                     if output_pdf_path:
-                        save_res = atomic_writer.safe_save_file(output_pdf_path, test_pdf, allow_shadow=True)
+                        save_res = atomic_writer.safe_save_file(output_pdf_path, step_source_pdf, allow_shadow=True)
                         if not save_res.success:
                             return False, f"Failed to save output PDF: {save_res.error_message}", {
                                 "step": step_idx, "pages": 1, "error": save_res.error_message
@@ -218,8 +237,15 @@ class AutoFitEngine:
             }
 
         finally:
-            test_pdf.unlink(missing_ok=True)
-            test_html.unlink(missing_ok=True)
+            for p in temp_files_to_clean:
+                try:
+                    p_obj = Path(p)
+                    if actual_pdf_path and p_obj.resolve() == Path(actual_pdf_path).resolve():
+                        continue
+                    if p_obj.exists():
+                        p_obj.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
