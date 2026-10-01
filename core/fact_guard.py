@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 # ---------------------------------------------------------------------------
 # Technology & Version Whitelist & Inflation Lexicons (Centralized SSOT)
 # ---------------------------------------------------------------------------
+from core.cli_helpers import load_json
 from core.profile_adapter import (
     ProfileEvidenceIndex,
     build_profile_evidence_index,
@@ -180,19 +181,7 @@ class FactVerificationGuard:
             self.evidence_index = master_profile
             self.master_profile = master_profile.profile
         elif isinstance(master_profile, (str, Path)):
-            is_file = False
-            try:
-                path = Path(master_profile)
-                if path.exists() and path.is_file():
-                    is_file = True
-            except (OSError, ValueError):
-                is_file = False
-
-            if is_file:
-                with open(path, "r", encoding="utf-8") as f:
-                    raw_dict = json.load(f)
-            else:
-                raw_dict = json.loads(str(master_profile))
+            raw_dict = load_json(master_profile)
             self.profile_context = build_profile_context(raw_dict)
             self.master_profile = self.profile_context.normalized_profile
             self.evidence_index = self.profile_context.evidence_index

@@ -14,6 +14,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.cli_helpers import load_json_or_text
+
 
 class InputMode(str, Enum):
     JD_ONLY = "JD_ONLY"
@@ -253,33 +255,18 @@ def parse_input(
 
     # If it's a Path or str
     if isinstance(input_val, (str, Path)):
-        p = Path(input_val)
-        try:
-            if p.exists() and p.is_file():
-                text = p.read_text(encoding="utf-8")
-                if p.suffix.lower() == ".json" or expected_type in ("json", "dict"):
-                    try:
-                        return json.loads(text)
-                    except json.JSONDecodeError:
-                        return text
-                stripped = text.strip()
-                if (stripped.startswith("{") and stripped.endswith("}")) or (stripped.startswith("[") and stripped.endswith("]")):
-                    try:
-                        return json.loads(stripped)
-                    except Exception:
-                        pass
-                return text
-        except (OSError, ValueError):
-            pass
-
-        # Raw string handling
-        s = str(input_val).strip()
-        if expected_type in ("json", "dict") or ((s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]"))):
+        if expected_type in ("text",):
+            _, text = load_json_or_text(input_val)
+            return text
+        parsed, text = load_json_or_text(input_val)
+        if parsed is not None:
+            return parsed
+        if expected_type in ("json", "dict"):
             try:
-                return json.loads(s)
+                return json.loads(text)
             except Exception:
                 pass
-        return str(input_val)
+        return text
 
     return input_val
 

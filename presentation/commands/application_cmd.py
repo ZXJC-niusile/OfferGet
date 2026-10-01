@@ -122,19 +122,21 @@ def cmd_application_insights(args) -> None:
 
 
 def cmd_application_versions(args) -> None:
+    from services.resume_service import ResumeVersionService
+
     with _store(args) as store:
-        records = [record.to_dict() for record in store.list_resume_versions(args.application_id)]
+        service = ResumeVersionService(store.db_path)
+        records = [record.to_dict() for record in service.list(args.application_id)]
     emit_json(records) if args.json else print(json.dumps(records, ensure_ascii=False, indent=2))
 
 
 def cmd_application_version_diff(args) -> None:
-    from core.resume_version_diff import compare_resume_versions
+    from services.resume_service import ResumeVersionService
 
     with _store(args) as store:
-        before = store.get_resume_version(args.before_version_id)
-        after = store.get_resume_version(args.after_version_id)
-    if before is None or after is None:
-        missing = args.before_version_id if before is None else args.after_version_id
-        fail_cli(args, "resume_version_not_found", f"Resume version not found: {missing}")
-    payload = compare_resume_versions(before, after)
+        service = ResumeVersionService(store.db_path)
+        try:
+            payload = service.compare(args.before_version_id, args.after_version_id)
+        except KeyError as exc:
+            fail_cli(args, "resume_version_not_found", f"Resume version not found: {exc.args[0]}")
     emit_json(payload) if args.json else print(json.dumps(payload, ensure_ascii=False, indent=2))

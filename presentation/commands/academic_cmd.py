@@ -43,11 +43,13 @@ def cmd_defense_simulate(args):
             sys.exit(1)
         profile_data = load_profile(args.profile)
 
-    simulator = DefenseSimulator(profile_context=profile_data)
-    result = simulator.simulate(
-        project_input=target_data,
+    service = AcademicService()
+    result = service.simulate_defense(
+        target_project_or_text=target_data,
+        candidate_profile=profile_data,
         intensity=args.intensity or "开始挑刺",
-        scenario=args.scenario or "技术 / 简历面试"
+        scenario=args.scenario or "技术 / 简历面试",
+        output_format="raw",
     )
 
     if args.output:

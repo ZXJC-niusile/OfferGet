@@ -6,6 +6,7 @@ Provides clean I/O separation, directory creation, and structured JSON output.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -63,7 +64,7 @@ def read_text(path_or_str: str, must_exist: bool = False) -> str:
     return path_or_str
 
 
-def load_json(path_or_str: str) -> Dict[str, Any]:
+def load_json(path_or_str: Union[str, Path, os.PathLike[str]]) -> Dict[str, Any]:
     """
     Load and parse JSON from a file path or raw JSON string.
 
@@ -71,9 +72,10 @@ def load_json(path_or_str: str) -> Dict[str, Any]:
         FileNotFoundError: If path_or_str is a path that does not exist.
         json.JSONDecodeError / ValueError: If content cannot be parsed as valid JSON.
     """
-    if not isinstance(path_or_str, str):
-        raise TypeError(f"Expected str, got {type(path_or_str).__name__}")
+    if not isinstance(path_or_str, (str, Path, os.PathLike)):
+        raise TypeError(f"Expected str or Path, got {type(path_or_str).__name__}")
 
+    raw_str = str(path_or_str)
     p = Path(path_or_str)
     try:
         if p.exists() and p.is_file():
@@ -82,19 +84,19 @@ def load_json(path_or_str: str) -> Dict[str, Any]:
     except OSError:
         pass
 
-    s = path_or_str.strip()
+    s = raw_str.strip()
     if s.startswith(("{", "[")):
         return json.loads(s)
 
     # If it has path separators, .json extension, or is a single-line missing token
-    has_newline = "\n" in path_or_str or "\r" in path_or_str
-    if "/" in path_or_str or "\\" in path_or_str or p.suffix.lower() == ".json" or not has_newline:
+    has_newline = "\n" in raw_str or "\r" in raw_str
+    if "/" in raw_str or "\\" in raw_str or p.suffix.lower() == ".json" or not has_newline:
         raise FileNotFoundError(f"JSON file not found: {path_or_str}")
 
     return json.loads(s)
 
 
-def load_json_or_text(path_or_str: str) -> Tuple[Optional[Dict[str, Any]], str]:
+def load_json_or_text(path_or_str: Union[str, Path, os.PathLike[str]]) -> Tuple[Optional[Dict[str, Any]], str]:
     """
     Read input which may be a file or raw string, and attempt to parse as JSON.
 
@@ -103,9 +105,10 @@ def load_json_or_text(path_or_str: str) -> Tuple[Optional[Dict[str, Any]], str]:
         If JSON parsing succeeds and result is a dict (or list), parsed_json is returned.
         Otherwise, parsed_json is None and raw_text contains the UTF-8 text.
     """
-    if not isinstance(path_or_str, str):
-        raise TypeError(f"Expected str, got {type(path_or_str).__name__}")
+    if not isinstance(path_or_str, (str, Path, os.PathLike)):
+        raise TypeError(f"Expected str or Path, got {type(path_or_str).__name__}")
 
+    raw_str = str(path_or_str)
     p = Path(path_or_str)
     is_file = False
     try:
@@ -113,9 +116,9 @@ def load_json_or_text(path_or_str: str) -> Tuple[Optional[Dict[str, Any]], str]:
             text = p.read_text(encoding="utf-8")
             is_file = True
         else:
-            text = path_or_str
+            text = raw_str
     except OSError:
-        text = path_or_str
+        text = raw_str
 
     stripped = text.strip()
     parsed_json = None

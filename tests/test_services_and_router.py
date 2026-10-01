@@ -334,14 +334,39 @@ class TestServices(unittest.TestCase):
             self.assertIn("王工", content)
             self.assertIn("大模型强化学习专家", content)
 
+            # Canonical report generation
+            canon_file = os.path.join(tmp_dir, "canonical_report.html")
+            from core.jd_analyst.decoder import JDDecoder
+            from core.jd_analyst.matcher import JDMatcher
+            from core.jd_analyst.models import CandidateProfile
+            from core.jd_analyst.predictor import JDPredictor
+            from core.jd_analyst.redflags import RedFlagDetector
+
+            c_jd = JDDecoder().decode("职位：算法工程师\n要求：精通 Python 与 PyTorch。")
+            c_cand = CandidateProfile(name="Alice", skills=["Python", "PyTorch"])
+            c_match = JDMatcher().match(c_jd, c_cand)
+            c_rf = RedFlagDetector().detect(c_jd)
+            c_pred = JDPredictor().predict(jd=c_jd, matcher_result=c_match)
+            canon_path = report_service.generate_canonical_report(
+                jd=c_jd,
+                candidate=c_cand,
+                matcher=c_match,
+                redflags=c_rf,
+                prediction=c_pred,
+                output_path=canon_file,
+            )
+            self.assertTrue(os.path.exists(canon_path))
+            self.assertIn("Alice", Path(canon_path).read_text(encoding="utf-8"))
+
     def test_new_services_m10_m14(self):
-        """Test newly converged services (OfferService.compare_offers, CareerReviewService.debrief_real_interview, CommunicationService, AcademicService, ApplicationGuardService)."""
+        """Test newly converged services (OfferService.compare_offers, CareerReviewService.debrief_real_interview, CommunicationService, AcademicService, ApplicationGuardService, ResumeVersionService)."""
         from core.services import (
             OfferService,
             CareerReviewService,
             CommunicationService,
             AcademicService,
             ApplicationGuardService,
+            ResumeVersionService,
         )
 
         # 1. OfferService.compare_offers
@@ -361,7 +386,7 @@ class TestServices(unittest.TestCase):
         )
         self.assertEqual(checklist.total_turns, 1)
 
-        # 3. CommunicationService
+        # 3. CommunicationService - test all generated correspondence types
         comm_service = CommunicationService()
         letter = comm_service.follow_up(
             candidate_name="李明",
@@ -372,10 +397,97 @@ class TestServices(unittest.TestCase):
         )
         self.assertIn("智谱AI", letter.body_text)
 
-        # 4. AcademicService
+        cold = comm_service.cold_outreach(
+            candidate_name="李明",
+            recipient_name="张总",
+            target_company="智谱AI",
+            target_role="架构师",
+            core_skills=["Python", "PyTorch"],
+            key_achievements=["主导千卡训练集群容灾"],
+        )
+        self.assertIn("架构师", cold.subject)
+
+        cover = comm_service.cover_letter(
+            candidate_name="李明",
+            company_name="智谱AI",
+            role_name="架构师",
+            company_mission_hook="大模型推理系统研发",
+            matching_experiences=["主导千卡分布式训练与推理优化", "高并发网关中间件架构落地"],
+            contact_info="email@example.com / 13800000000",
+        )
+        self.assertIn("智谱AI", cover.subject)
+
+        resched = comm_service.reschedule(
+            candidate_name="李明",
+            interviewer_name="HR",
+            role_name="架构师",
+            original_datetime="周五下午3点",
+            conflict_reason="突发线上技术答辩",
+            available_slots=["下周一下午2点", "下周二上午10点"],
+        )
+        self.assertIn("改期", resched.subject)
+
+        ty = comm_service.thank_you(
+            candidate_name="李明",
+            interviewer_name="李老师",
+            role_name="架构师",
+            round_name="技术终面",
+            discussed_topic="分布式KV缓存淘汰策略",
+            candidate_insight="结合W-TinyLFU可降低极端倾斜负载下的失效率",
+        )
+        self.assertIn("感谢", ty.subject)
+
+        neg = comm_service.salary_negotiation(
+            candidate_name="李明",
+            recruiter_name="HR",
+            company_name="智谱AI",
+            role_name="架构师",
+            current_offer_package="年薪 60 万",
+            competing_offer_summary="手握另一家头部大厂头部评级 Offer",
+            target_adjustment="底薪上浮 15%",
+            professional_rationale="核心大模型算子优化经验",
+        )
+        self.assertIn("薪酬", neg.subject)
+
+        dec = comm_service.decline_offer(
+            candidate_name="李明",
+            recruiter_name="HR",
+            company_name="智谱AI",
+            role_name="架构师",
+            decline_reason="个人职业发展方向聚焦于大模型基础设施",
+        )
+        self.assertIn("录用沟通", dec.subject)
+
+        boss = comm_service.boss_intro(
+            candidate_name="李明",
+            target_role="架构师",
+            experience_summary="7年大模型基础设施研发经验",
+            core_actions=["主导千卡训练集群调度", "算子深度优化"],
+            verified_outcomes=["显存利用率达85%", "吞吐提升40%"],
+        )
+        self.assertIn("李明", boss.subject)
+
+        hh = comm_service.headhunter_intro(
+            candidate_name="李明",
+            current_or_recent_title="资深后端架构师",
+            years_of_experience="7年",
+            core_focus_areas=["分布式存储", "高并发网关", "大模型推理"],
+            representative_impact=["从0到1主导核心微服务重构", "千卡集群故障自动化恢复"],
+            target_job_preferences="大厂技术专家或独角兽基础架构Leader",
+        )
+        self.assertIn("李明", hh.body_text)
+
+        # 4. AcademicService - test bibtex and defense simulation
         acad_service = AcademicService()
         pubs = acad_service.parse_bibtex("@article{test2025, title={AI for Science}, author={Zhang, San}, journal={Nature}, year={2025}}")
         self.assertEqual(len(pubs), 1)
+
+        sim_dict = acad_service.simulate_defense("分布式中间件系统研发", intensity="先热个身", output_format="dict")
+        self.assertIsInstance(sim_dict, dict)
+        self.assertIn("summary_stats", sim_dict)
+
+        sim_raw = acad_service.simulate_defense("分布式中间件系统研发", intensity="先热个身", output_format="raw")
+        self.assertTrue(hasattr(sim_raw, "to_markdown"))
 
         # 5. ApplicationGuardService
         guard_service = ApplicationGuardService()
@@ -388,6 +500,47 @@ class TestServices(unittest.TestCase):
             history=[],
         )
         self.assertFalse(res.has_collision)
+
+        # 6. ResumeVersionService
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            db_path = Path(tmp_dir) / "test_versions.db"
+            with ResumeVersionService(db_path) as ver_service:
+                from core.application_tracker import ApplicationRecord, AppStatus, ResumeVersion
+                ver_service.store.save(ApplicationRecord(
+                    id="app_123",
+                    target_name="示例公司",
+                    role_or_track="架构师",
+                    status=AppStatus.APPLIED,
+                ))
+                r1 = ResumeVersion(
+                    version_id="ver_001",
+                    application_id="app_123",
+                    proposal_id=None,
+                    profile_hash="hash_abc",
+                    theme="modern-navy",
+                    label="v1",
+                )
+                r2 = ResumeVersion(
+                    version_id="ver_002",
+                    application_id="app_123",
+                    proposal_id=None,
+                    profile_hash="hash_def",
+                    theme="classic-tech",
+                    label="v2",
+                )
+                ver_service.store.save_resume_version(r1)
+                ver_service.store.save_resume_version(r2)
+
+                versions = ver_service.list("app_123")
+                self.assertEqual(len(versions), 2)
+                got_ver = ver_service.get("ver_001")
+                self.assertIsNotNone(got_ver)
+                self.assertEqual(got_ver.version_id, "ver_001")
+
+                diff = ver_service.compare("ver_001", "ver_002")
+                self.assertEqual(diff["before_version_id"], "ver_001")
+                self.assertEqual(diff["after_version_id"], "ver_002")
+                self.assertTrue(diff["profile_content_changed"])
 
     def test_lazy_services_compatibility_matrix(self):
         """Test PEP 562 lazy loading compatibility across core.services symbols and command handlers."""

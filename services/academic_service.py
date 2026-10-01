@@ -41,6 +41,14 @@ class CommunicationService:
         from core.communication_kit import CareerCommunicationKit
         return CareerCommunicationKit.decline_offer(*args, **kwargs)
 
+    def boss_intro(self, *args: Any, **kwargs: Any) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.boss_intro(*args, **kwargs)
+
+    def headhunter_intro(self, *args: Any, **kwargs: Any) -> Any:
+        from core.communication_kit import CareerCommunicationKit
+        return CareerCommunicationKit.headhunter_intro(*args, **kwargs)
+
 
 class AcademicService:
     """Domain service for academic publication ingestion and camp presentation planning."""
@@ -94,13 +102,23 @@ class AcademicService:
         target_project_or_text: Any,
         candidate_profile: Optional[Any] = None,
         intensity: str = "开始挑刺",
+        scenario: str = "技术 / 简历面试",
+        output_format: str = "dict",
     ) -> Any:
         """Simulates project defense interrogation."""
-        from core.defense.simulator import simulate_project_defense
+        from core.defense.simulator import DefenseSimulator, simulate_project_defense
+        if output_format == "raw":
+            return DefenseSimulator(profile_context=candidate_profile).simulate(
+                project_input=target_project_or_text,
+                intensity=intensity,
+                scenario=scenario,
+            )
         return simulate_project_defense(
             target_project_or_text,
-            candidate_profile=candidate_profile,
+            profile_context=candidate_profile,
             intensity=intensity,
+            scenario=scenario,
+            output_format=output_format,
         )
 
 

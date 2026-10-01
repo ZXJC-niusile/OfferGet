@@ -11,6 +11,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from core.cli_helpers import load_json_or_text
 from core.profile_adapter import (
     ProfileContext,
     ProfileEvidenceIndex,
@@ -101,30 +102,10 @@ def extract_bullets_from_input(profile_or_text: Any) -> Tuple[List[str], Dict[st
 
     # 4. Handle string (text, filepath, or json string)
     text_content = str(profile_or_text).strip()
-
-    # Check if it's a file path
-    if os.path.exists(text_content):
-        try:
-            with open(text_content, "r", encoding="utf-8") as f:
-                content = f.read()
-            if text_content.endswith(".json") or content.strip().startswith("{"):
-                try:
-                    loaded = json.loads(content)
-                    return extract_bullets_from_input(loaded)
-                except Exception:
-                    text_content = content
-            else:
-                text_content = content
-        except Exception:
-            pass
-
-    # Check if it's a raw JSON string
-    if text_content.startswith("{") and text_content.endswith("}"):
-        try:
-            loaded = json.loads(text_content)
-            return extract_bullets_from_input(loaded)
-        except Exception:
-            pass
+    loaded_json, content = load_json_or_text(text_content)
+    if isinstance(loaded_json, (dict, list)):
+        return extract_bullets_from_input(loaded_json)
+    text_content = content
 
     # Treat as plain text / markdown / HTML
     meta["raw_text"] = text_content
@@ -723,19 +704,10 @@ def extract_candidate_skills(
             index = profile_data.evidence_index
         elif isinstance(profile_data, dict):
             index = build_profile_evidence_index(profile_data)
-        elif isinstance(profile_data, str) and os.path.exists(profile_data):
-            try:
-                with open(profile_data, "r", encoding="utf-8") as f:
-                    content = f.read()
-                if profile_data.endswith(".json") or content.strip().startswith("{"):
-                    try:
-                        loaded = json.loads(content)
-                        if isinstance(loaded, dict):
-                            index = build_profile_evidence_index(loaded)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+        elif isinstance(profile_data, (str, os.PathLike)):
+            loaded, _ = load_json_or_text(str(profile_data))
+            if isinstance(loaded, dict):
+                index = build_profile_evidence_index(loaded)
 
     if index is not None:
         for item in index.skills:

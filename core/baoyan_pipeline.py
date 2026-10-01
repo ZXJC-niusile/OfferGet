@@ -18,6 +18,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from core.cli_helpers import load_json
 from core.profile_adapter import ProfileContext, build_profile_context
 from core.registry import QualityRuleRegistry
 
@@ -125,9 +126,10 @@ def _load_profile(data: Union[Dict[str, Any], str, Path]) -> Dict[str, Any]:
         return data
     path = Path(data)
     if not path.exists():
+        if isinstance(data, str) and (data.strip().startswith("{") or data.strip().startswith("[")):
+            return json.loads(data)
         raise FileNotFoundError(f"Profile path not found: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
+    return load_json(path)
 
 
 def validate_academic_profile(profile_data: Union[Dict[str, Any], str, Path]) -> Dict[str, Any]:

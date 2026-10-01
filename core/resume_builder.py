@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
 from core.artifacts import write_text_atomic
+from core.cli_helpers import load_json
 from core.fingerprints import content_fingerprint
 from core.paths import get_project_root, get_theme_dir
 
@@ -105,8 +106,7 @@ class ResumeBuilder:
             if not p_path.exists():
                 raise FileNotFoundError(f"Candidate profile not found at {p_path}")
             if p_path.suffix.lower() == ".json":
-                with open(p_path, "r", encoding="utf-8") as f:
-                    raw_data = json.load(f)
+                raw_data = load_json(p_path)
             else:
                 from core.resume_parser import parse_resume_to_profile
                 raw_data = parse_resume_to_profile(p_path)

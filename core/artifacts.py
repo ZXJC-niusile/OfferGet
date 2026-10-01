@@ -9,11 +9,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import tempfile
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+from core.atomic_writer import safe_save_file
 
 PathLike = Union[str, os.PathLike[str]]
 
@@ -28,41 +29,28 @@ def ensure_parent(path: PathLike) -> Path:
 def write_text_atomic(content: str, path: PathLike) -> str:
     """Write UTF-8 text atomically and return the target path."""
     target = ensure_parent(path)
-    _atomic_write(target, content.encode("utf-8"))
-    return str(target)
+    res = safe_save_file(target, content.encode("utf-8") if isinstance(content, str) else content)
+    if not res.success:
+        raise OSError(res.error_message or f"Failed to atomically write {target}")
+    return str(res.final_path)
 
 
 def write_json_atomic(data: Any, path: PathLike) -> str:
     """Serialize JSON using the repository defaults and write it atomically."""
     payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
     target = ensure_parent(path)
-    _atomic_write(target, payload)
-    return str(target)
+    res = safe_save_file(target, payload)
+    if not res.success:
+        raise OSError(res.error_message or f"Failed to atomically write {target}")
+    return str(res.final_path)
 
 
-def _atomic_write(target: Path, payload: bytes) -> None:
-    """Replace a target through a same-directory temporary file."""
-    temp_name: Optional[str] = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="wb",
-            prefix=f".{target.name}.",
-            suffix=".tmp",
-            dir=str(target.parent),
-            delete=False,
-        ) as handle:
-            temp_name = handle.name
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_name, target)
-        temp_name = None
-    finally:
-        if temp_name:
-            try:
-                os.unlink(temp_name)
-            except FileNotFoundError:
-                pass
+def _atomic_write(target: Path, payload: bytes) -> Path:
+    """Replace a target through atomic shadow write delegation."""
+    res = safe_save_file(target, payload)
+    if not res.success:
+        raise OSError(res.error_message or f"Failed to atomically write {target}")
+    return res.final_path
 
 
 def require_file(path: PathLike, label: str = "File") -> Path:

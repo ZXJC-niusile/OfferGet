@@ -27,7 +27,7 @@ OfferGet 涵盖**工业界技术求职战略**与**国内顶级高校学术推�
 │ (Industry Job-Hunt OS)   │ 5 图层穿透、黑话与红旗   │ 单事实源、Mini-RFC、压页 │ 4 维评分、三态台账、Diff │ 双向可逆脱敏、指标抗漂移  │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────────────────┼───────────────────────────┤
 │ Track 2: 学术推免与复试  │   Module 5: Offer & Track│  Module 6: Academic Baoyan│ Module 7: Review Loop    │  Full Traceability & Guard│
-│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 662 项全量单测 100% 自动化│
+│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 663 项全量单测 100% 自动化│
 └──────────────────────────┴──────────────────────────┴──────────────────────────┴──────────────────────────┴───────────────────────────┘
 
 ```
@@ -321,7 +321,7 @@ python cli.py resume autofit examples/sample-resume.html output_fit.html --pdf m
 # 20. 环境诊断与无头浏览器依赖检查 (Doctor)
 python cli.py doctor
 
-# 21. 全局统一环境与自动化测试套件自检（共 662 项测试 100% 绿灯）
+# 21. 全局统一环境与自动化测试套件自检（共 663 项测试 100% 绿灯）
 python cli.py selftest
 
 
@@ -479,7 +479,12 @@ invoke_subagent(
 | [hidden-signals-lexicon.md](references/hidden-signals-lexicon.md) | **32 项黑话潜台词词典**：大厂话术对照真相与候选人应对战术。 |
 | [red-flags-guide.md](references/red-flags-guide.md) | **技术陷阱与反问求证指南**：5 大致命红旗与 15 道黄金面试反问探针。 |
 | [anti-ai-slop.md](references/anti-ai-slop.md) | **反 AI 写作指纹规范**：四大特征拦截、硬指标双重锚定与 CAR 事实因果重构。 |
+| [sentence-patterns.md](references/sentence-patterns.md) | **简历战术句式库**：STAR+CAR 因果句型、动词阶梯与工程成果句式。 |
+| [inflation-patterns.md](references/inflation-patterns.md) | **虚标膨胀特征词典与防伪审查基准**：高频虚高修饰词、算力欺诈识别与真实锚定法则。 |
 | [interview-questions-bank.md](references/interview-questions-bank.md) | **大厂大模型面试 Top 20 深度题库**：3D 并行、MLA、MoE 路由、GRPO、PagedAttention、投机采样等。 |
 | [claim-ledger-schema.md](references/claim-ledger-schema.md) | **原子主张事实台账规范**：4 维解耦、JSON Schema、证据定级与置信状态机。 |
 | [methods-11.md](references/methods-11.md) | **ApexResume 战术手法 11 讲**：Mini-RFC、参数威慑、动词定级、因果反事实基线。 |
 | [evidence-rules.md](references/evidence-rules.md) | **凭证等级与核验法则**：Level A/B/C/D 证据链支撑体系。 |
+| [jd-matrix-framework.md](references/jd-matrix-framework.md) | **岗位匹配度矩阵分析框架**：多维权重打分模型与漏斗型筛选题库。 |
+| [ai-agent-lexicon.md](references/ai-agent-lexicon.md) | **AI Agent / LLM 核心技术栈与架构分级词典**：从底层算子到上层 Agent 工作流标准化术语。 |
+| [hr-pitch-guide.md](references/hr-pitch-guide.md) | **HR / 业务 Leader 破冰与三段式沟通话术指南**：高情商自荐、改期协调与薪酬谈判话术模板。 |

@@ -32,6 +32,8 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
+from core.cli_helpers import load_json, load_json_or_text
+
 
 # ---------------------------------------------------------------------------
 # Enums and Constants
@@ -392,22 +394,10 @@ class DefenseSimulator:
 
     def load_profile(self, profile_context: Union[dict, str, Path]) -> None:
         """Loads and indexes the candidate's Single Source of Truth (SSOT) profile."""
-        if isinstance(profile_context, (str, Path)):
-            is_file = False
-            try:
-                path = Path(profile_context)
-                if path.exists() and path.is_file():
-                    is_file = True
-            except (OSError, ValueError):
-                is_file = False
-
-            if is_file:
-                with open(path, "r", encoding="utf-8") as f:
-                    self.profile_data = json.load(f)
-            else:
-                self.profile_data = json.loads(str(profile_context))
-        elif isinstance(profile_context, dict):
+        if isinstance(profile_context, dict):
             self.profile_data = copy.deepcopy(profile_context)
+        elif isinstance(profile_context, (str, Path)):
+            self.profile_data = copy.deepcopy(load_json(profile_context))
         else:
             raise TypeError(f"Expected dict, str, or Path, got {type(profile_context).__name__}")
 
@@ -542,29 +532,10 @@ class DefenseSimulator:
         positioning = ""
         raw_claims: List[Dict[str, Any]] = []
 
-        if isinstance(project_input, str):
-            # Check if it's a file path
-            is_file = False
-            try:
-                path = Path(project_input)
-                if path.exists() and path.is_file():
-                    is_file = True
-            except (OSError, ValueError):
-                is_file = False
-
-            if is_file:
-                try:
-                    with open(path, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    try:
-                        parsed = json.loads(content)
-                        return self._normalize_project_input(parsed, override_name)
-                    except json.JSONDecodeError:
-                        text = content
-                except Exception:
-                    text = project_input
-            else:
-                text = project_input
+        if isinstance(project_input, (str, Path)):
+            parsed, text = load_json_or_text(project_input)
+            if isinstance(parsed, (dict, list)):
+                return self._normalize_project_input(parsed, override_name)
 
             # Extract project title or use override
             lines = [line.strip() for line in text.splitlines() if line.strip()]

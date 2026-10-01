@@ -5,9 +5,10 @@ Strictly zero external dependencies, robust CSS tab interactions, and
 100% compliant with OfferGet Bilingual Twin parity and Security Gate audits.
 """
 
-import html as html_lib
 import os
 
+from core.artifacts import write_text_atomic
+from core.security_gate import escape_html_text as _esc
 from .models import (
     CandidateProfile,
     DecodedJD,
@@ -16,13 +17,6 @@ from .models import (
     PredictionResult,
     RedFlagReport,
 )
-
-
-def _esc(val: object) -> str:
-    """Safely escapes text for inclusion in HTML."""
-    if val is None:
-        return ""
-    return html_lib.escape(str(val), quote=True)
 
 
 class OfferStrategyReporter:
@@ -559,10 +553,7 @@ class OfferStrategyReporter:
     ) -> str:
         """Generate and save the HTML report to a file."""
         html_content = self.generate_html(jd, candidate, matcher, redflags, prediction)
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        return output_path
+        return write_text_atomic(html_content, output_path)
 
     def _render_gauge_svg(self, pct: float, color: str) -> str:
         """Render a circular SVG score gauge."""
