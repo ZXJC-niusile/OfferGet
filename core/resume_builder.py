@@ -64,6 +64,15 @@ def _compute_profile_fingerprint(profile_data: Any) -> str:
         return str(id(payload))
 
 
+def _parse_render_result(res: Any, default_pdf: Path) -> Tuple[bool, int, str, Path]:
+    """Extracts (ok, pages, msg, final_path) from RenderResult or plain 3-tuple."""
+    ok = res.ok if hasattr(res, "ok") else bool(res[0])
+    pages = res.pages if hasattr(res, "pages") else int(res[1])
+    msg = res.msg if hasattr(res, "msg") else str(res[2])
+    final_path = getattr(res, "final_path", None) or default_pdf
+    return ok, pages, msg, Path(final_path)
+
+
 class ResumeBuilder:
     """Unified engine for building all 6 resume variants from candidate profile data."""
 
@@ -310,11 +319,14 @@ class ResumeBuilder:
                 )
                 if not success:
                     # Fallback write and render
-                    write_text_atomic(populated_html, html_path)
-                    pdf_path.unlink(missing_ok=True)
-                    render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
-                    if not render_ok or not pdf_path.exists():
+                    actual_html = write_text_atomic(populated_html, html_path)
+                    render_res = self.renderer.render_pdf(actual_html, pdf_path)
+                    render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_path)
+                    if not render_ok:
                         raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
+                else:
+                    actual_pdf = Path(details.get("final_pdf_path", pdf_path))
+                    actual_html = Path(details.get("final_html_path", html_path))
             finally:
                 if tmp_path.exists():
                     try:
@@ -322,13 +334,13 @@ class ResumeBuilder:
                     except Exception:
                         pass
         else:
-            write_text_atomic(populated_html, html_path)
-            pdf_path.unlink(missing_ok=True)
-            render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
-            if not render_ok or not pdf_path.exists():
+            actual_html = write_text_atomic(populated_html, html_path)
+            render_res = self.renderer.render_pdf(actual_html, pdf_path)
+            render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_path)
+            if not render_ok:
                 raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
 
-        result_paths: Dict[str, Path] = {"html": html_path, "pdf": pdf_path}
+        result_paths: Dict[str, Path] = {"html": Path(actual_html), "pdf": Path(actual_pdf)}
 
         if diff_ledger:
             effective_baseline = baseline_profile or self.raw_profile or prof
@@ -405,13 +417,13 @@ class ResumeBuilder:
         html_path = out_dir / "resume_ats_plain.html"
         write_text_atomic(html_content, html_path)
 
-        pdf_path = out_dir / "resume_ats_plain.pdf"
-        pdf_path.unlink(missing_ok=True)
-        render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
-        if not render_ok or not pdf_path.exists():
+        pdf_target = out_dir / "resume_ats_plain.pdf"
+        render_res = self.renderer.render_pdf(html_path, pdf_target)
+        render_ok, _, render_msg, pdf_path = _parse_render_result(render_res, pdf_target)
+        if not render_ok:
             raise RuntimeError(f"Failed to render ATS plain PDF: {render_msg}")
 
-        return {"md": md_path, "html": html_path, "pdf": pdf_path}
+        return {"md": Path(md_path), "html": Path(html_path), "pdf": Path(pdf_path)}
 
     def build_academic_latex(
         self,
@@ -457,15 +469,18 @@ class ResumeBuilder:
         html_path = out_dir / "resume_academic_latex.html"
         write_text_atomic(html_src, html_path)
 
-        pdf_path = out_dir / "resume_academic_latex.pdf"
+        pdf_target = out_dir / "resume_academic_latex.pdf"
         # Try native LaTeX compile first; if unavailable, render the LaTeX-style HTML
-        if not self.academic_exporter.compile_latex(tex_path, pdf_path):
-            pdf_path.unlink(missing_ok=True)
-            render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
-            if not render_ok or not pdf_path.exists():
+        if not self.academic_exporter.compile_latex(tex_path, pdf_target):
+            render_res = self.renderer.render_pdf(html_path, pdf_target)
+            render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
+            if not render_ok:
                 raise RuntimeError(f"Failed to render academic LaTeX PDF: {render_msg}")
+            pdf_path = actual_pdf
+        else:
+            pdf_path = pdf_target
 
-        return {"tex": tex_path, "html": html_path, "pdf": pdf_path}
+        return {"tex": Path(tex_path), "html": Path(html_path), "pdf": Path(pdf_path)}
 
     def build_academic_typst(
         self,
@@ -496,9 +511,9 @@ class ResumeBuilder:
         typ_path = out_dir / "resume_academic_typst.typ"
         write_text_atomic(typ_src, typ_path)
 
-        pdf_path = out_dir / "resume_academic_typst.pdf"
-        compiled = self.academic_exporter.compile_typst(typ_path, pdf_path)
-        if not compiled or not pdf_path.exists():
+        pdf_target = out_dir / "resume_academic_typst.pdf"
+        compiled = self.academic_exporter.compile_typst(typ_path, pdf_target)
+        if not compiled or not pdf_target.exists():
             html_src = self.academic_exporter.generate_latex_html_preview(
                 vm,
                 reserve_photo=photo,
@@ -507,12 +522,15 @@ class ResumeBuilder:
             )
             html_path = out_dir / "resume_academic_typst.html"
             write_text_atomic(html_src, html_path)
-            pdf_path.unlink(missing_ok=True)
-            render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
-            if not render_ok or not pdf_path.exists():
+            render_res = self.renderer.render_pdf(html_path, pdf_target)
+            render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
+            if not render_ok:
                 raise RuntimeError(f"Failed to render academic Typst PDF: {render_msg}")
+            pdf_path = actual_pdf
+        else:
+            pdf_path = pdf_target
 
-        return {"typ": typ_path, "pdf": pdf_path}
+        return {"typ": Path(typ_path), "pdf": Path(pdf_path)}
 
     def build_theme(
         self,

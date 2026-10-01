@@ -90,16 +90,20 @@ class TestAutoFitEngine(unittest.TestCase):
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as pf:
             out_pdf = pf.name
 
+        final_out_pdf = out_pdf
         try:
             success, msg, details = self.engine.fit_to_single_page(in_path, output_pdf_path=out_pdf)
-            self.assertTrue(success)
+            self.assertTrue(success, f"msg={msg}; details={details}")
             self.assertEqual(details["pages"], 1)
             self.assertEqual(details["step"], 0)
-            self.assertTrue(Path(out_pdf).exists())
-            self.assertGreater(Path(out_pdf).stat().st_size, 0)
+            final_out_pdf = details.get("final_pdf_path", out_pdf)
+            self.assertTrue(Path(final_out_pdf).exists())
+            self.assertGreater(Path(final_out_pdf).stat().st_size, 0)
         finally:
             Path(in_path).unlink(missing_ok=True)
             Path(out_pdf).unlink(missing_ok=True)
+            if final_out_pdf != out_pdf:
+                Path(final_out_pdf).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

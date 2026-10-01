@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Tests-674%20passed%20100%25%20green-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-679%20passed-brightgreen.svg" alt="Tests">
   <a href="https://github.com/ZXJC-niusile/OfferGet/actions"><img src="https://github.com/ZXJC-niusile/OfferGet/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Themes-9%20HTML%20%2B%20LaTeX%20%2B%20Typst%20%2B%20DOCX-purple.svg" alt="Themes">
@@ -31,7 +31,7 @@
 - [📋 CLI 命令完整速查手册 (Cheat Sheet)](#-cli-命令完整速查手册-cheat-sheet)
 - [📦 预置开箱测试用例索引 (`examples/`)](#-预置开箱测试用例索引-examples)
 - [📚 战略方法论与基准词典 (`references/`)](#-战略方法论与基准词典-references)
-- [🧪 质量工程与全量自检 (674 项测试)](#-质量工程与全量自检-674-项测试)
+- [🧪 质量工程与全量自检 (679 项测试)](#-质量工程与全量自检-679-项测试)
 - [🔒 核心设计哲学与安全护栏](#-核心设计哲学与安全护栏)
 
 ---
@@ -337,7 +337,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py doctor` | *(无参数)* | 检查 Python 运行环境、无头浏览器与可选排版工具 |
-| `python cli.py selftest` | *(无参数)* | 执行全系统 674 项自动化测试套件自检 |
+| `python cli.py selftest` | *(无参数)* | 执行全系统 679 项自动化测试套件自检 |
 | `python cli.py rendercv import <in>` | `--output profile.json` | 将 RenderCV JSON 导入转换为 OfferGet Profile |
 | `python cli.py rendercv export <in>` | `--output rendercv.json` | 将 OfferGet Profile 导出为标准 RenderCV JSON |
 
@@ -389,7 +389,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 
 ---
 
-## 🧪 质量工程与全量自检 (674 项测试)
+## 🧪 质量工程与全量自检 (679 项测试)
 
 
 OfferGet 追求航空级的代码可靠性与工业级稳健度：
@@ -398,7 +398,7 @@ OfferGet 追求航空级的代码可靠性与工业级稳健度：
 # 1. 环境依赖诊断
 python cli.py doctor
 
-# 2. 运行系统级统一自检流水线 (全量 674 项测试 100% 绿灯)
+# 2. 运行系统级统一自检流水线 (全量 679 项测试 100% 绿灯)
 python cli.py selftest
 
 # 3. 运行端到端全链路集成测试 (E2E Integration)

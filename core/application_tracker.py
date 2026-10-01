@@ -500,7 +500,7 @@ class ApplicationStore:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
-    CURRENT_SCHEMA_VERSION: int = 7
+    CURRENT_SCHEMA_VERSION: int = 8
 
     def _init_db(self) -> None:
         conn = self._get_connection()
@@ -658,13 +658,17 @@ class ApplicationStore:
                     conn.execute("ALTER TABLE resume_versions ADD COLUMN artifact_hashes_json TEXT NOT NULL DEFAULT '{}' ")
                 if "accept_phase" not in existing_cols:
                     conn.execute("ALTER TABLE resume_versions ADD COLUMN accept_phase TEXT NOT NULL DEFAULT 'completed'")
-            existing_p_cols = {row[1] for row in conn.execute("PRAGMA table_info(material_proposals)").fetchall()}
-            if "applied_phase" not in existing_p_cols:
-                conn.execute("ALTER TABLE material_proposals ADD COLUMN applied_phase TEXT NOT NULL DEFAULT ''")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_resume_versions_application ON resume_versions(application_id, created_at DESC)"
             )
             conn.execute("PRAGMA user_version = 7")
+            conn.commit()
+
+        if from_version < 8:
+            existing_p_cols = {row[1] for row in conn.execute("PRAGMA table_info(material_proposals)").fetchall()}
+            if "applied_phase" not in existing_p_cols:
+                conn.execute("ALTER TABLE material_proposals ADD COLUMN applied_phase TEXT NOT NULL DEFAULT ''")
+            conn.execute("PRAGMA user_version = 8")
             conn.commit()
 
     def save(self, record: ApplicationRecord) -> None:

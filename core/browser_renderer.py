@@ -16,7 +16,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     try:
@@ -66,6 +66,64 @@ PATH_BINARIES = [
 class BrowserNotFoundError(RuntimeError):
     """Raised when no compatible headless browser (Chrome/Edge/Chromium) is located on the system."""
     pass
+
+
+class RenderResult(tuple):
+    """Result of BrowserRenderer.render_pdf.
+
+    Subclasses 3-tuple (ok, pages, msg) for complete backward compatibility with tuple unpacking:
+        ok, pages, msg = res
+    Also provides structured attributes:
+        res.ok / res.success (bool)
+        res.pages (int)
+        res.msg (str)
+        res.final_path (Optional[Path])
+        res.is_shadow (bool)
+        res.error (str)
+    """
+
+    def __new__(
+        cls,
+        ok: bool,
+        pages: int,
+        msg: str,
+        final_path: Optional[Union[str, Path]] = None,
+        is_shadow: bool = False,
+        error: str = "",
+    ) -> "RenderResult":
+        instance = super().__new__(cls, (ok, pages, msg))
+        instance._final_path = Path(final_path) if final_path else None
+        instance._is_shadow = is_shadow
+        instance._error = error
+        return instance
+
+    @property
+    def ok(self) -> bool:
+        return self[0]
+
+    @property
+    def success(self) -> bool:
+        return self[0]
+
+    @property
+    def pages(self) -> int:
+        return self[1]
+
+    @property
+    def msg(self) -> str:
+        return self[2]
+
+    @property
+    def final_path(self) -> Optional[Path]:
+        return self._final_path
+
+    @property
+    def is_shadow(self) -> bool:
+        return self._is_shadow
+
+    @property
+    def error(self) -> str:
+        return self._error
 
 
 class BrowserRenderer:
@@ -182,17 +240,18 @@ class BrowserRenderer:
         html_path: str | Path,
         pdf_path: str | Path,
         timeout_seconds: int = 30,
-    ) -> Tuple[bool, int, str]:
+    ) -> RenderResult:
         """Renders an HTML file to an A4 PDF using headless browser CLI.
 
-        Returns: (success: bool, pages: int, message: str)
+        Returns: RenderResult(ok: bool, pages: int, message: str, final_path: Path, is_shadow: bool)
         """
         html_file = Path(html_path).resolve()
         pdf_file = Path(pdf_path).resolve()
         pdf_file.parent.mkdir(parents=True, exist_ok=True)
 
         if not html_file.exists():
-            return False, 0, f"HTML file not found: {html_file}"
+            err = f"HTML file not found: {html_file}"
+            return RenderResult(False, 0, err, error=err)
 
         temp_user_data = tempfile.mkdtemp(prefix="offerget_browser_")
         temp_rendered_pdf = Path(temp_user_data) / "rendered.pdf"
@@ -218,27 +277,32 @@ class BrowserRenderer:
                 timeout=timeout_seconds,
             )
             if proc.returncode != 0 and not temp_rendered_pdf.exists():
-                return False, 0, f"Browser returned code {proc.returncode}: {proc.stderr}"
+                err = f"Browser returned code {proc.returncode}: {proc.stderr}"
+                return RenderResult(False, 0, err, error=err)
 
             if not temp_rendered_pdf.exists() or temp_rendered_pdf.stat().st_size == 0:
-                return False, 0, "PDF was not generated or generated empty."
+                err = "PDF was not generated or generated empty."
+                return RenderResult(False, 0, err, error=err)
 
             pages = self.count_pages(temp_rendered_pdf)
 
             res = atomic_writer.safe_save_file(pdf_file, temp_rendered_pdf, allow_shadow=True)
             if not res.success:
-                return False, 0, f"Failed to save PDF to {pdf_file}: {res.error_message}"
+                err = f"Failed to save PDF to {pdf_file}: {res.error_message}"
+                return RenderResult(False, 0, err, error=res.error_message)
 
             if res.is_shadow:
                 msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
             else:
                 msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
 
-            return True, pages, msg
+            return RenderResult(True, pages, msg, final_path=res.final_path, is_shadow=res.is_shadow)
         except subprocess.TimeoutExpired:
-            return False, 0, f"Rendering timed out after {timeout_seconds}s"
+            err = f"Rendering timed out after {timeout_seconds}s"
+            return RenderResult(False, 0, err, error=err)
         except Exception as e:
-            return False, 0, f"Render error: {str(e)}"
+            err = f"Render error: {str(e)}"
+            return RenderResult(False, 0, err, error=err)
         finally:
             shutil.rmtree(temp_user_data, ignore_errors=True)
 

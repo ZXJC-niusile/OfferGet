@@ -22,6 +22,8 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
+import core.atomic_writer as atomic_writer
+from core.artifacts import write_text_atomic
 from core.browser_renderer import BrowserRenderer
 
 
@@ -125,44 +127,70 @@ class AutoFitEngine:
         try:
             # First check step 0
             test_html.write_text(raw_html, encoding="utf-8")
-            ok, initial_pages, _ = self.renderer.render_pdf(test_html, test_pdf)
+            ok, initial_pages, initial_msg = self.renderer.render_pdf(test_html, test_pdf)
 
             if not ok:
-                return False, f"Initial render failed: {test_pdf}", {}
+                return False, f"Initial render failed: {initial_msg}", {"step": 0, "error": initial_msg}
 
             if initial_pages == 1:
                 # Already fits perfectly
+                actual_html_path = None
                 if output_html_path:
-                    Path(output_html_path).write_text(raw_html, encoding="utf-8")
+                    actual_html_path = write_text_atomic(raw_html, output_html_path)
+                actual_pdf_path = None
+                is_shadow = False
                 if output_pdf_path:
-                    pdf_ok, _, pdf_msg = self.renderer.render_pdf(test_html, output_pdf_path)
-                    if not pdf_ok or not Path(output_pdf_path).exists():
-                        return False, f"Failed to render output PDF: {pdf_msg}", {"step": 0, "pages": 1}
-                return True, "Resume already fits onto 1 page cleanly without modifications.", {
-                    "step": 0, "pages": 1, "profile": TUNING_LADDER[0].name
+                    save_res = atomic_writer.safe_save_file(output_pdf_path, test_pdf, allow_shadow=True)
+                    if not save_res.success:
+                        return False, f"Failed to save output PDF: {save_res.error_message}", {
+                            "step": 0, "pages": 1, "error": save_res.error_message
+                        }
+                    actual_pdf_path = save_res.final_path
+                    is_shadow = save_res.is_shadow
+                details: Dict[str, Any] = {
+                    "step": 0,
+                    "pages": 1,
+                    "profile": TUNING_LADDER[0].name,
                 }
+                if actual_pdf_path:
+                    details["final_pdf_path"] = str(actual_pdf_path)
+                    details["is_shadow"] = is_shadow
+                if actual_html_path:
+                    details["final_html_path"] = str(actual_html_path)
+                return True, "Resume already fits onto 1 page cleanly without modifications.", details
 
             # If pages > 1, start stepped tuning
+            last_pages = initial_pages
+            last_msg = initial_msg
             for step_idx, profile in enumerate(TUNING_LADDER):
                 tuned_html = self.apply_profile_to_html(raw_html, profile)
                 test_html.write_text(tuned_html, encoding="utf-8")
 
-                ok, pages, _ = self.renderer.render_pdf(test_html, test_pdf)
+                ok, pages, step_msg = self.renderer.render_pdf(test_html, test_pdf)
+                last_pages = pages
+                last_msg = step_msg
                 if ok and pages == 1:
                     # Success!
+                    actual_html_path = None
                     if output_html_path:
-                        Path(output_html_path).write_text(tuned_html, encoding="utf-8")
+                        actual_html_path = write_text_atomic(tuned_html, output_html_path)
+                    actual_pdf_path = None
+                    is_shadow = False
                     if output_pdf_path:
-                        pdf_ok, _, pdf_msg = self.renderer.render_pdf(test_html, output_pdf_path)
-                        if not pdf_ok or not Path(output_pdf_path).exists():
-                            return False, f"Failed to render output PDF: {pdf_msg}", {"step": step_idx, "pages": 1}
+                        save_res = atomic_writer.safe_save_file(output_pdf_path, test_pdf, allow_shadow=True)
+                        if not save_res.success:
+                            return False, f"Failed to save output PDF: {save_res.error_message}", {
+                                "step": step_idx, "pages": 1, "error": save_res.error_message
+                            }
+                        actual_pdf_path = save_res.final_path
+                        is_shadow = save_res.is_shadow
 
                     msg = (
                         f"AutoFit Success: Compressed from {initial_pages} pages down to 1 page "
                         f"using [{profile.name}] (line-height: {profile.line_height}, "
                         f"padding: {profile.padding_y_mm}mm, font-size: {profile.font_size_px}px)."
                     )
-                    return True, msg, {
+                    details = {
                         "step": step_idx,
                         "initial_pages": initial_pages,
                         "pages": 1,
@@ -170,16 +198,23 @@ class AutoFitEngine:
                         "line_height": profile.line_height,
                         "padding_y_mm": profile.padding_y_mm,
                     }
+                    if actual_pdf_path:
+                        details["final_pdf_path"] = str(actual_pdf_path)
+                        details["is_shadow"] = is_shadow
+                    if actual_html_path:
+                        details["final_html_path"] = str(actual_html_path)
+                    return True, msg, details
 
             # If still overflows after step 4
             return False, (
                 f"AutoFit Warning: Content exceeds 1-page capacity even after Ultra Compact tuning "
-                f"(remains {pages} pages). It is strongly advised to prune 1-2 bullet points or remove "
+                f"(remains {last_pages} pages). It is strongly advised to prune 1-2 bullet points or remove "
                 f"the weakest project to maintain readability and avoid visual overcrowding."
             ), {
                 "step": len(TUNING_LADDER) - 1,
                 "initial_pages": initial_pages,
-                "pages": pages,
+                "pages": last_pages,
+                "last_message": last_msg,
             }
 
         finally:

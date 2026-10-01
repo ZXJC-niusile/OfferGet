@@ -129,21 +129,80 @@ class ProposalService:
         jd_text: str,
         output_path: Union[str, Path],
         patch_ids: Optional[List[int]] = None,
+        build_resume: bool = False,
+        resume_theme: str = "classic-tech",
+        resume_output_dir: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
-        from core.material_proposal import apply_material_proposal
+        from core.artifacts import inspect_artifacts, write_json_atomic
+        from core.material_proposal import apply_material_proposal, jd_fingerprint, profile_fingerprint
 
         proposal = self.get(proposal_id)
         if proposal is None:
             raise KeyError(proposal_id)
+
         try:
             updated = apply_material_proposal(proposal, profile, jd_text, patch_ids=patch_ids)
         except ValueError:
             self.save(proposal)
             raise
+
         actual_output_path = write_json_atomic(updated, output_path)
         proposal.applied_phase = "profile_written"
         self.save(proposal)
-        return {"proposal": proposal.to_dict(), "profile_output": str(actual_output_path)}
+
+        generated_resumes: Dict[str, str] = {}
+        if build_resume:
+            from services.resume_service import ResumeService
+
+            out_dir = Path(resume_output_dir or Path(actual_output_path).parent / "proposal_resume")
+            built = ResumeService().build_resume(updated, theme=resume_theme, output_dir=out_dir)
+            generated_resumes = {key: str(value) for key, value in built.items()}
+            proposal.applied_phase = "render_completed"
+            self.save(proposal)
+
+        output_paths = {"profile": str(actual_output_path), **generated_resumes}
+        artifact_status, artifact_hashes = inspect_artifacts(output_paths)
+        missing = [name for name, status in artifact_status.items() if status != "present"]
+        if missing:
+            raise RuntimeError(f"Generated artifacts unavailable: {', '.join(missing)}")
+
+        version_dict = None
+        if proposal.application_id:
+            from core.application_tracker import ResumeVersion
+
+            version = ResumeVersion(
+                application_id=proposal.application_id,
+                proposal_id=proposal.proposal_id,
+                profile_hash=profile_fingerprint(updated),
+                jd_hash=jd_fingerprint(jd_text),
+                theme=resume_theme if build_resume else "profile-only",
+                output_paths=output_paths,
+                artifact_status=artifact_status,
+                artifact_hashes=artifact_hashes,
+                accept_phase="completed",
+                label=f"Proposal {proposal.proposal_id}",
+            )
+            self.store.save_resume_version(version)
+            version_dict = version.to_dict()
+
+        # Mark completed ONLY after artifacts inspection AND version registration succeed
+        proposal.applied_phase = "completed"
+        self.save(proposal)
+
+        res_payload: Dict[str, Any] = {
+            "proposal": proposal.to_dict(),
+            "profile_output": str(actual_output_path),
+            "accept_phase": proposal.applied_phase,
+            "output_paths": output_paths,
+            "artifact_status": artifact_status,
+            "artifact_hashes": artifact_hashes,
+        }
+        if generated_resumes:
+            res_payload["generated_resumes"] = generated_resumes
+        if version_dict:
+            res_payload["resume_version"] = version_dict
+
+        return res_payload
 
 
 class ApplicationOutcomeService:

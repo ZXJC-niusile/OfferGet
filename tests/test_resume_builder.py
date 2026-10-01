@@ -542,9 +542,9 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertTrue(diff_md.exists())
         self.assertTrue(diff_json.exists())
 
-    def test_pdf_rendering_failure_raises_runtime_error_and_cleans_stale_pdf(self):
+    def test_pdf_rendering_failure_raises_runtime_error_and_preserves_stale_pdf(self):
         """Verifies that when PDF rendering fails or times out, ResumeBuilder raises RuntimeError
-        and does NOT leave or report a stale pre-existing PDF as successful."""
+        and does NOT delete the user's pre-existing PDF file, nor report it as a successful build."""
         class FailingRenderer(BrowserRenderer):
             def __init__(self):
                 self.browser_path = "mock-failing-browser"
@@ -564,20 +564,64 @@ class TestResumeBuilder(unittest.TestCase):
         out_sub = self.test_dir / "failing_render_out"
         out_sub.mkdir(parents=True, exist_ok=True)
 
-        # Place a pre-existing stale PDF to ensure it is not mistaken for a new build
+        # Place a pre-existing PDF to ensure it is preserved if new build fails
         stale_pdf = out_sub / "resume_classic_tech.pdf"
         stale_pdf.write_text("STALE DUMMY PDF", encoding="utf-8")
 
         with self.assertRaises(RuntimeError) as ctx:
             builder.build_theme("classic-tech", out_sub, autofit=False)
         self.assertIn("Failed to render PDF", str(ctx.exception))
-        # The stale PDF must have been unlinked
-        self.assertFalse(stale_pdf.exists())
+        # The pre-existing PDF must be preserved (not deleted)
+        self.assertTrue(stale_pdf.exists())
+        self.assertEqual(stale_pdf.read_text(encoding="utf-8"), "STALE DUMMY PDF")
 
-        # Verify build_ats_plain also raises
+        # Verify build_ats_plain also raises and preserves any existing file
+        ats_stale_pdf = out_sub / "resume_ats_plain.pdf"
+        ats_stale_pdf.write_text("ATS STALE DUMMY PDF", encoding="utf-8")
         with self.assertRaises(RuntimeError) as ctx_ats:
             builder.build_ats_plain(out_sub)
         self.assertIn("Failed to render ATS plain PDF", str(ctx_ats.exception))
+        self.assertTrue(ats_stale_pdf.exists())
+        self.assertEqual(ats_stale_pdf.read_text(encoding="utf-8"), "ATS STALE DUMMY PDF")
+
+    def test_pdf_rendering_shadow_file_propagation(self):
+        """Verifies that when the target PDF path is locked and renderer falls back to a shadow file,
+        ResumeBuilder returns the actual shadow path rather than crediting the locked original file."""
+        from core.browser_renderer import RenderResult
+
+        shadow_pdf = self.test_dir / "resume_classic_tech_shadow_12345.pdf"
+        shadow_pdf.write_text("SHADOW PDF CONTENT", encoding="utf-8")
+
+        class ShadowRenderer(BrowserRenderer):
+            def __init__(self):
+                self.browser_path = "mock-shadow-browser"
+
+            def render_pdf(self, html_path, pdf_path, timeout_seconds=30):
+                return RenderResult(
+                    ok=True,
+                    pages=1,
+                    msg="Saved to shadow copy due to file lock",
+                    final_path=shadow_pdf,
+                    is_shadow=True,
+                )
+
+            def measure_overflow(self, html_path, a4_target_height=1122.5):
+                return 1000, 0
+
+        builder = ResumeBuilder(
+            profile_or_path=self.profile_json_path,
+            renderer=ShadowRenderer(),
+        )
+
+        out_sub = self.test_dir / "shadow_render_out"
+        out_sub.mkdir(parents=True, exist_ok=True)
+        locked_pdf = out_sub / "resume_classic_tech.pdf"
+        locked_pdf.write_text("OLD LOCKED PDF", encoding="utf-8")
+
+        result = builder.build_theme("classic-tech", out_sub, autofit=False)
+        self.assertEqual(result["pdf"].resolve(), shadow_pdf.resolve())
+        # The locked PDF remains untouched with old content
+        self.assertEqual(locked_pdf.read_text(encoding="utf-8"), "OLD LOCKED PDF")
 
     def test_lazy_browser_renderer_allows_ats_docx_without_chrome(self):
         """Verifies that ResumeBuilder does not eagerly initialize BrowserRenderer,

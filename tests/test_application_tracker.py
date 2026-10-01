@@ -343,7 +343,7 @@ class TestApplicationStorePersistence(unittest.TestCase):
             try:
                 with store._get_connection() as c:
                     ver = c.execute("PRAGMA user_version").fetchone()[0]
-                    self.assertEqual(ver, 7)
+                    self.assertEqual(ver, 8)
                     cols = [r[1] for r in c.execute("PRAGMA table_info(applications)").fetchall()]
                     self.assertIn("target_level", cols)
                     self.assertIn("portal_url", cols)
@@ -476,7 +476,7 @@ class TestApplicationOutcomes(unittest.TestCase):
     def test_schema_v4_migrates_to_v6(self):
         with ApplicationStore(self.db_path) as store:
             with store._get_connection() as conn:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
                 columns = {row[1] for row in conn.execute("PRAGMA table_info(application_outcomes)")}
                 self.assertIn("outcome_id", columns)
                 self.assertIn("feedback_tags_json", columns)
@@ -486,7 +486,7 @@ class TestApplicationOutcomes(unittest.TestCase):
                 conn.commit()
         with ApplicationStore(self.db_path) as migrated:
             with migrated._get_connection() as conn:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
                 self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='application_outcomes'").fetchone())
                 self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='resume_versions'").fetchone())
 
@@ -616,14 +616,127 @@ class TestResumeVersions(unittest.TestCase):
             path = Path(tmp) / "versions.db"
             with ApplicationStore(path) as store:
                 with store._get_connection() as conn:
-                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
+                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
                     conn.execute("DROP TABLE resume_versions")
                     conn.execute("PRAGMA user_version = 6")
                     conn.commit()
             with ApplicationStore(path) as migrated:
                 with migrated._get_connection() as conn:
-                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 7)
+                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
                     self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='resume_versions'").fetchone())
+
+    def test_schema_v8_migration_from_true_legacy_v7_without_applied_phase(self):
+        """Verifies that a true legacy v7 database (lacking applied_phase in material_proposals)
+        is safely upgraded to v8, existing data is preserved, and proposals can be saved with applied_phase."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "legacy_v7.db"
+            # 1. Manually construct a true v7 database without applied_phase in material_proposals
+            conn = sqlite3.connect(str(path))
+            conn.execute("""
+                CREATE TABLE applications (
+                    id TEXT PRIMARY KEY, target_name TEXT NOT NULL, role_or_track TEXT NOT NULL,
+                    status TEXT NOT NULL, deadline TEXT, exam_or_interview_time TEXT, channel TEXT,
+                    cooling_days_left INTEGER DEFAULT 0, notes TEXT, applied_date TEXT, updated_at TEXT,
+                    collision_risk TEXT, status_history_json TEXT, evidence_snapshot_json TEXT,
+                    offer_details_json TEXT, target_level TEXT DEFAULT '', portal_url TEXT DEFAULT '',
+                    recruiter_contact TEXT DEFAULT ''
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE material_proposals (
+                    proposal_id TEXT PRIMARY KEY,
+                    application_id TEXT,
+                    source_profile_hash TEXT NOT NULL,
+                    source_jd_hash TEXT NOT NULL,
+                    patches_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    accepted_patch_ids_json TEXT NOT NULL DEFAULT '[]',
+                    proposal_hash TEXT NOT NULL,
+                    conflict_reason TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE resume_versions (
+                    version_id TEXT PRIMARY KEY, application_id TEXT, proposal_id TEXT,
+                    profile_hash TEXT NOT NULL, jd_hash TEXT NOT NULL DEFAULT '', theme TEXT NOT NULL DEFAULT '',
+                    output_paths_json TEXT NOT NULL DEFAULT '{}', artifact_status_json TEXT NOT NULL DEFAULT '{}',
+                    artifact_hashes_json TEXT NOT NULL DEFAULT '{}', accept_phase TEXT NOT NULL DEFAULT 'completed',
+                    label TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("PRAGMA user_version = 7")
+            # Insert existing data
+            conn.execute("INSERT INTO applications (id, target_name, role_or_track, status) VALUES ('APP-OLD', 'Legacy Co', 'Dev', 'pending')")
+            conn.execute("""
+                INSERT INTO material_proposals (
+                    proposal_id, application_id, source_profile_hash, source_jd_hash,
+                    patches_json, status, accepted_patch_ids_json, proposal_hash, conflict_reason, created_at
+                ) VALUES (
+                    'PROP-LEGACY', 'APP-OLD', 'prof_hash_1', 'jd_hash_1',
+                    '[]', 'draft', '[]', 'prop_hash_1', '', '2026-09-01 10:00:00'
+                )
+            """)
+            conn.commit()
+            conn.close()
+
+            # 2. Open via ApplicationStore -> triggers v8 migration
+            with ApplicationStore(path) as store:
+                with store._get_connection() as c:
+                    self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 8)
+                    cols = {r[1] for r in c.execute("PRAGMA table_info(material_proposals)").fetchall()}
+                    self.assertIn("applied_phase", cols)
+
+                # Verify existing data retained
+                retrieved_app = store.get("APP-OLD")
+                self.assertIsNotNone(retrieved_app)
+                self.assertEqual(retrieved_app.target_name, "Legacy Co")
+
+                retrieved_prop = store.get_material_proposal("PROP-LEGACY")
+                self.assertIsNotNone(retrieved_prop)
+                self.assertEqual(retrieved_prop.proposal_id, "PROP-LEGACY")
+                self.assertEqual(retrieved_prop.applied_phase, "")
+
+                # Verify saving proposal with applied_phase succeeds without OperationalError
+                retrieved_prop.applied_phase = "completed"
+                store.save_material_proposal(retrieved_prop)
+                updated_prop = store.get_material_proposal("PROP-LEGACY")
+                self.assertEqual(updated_prop.applied_phase, "completed")
+
+            # 3. Reopening must be idempotent and preserve state
+            with ApplicationStore(path) as reopened:
+                prop_reopened = reopened.get_material_proposal("PROP-LEGACY")
+                self.assertEqual(prop_reopened.applied_phase, "completed")
+
+    def test_schema_v8_migration_from_intermediate_v7_with_applied_phase(self):
+        """Verifies that an intermediate v7 database that already possessed applied_phase
+        migrates cleanly to v8 without duplicate column errors."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "intermediate_v7.db"
+            conn = sqlite3.connect(str(path))
+            conn.execute("""
+                CREATE TABLE material_proposals (
+                    proposal_id TEXT PRIMARY KEY,
+                    application_id TEXT,
+                    source_profile_hash TEXT NOT NULL,
+                    source_jd_hash TEXT NOT NULL,
+                    patches_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    accepted_patch_ids_json TEXT NOT NULL DEFAULT '[]',
+                    proposal_hash TEXT NOT NULL,
+                    conflict_reason TEXT NOT NULL DEFAULT '',
+                    applied_phase TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("PRAGMA user_version = 7")
+            conn.commit()
+            conn.close()
+
+            with ApplicationStore(path) as store:
+                with store._get_connection() as c:
+                    self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 8)
+
 
     def test_metadata_diff_is_deterministic_and_does_not_claim_content_diff(self):
         before = ResumeVersion(
@@ -1010,9 +1123,55 @@ class TestProposalService(unittest.TestCase):
                         original_path=target_out,
                         notice="saved to shadow copy",
                     )
+                    shadow_out.write_text("{}", encoding="utf-8")
                     res = service.accept("PROP-SHADOW", self.profile, self.jd, target_out)
                     self.assertEqual(res["profile_output"], str(shadow_out))
                     stored = service.get("PROP-SHADOW")
+                    self.assertEqual(stored.applied_phase, "completed")
+                    self.assertEqual(res["proposal"]["applied_phase"], "completed")
+                    self.assertEqual(res["accept_phase"], "completed")
+
+    def test_service_accept_artifact_failure_does_not_mark_completed(self):
+        """Verifies that if inspected artifacts are missing, ProposalService.accept raises RuntimeError
+        and does NOT prematurely advance proposal applied_phase to 'completed'."""
+        from unittest.mock import patch
+        from core.services import ProposalService
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "svc.db"
+            target_out = Path(tmp) / "out.json"
+
+            with ProposalService(db_path) as service:
+                service.store.save(ApplicationRecord("APP-SVC", "公司A", "工程师"))
+                service.save(self._proposal("PROP-FAIL-ARTIFACT"))
+
+                with patch("core.artifacts.inspect_artifacts") as mock_inspect:
+                    mock_inspect.return_value = ({"profile": "missing"}, {})
+                    with self.assertRaises(RuntimeError) as ctx:
+                        service.accept("PROP-FAIL-ARTIFACT", self.profile, self.jd, target_out)
+                    self.assertIn("Generated artifacts unavailable", str(ctx.exception))
+                    stored = service.get("PROP-FAIL-ARTIFACT")
+                    # Must stay at profile_written, NEVER prematurely marked completed!
+                    self.assertEqual(stored.applied_phase, "profile_written")
+
+    def test_service_accept_version_save_failure_does_not_mark_completed(self):
+        """Verifies that if ResumeVersion recording fails, proposal applied_phase is not marked completed."""
+        from unittest.mock import patch
+        from core.services import ProposalService
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "svc.db"
+            target_out = Path(tmp) / "out.json"
+
+            with ProposalService(db_path) as service:
+                service.store.save(ApplicationRecord("APP-SVC", "公司A", "工程师"))
+                service.save(self._proposal("PROP-FAIL-VER"))
+
+                with patch.object(service.store, "save_resume_version", side_effect=ValueError("version collision")):
+                    with self.assertRaises(ValueError) as ctx:
+                        service.accept("PROP-FAIL-VER", self.profile, self.jd, target_out)
+                    self.assertIn("version collision", str(ctx.exception))
+                    stored = service.get("PROP-FAIL-VER")
                     self.assertEqual(stored.applied_phase, "profile_written")
 
 

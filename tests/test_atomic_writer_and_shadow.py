@@ -414,11 +414,14 @@ def test_browser_renderer_resilient_under_lock(tmp_path: Path):
     with patch("subprocess.run", side_effect=fake_subprocess_run), \
          patch("core.atomic_writer.safe_save_file", return_value=mock_shadow_result):
 
-        success, pages, msg = renderer.render_pdf(html_file, locked_pdf)
+        res = renderer.render_pdf(html_file, locked_pdf)
+        success, pages, msg = res
 
     assert success is True
     assert pages >= 1
     assert "Saved to shadow copy: target_shadow_20260930_999999.pdf due to lock" in msg
+    assert res.final_path == shadow_pdf
+    assert res.is_shadow is True
 
 
 # ---------------------------------------------------------------------------
