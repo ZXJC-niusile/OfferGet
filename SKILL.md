@@ -15,19 +15,19 @@ $$\text{岗位 JD 拆解} \longrightarrow \text{基于真实事实的简历建�
 
 ---
 
-## 核心架构与 5 大模块拓扑 (5-Module Full-Spectrum Topology)
+## 核心架构与全谱系双轨拓扑 (Full-Spectrum Dual-Track Topology)
+
+OfferGet 涵盖**工业界技术求职战略**与**国内顶级高校学术推免/复试深造**两大完整双轨，由 7 大核心能力域组成：
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                                   OfferGet Master Operating System                                                    │
+│                                              OfferGet Dual-Track Master Operating System                                              │
 ├──────────────────────────┬──────────────────────────┬──────────────────────────┬──────────────────────────┬───────────────────────────┤
-│   Module 1: JDAnalyst    │   Module 2: ApexResume   │   Module 3: ATSAuditor   │  Module 4: Privacy & Fact│  Module 5: Strategy & Nego│
+│ Track 1: 企业求职与闭环  │   Module 1: JDAnalyst    │   Module 2: ApexResume   │   Module 3: ATSAuditor   │  Module 4: Privacy & Fact │
+│ (Industry Job-Hunt OS)   │ 5 图层穿透、黑话与红旗   │ 单事实源、Mini-RFC、压页 │ 4 维评分、三态台账、Diff │ 双向可逆脱敏、指标抗漂移  │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────────────────┼───────────────────────────┤
-│ • 5 图层纵向语义穿透拆解 │ • 单事实源 (SSOT) 凭证账本│ • 4 维加权 ATS 评分模型  │ • 双向可逆去隐私化脱敏网关│ • 技能差距 ROI 杠杆计算   │
-│ • 32 项大厂黑话潜台词词典│ • Mini-RFC 架构叙事改写  │ • 三态技能台账防伪审查   │ • 标准/严格双层脱敏引擎   │ • 50-80% 错失区间跃迁建议 │
-│ • 5 大技术红旗与反问探针 │ • 动词五级阶梯与证据约束 │ • 可见度系统多变体隔离   │ • 事实锚点提取与虚标拦截 │ • 6 大劳动合同陷阱深度识别│
-│ • Top 20 硬核面试真题库  │ • AutoFit 像素级压页算法 │ • 四大反 AI 指纹拦截过滤 │ • 指标漂移 (Anti-Drift)   │ • 高情商薪酬博弈与反制谈判│
-│ • 渠道权重与 Ghost Job   │ • 34 项独立单测 100% 覆盖│ • 成对双胞胎双语合规核验 │ • 确定性真实底稿核验门禁 │ • 中英双语薪酬对谈策略信  │
+│ Track 2: 学术推免与复试  │   Module 5: Offer & Track│  Module 6: Academic Baoyan│ Module 7: Review Loop    │  Full Traceability & Guard│
+│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 652 项全量单测 100% 自动化│
 └──────────────────────────┴──────────────────────────┴──────────────────────────┴──────────────────────────┴───────────────────────────┘
 ```
 
@@ -286,22 +286,47 @@ python cli.py offer evaluate examples/sample_offer.json --profile examples/candi
 # 11. 生成高情商薪酬谈判信与口头对谈脚本
 python cli.py offer counter examples/sample_offer.json --target-base 95000 --profile examples/candidate_profile.json
 
-# 12. 调用 ApexResume 简历子系统：确定性防伪审计
+# 12. 统一多主题简历生成与编译 (支持 9 套 HTML、LaTeX、Typst、DOCX 与 ATS-Plain)
+python cli.py resume build examples/candidate_profile.json --theme classic-tech
+python cli.py resume build examples/academic_profile.json --theme academic-latex
+python cli.py resume build examples/academic_profile.json --theme academic-typst
+python cli.py resume build examples/candidate_profile.json --theme ats-docx
+
+# 13. 改写前后事实变更溯源与 Diff 台账审计
+python cli.py diff audit examples/candidate_profile.json tailored_profile.json
+
+# 14. 真实经历项目答辩红蓝对抗模拟 (支持先热个身/开始挑刺/严刑拷打 3 级烈度)
+python cli.py defense simulate examples/candidate_profile.json --intensity critical
+
+# 15. 保研推免学术诚信审计与自适应字数压缩 (摘要版/简历版/陈述版)
+python cli.py baoyan audit "负责 8 卡 A100 集群微调实验，实测吞吐提升 34.2%，成果已整理在投。" --role 核心成员 --tier 简历版
+python cli.py baoyan compress "长段学术经历描述..." --tier 摘要版
+
+# 16. 高校导师学术画像匹配与高情商套磁信撰写
+python cli.py baoyan advisor examples/sample_advisor.json --profile examples/academic_profile.json --scenario summer_camp
+
+# 17. 保研/推免全周期申请动态材料清单生成
+python cli.py baoyan checklist --profile examples/academic_profile.json --stage 夏令营 --track 直博
+
+# 18. 调用 ApexResume 简历子系统：确定性防伪审计
 python cli.py resume audit --claims ApexResume/examples/claims.json --html ApexResume/examples/sample-resume.html
 
-# 13. 调用 ApexResume 简历子系统：AutoFit 像素级单页压页与 PDF 导出
+# 19. 调用 ApexResume 简历子系统：AutoFit 像素级单页压页与 PDF 导出
 python cli.py resume autofit ApexResume/examples/sample-resume.html output_fit.html --pdf my_resume.pdf
 
-# 14. 全局统一环境与自动化测试套件自检（OfferGet 542 项 + ApexResume 34 项，共 576 项）
+# 20. 环境诊断与无头浏览器依赖检查 (Doctor)
+python cli.py doctor
+
+# 21. 全局统一环境与自动化测试套件自检（OfferGet 618 项 + ApexResume 34 项，共 652 项 100% 绿灯）
 python cli.py selftest
 
-# 15. 持久化投递管理：创建投递记录，跟踪状态与证据快照
+# 22. 持久化投递管理：创建投递记录，跟踪状态与证据快照
 python cli.py application add "APP-001" --company "示例科技" --role "后端工程师"
 python cli.py application list --status pending
 python cli.py application show "APP-001"
 python cli.py application status "APP-001" interview --note "已进入一面"
 
-# 16. 证据门禁材料提案（HITL）：review 生成草稿，人工确认后才可落地改写
+# 23. 证据门禁材料提案（HITL 人机协同）：review 生成草稿，人工确认后才可落地改写
 python cli.py review examples/sample_ai_jd.txt --profile examples/candidate_profile.json \
   --proposal-db offers.db --application-id "APP-001" --output review.json --json
 python cli.py proposal list --status draft --application-id "APP-001"
@@ -309,18 +334,18 @@ python cli.py proposal accept "MP-xxxx" --profile examples/candidate_profile.jso
   --jd examples/sample_ai_jd.txt --output tailored_profile.json --build-resume
 python cli.py proposal reject "MP-xxxx"
 
-# 17. 投递结果反馈闭环：受控阶段/结果/标签、复盘和下一步行动，并聚合跨申请洞察
+# 24. 投递结果反馈闭环：受控阶段/结果/标签、复盘和下一步行动，并聚合跨申请洞察
 python cli.py application outcome "APP-001" --stage interview --result rejected \
   --feedback "系统设计深度不足" --reflection "容量估算不充分" \
   --next-action "练习缓存与分片设计" --tags system_design,technical_depth
 python cli.py application outcomes "APP-001" --json
 python cli.py application insights --json
 
-# 18. RenderCV JSON 互通：导入为 OfferGet Profile，或导出为 RenderCV JSON
+# 25. RenderCV JSON 互通：导入为 OfferGet Profile，或导出为 RenderCV JSON
 python cli.py rendercv import rendercv.json --output profile.json
 python cli.py rendercv export profile.json --output rendercv.json
 
-# 19. 记录不可变的岗位关联简历版本元数据
+# 26. 记录不可变的岗位关联简历版本元数据与版本差异比对
 python cli.py application show APP-001 --json
 python cli.py application versions APP-001 --json
 python cli.py application version-diff VERSION_A VERSION_B --json
