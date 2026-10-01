@@ -140,9 +140,10 @@ class ProposalService:
         except ValueError:
             self.save(proposal)
             raise
+        actual_output_path = write_json_atomic(updated, output_path)
+        proposal.applied_phase = "profile_written"
         self.save(proposal)
-        write_json_atomic(updated, output_path)
-        return {"proposal": proposal.to_dict(), "profile_output": str(output_path)}
+        return {"proposal": proposal.to_dict(), "profile_output": str(actual_output_path)}
 
 
 class ApplicationOutcomeService:

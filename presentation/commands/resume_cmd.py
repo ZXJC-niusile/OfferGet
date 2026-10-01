@@ -43,6 +43,7 @@ def cmd_resume_build(args_list=None):
             "ats-plain",
             "academic-latex",
             "academic-typst",
+            "ats-docx",
         ],
         help="Resume theme to build (default: all)",
     )
@@ -136,32 +137,51 @@ def cmd_resume_build(args_list=None):
     diff_ledger = bool(parsed.diff_ledger)
     pages = str(parsed.pages)
 
-    if parsed.theme == "all":
-        results = builder.build_all(
-            out_dir,
-            photo=photo,
-            autofit=autofit,
-            adaptive_fill=adaptive_fill,
-            diff_ledger=diff_ledger,
-            baseline_profile=baseline_data,
-            pages=pages,
-        )
-        for theme_name, files in results.items():
-            pdf_name = files.get("pdf", Path("")).name
-            print(f"  ✓ [{theme_name:<16}] -> {pdf_name}")
-    else:
-        files = builder.build_theme(
-            parsed.theme,
-            out_dir,
-            photo=photo,
-            autofit=autofit,
-            adaptive_fill=adaptive_fill,
-            diff_ledger=diff_ledger,
-            baseline_profile=baseline_data,
-            pages=pages,
-        )
-        pdf_name = files.get("pdf", Path("")).name
-        print(f"  ✓ [{parsed.theme:<16}] -> {pdf_name}")
+    failed_themes = []
+    try:
+        if parsed.theme == "all":
+            results = builder.build_all(
+                out_dir,
+                photo=photo,
+                autofit=autofit,
+                adaptive_fill=adaptive_fill,
+                diff_ledger=diff_ledger,
+                baseline_profile=baseline_data,
+                pages=pages,
+            )
+            for theme_name, files in results.items():
+                artifact = files.get("pdf") or files.get("docx")
+                if artifact and not Path(artifact).exists():
+                    failed_themes.append((theme_name, f"Target artifact missing: {artifact}"))
+                    emit_stderr(f"  ✗ [{theme_name:<16}] -> FAILED (not found: {artifact.name})")
+                else:
+                    artifact_name = artifact.name if artifact else "generated"
+                    print(f"  ✓ [{theme_name:<16}] -> {artifact_name}")
+        else:
+            files = builder.build_theme(
+                parsed.theme,
+                out_dir,
+                photo=photo,
+                autofit=autofit,
+                adaptive_fill=adaptive_fill,
+                diff_ledger=diff_ledger,
+                baseline_profile=baseline_data,
+                pages=pages,
+            )
+            artifact = files.get("pdf") or files.get("docx")
+            if artifact and not Path(artifact).exists():
+                failed_themes.append((parsed.theme, f"Target artifact missing: {artifact}"))
+                emit_stderr(f"  ✗ [{parsed.theme:<16}] -> FAILED (not found: {artifact.name})")
+            else:
+                artifact_name = artifact.name if artifact else "generated"
+                print(f"  ✓ [{parsed.theme:<16}] -> {artifact_name}")
+    except RuntimeError as exc:
+        emit_stderr(f"[-] Error: Resume build failed: {exc}")
+        sys.exit(1)
+
+    if failed_themes:
+        emit_stderr(f"[-] Error: {len(failed_themes)} theme variant(s) failed verification.")
+        sys.exit(1)
 
     if diff_ledger:
         diff_md = out_dir / "resume_diff_ledger.md"

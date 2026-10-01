@@ -67,23 +67,33 @@ def cmd_proposal_accept(args) -> None:
             store.save_material_proposal(proposal)
             fail_cli(args, "proposal_accept_error", str(exc))
         store.save_material_proposal(proposal)
-    accept_phase = "profile_written"
-    write_json(updated_profile, args.output)
-    payload = {"proposal": proposal.to_dict(), "profile_output": str(args.output)}
+
+    actual_profile_path = write_json(updated_profile, args.output)
+    proposal.applied_phase = "profile_written"
+    with _store(args) as store:
+        store.save_material_proposal(proposal)
+
+    payload = {"proposal": proposal.to_dict(), "profile_output": str(actual_profile_path)}
     generated_resumes = {}
     if args.build_resume:
-        output_dir = Path(args.resume_output_dir or Path(args.output).parent / "proposal_resume")
+        output_dir = Path(args.resume_output_dir or Path(actual_profile_path).parent / "proposal_resume")
         built = ResumeService().build_resume(updated_profile, theme=args.resume_theme, output_dir=output_dir)
         generated_resumes = {key: str(value) for key, value in built.items()}
         payload["generated_resumes"] = generated_resumes
-        accept_phase = "render_completed"
-    output_paths = {"profile": str(args.output), **generated_resumes}
+        proposal.applied_phase = "render_completed"
+        with _store(args) as store:
+            store.save_material_proposal(proposal)
+
+    output_paths = {"profile": str(actual_profile_path), **generated_resumes}
     artifact_status, artifact_hashes = inspect_artifacts(output_paths)
     missing = [name for name, status in artifact_status.items() if status != "present"]
     if missing:
         fail_cli(args, "artifact_validation_failed", f"Generated artifacts unavailable: {', '.join(missing)}")
-    accept_phase = "completed"
-    payload["accept_phase"] = accept_phase
+    proposal.applied_phase = "completed"
+    with _store(args) as store:
+        store.save_material_proposal(proposal)
+
+    payload["accept_phase"] = proposal.applied_phase
     payload["artifact_status"] = artifact_status
     payload["artifact_hashes"] = artifact_hashes
     if proposal.application_id:
@@ -96,10 +106,10 @@ def cmd_proposal_accept(args) -> None:
             output_paths=output_paths,
             artifact_status=artifact_status,
             artifact_hashes=artifact_hashes,
-            accept_phase=accept_phase,
+            accept_phase=proposal.applied_phase,
             label=f"Proposal {proposal.proposal_id}",
         )
         with _store(args) as store:
             store.save_resume_version(version)
         payload["resume_version"] = version.to_dict()
-    emit_json(payload) if args.json else print(f"Proposal accepted; new profile written to {args.output}")
+    emit_json(payload) if args.json else print(f"Proposal accepted; new profile written to {actual_profile_path}")

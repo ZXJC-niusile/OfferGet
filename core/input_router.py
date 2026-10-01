@@ -263,9 +263,12 @@ def parse_input(
             return parsed
         if expected_type in ("json", "dict"):
             try:
-                return json.loads(text)
-            except Exception:
-                pass
+                data = json.loads(text)
+                if isinstance(data, (dict, list)):
+                    return data
+            except Exception as exc:
+                raise ValueError(f"Expected JSON input could not be parsed: {exc}") from exc
+            raise ValueError(f"Expected JSON object or list, got text")
         return text
 
     return input_val

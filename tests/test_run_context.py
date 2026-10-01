@@ -173,12 +173,12 @@ class TestArtifactsAndPaths(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             target_txt = Path(tmp_dir) / "sub" / "dir" / "test.txt"
             written_path = write_text_atomic("hello world", target_txt)
-            self.assertEqual(Path(written_path), target_txt)
+            self.assertEqual(Path(written_path).resolve(), target_txt.resolve())
             self.assertEqual(target_txt.read_text(encoding="utf-8"), "hello world")
 
             target_json = Path(tmp_dir) / "sub" / "dir2" / "data.json"
             written_json = write_json_atomic({"k": "v", "num": 42}, target_json)
-            self.assertEqual(Path(written_json), target_json)
+            self.assertEqual(Path(written_json).resolve(), target_json.resolve())
             loaded = json.loads(target_json.read_text(encoding="utf-8"))
             self.assertEqual(loaded["k"], "v")
             self.assertEqual(loaded["num"], 42)

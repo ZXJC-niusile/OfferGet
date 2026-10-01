@@ -567,6 +567,7 @@ class ApplicationStore:
                     accepted_patch_ids_json TEXT NOT NULL DEFAULT '[]',
                     proposal_hash TEXT NOT NULL,
                     conflict_reason TEXT NOT NULL DEFAULT '',
+                    applied_phase TEXT NOT NULL DEFAULT '',
                     created_at TEXT NOT NULL
                 )
                 """
@@ -657,6 +658,9 @@ class ApplicationStore:
                     conn.execute("ALTER TABLE resume_versions ADD COLUMN artifact_hashes_json TEXT NOT NULL DEFAULT '{}' ")
                 if "accept_phase" not in existing_cols:
                     conn.execute("ALTER TABLE resume_versions ADD COLUMN accept_phase TEXT NOT NULL DEFAULT 'completed'")
+            existing_p_cols = {row[1] for row in conn.execute("PRAGMA table_info(material_proposals)").fetchall()}
+            if "applied_phase" not in existing_p_cols:
+                conn.execute("ALTER TABLE material_proposals ADD COLUMN applied_phase TEXT NOT NULL DEFAULT ''")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_resume_versions_application ON resume_versions(application_id, created_at DESC)"
             )
@@ -752,8 +756,8 @@ class ApplicationStore:
                 """
                 INSERT INTO material_proposals (
                     proposal_id, application_id, source_profile_hash, source_jd_hash, patches_json,
-                    status, accepted_patch_ids_json, proposal_hash, conflict_reason, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, accepted_patch_ids_json, proposal_hash, conflict_reason, applied_phase, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(proposal_id) DO UPDATE SET
                     application_id=excluded.application_id,
                     source_profile_hash=excluded.source_profile_hash,
@@ -762,13 +766,15 @@ class ApplicationStore:
                     status=excluded.status,
                     accepted_patch_ids_json=excluded.accepted_patch_ids_json,
                     proposal_hash=excluded.proposal_hash,
-                    conflict_reason=excluded.conflict_reason
+                    conflict_reason=excluded.conflict_reason,
+                    applied_phase=excluded.applied_phase
                 """,
                 (
                     data["proposal_id"], data.get("application_id"), data["source_profile_hash"], data["source_jd_hash"],
                     json.dumps(data["patches"], ensure_ascii=False, sort_keys=True),
                     data["status"], json.dumps(data["accepted_patch_ids"]),
                     data["proposal_hash"], data["conflict_reason"],
+                    data.get("applied_phase", ""),
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 ),
             )
@@ -794,6 +800,7 @@ class ApplicationStore:
             "accepted_patch_ids": json.loads(data["accepted_patch_ids_json"]),
             "proposal_hash": data["proposal_hash"],
             "conflict_reason": data["conflict_reason"],
+            "applied_phase": data.get("applied_phase", ""),
         })
 
     def list_material_proposals(

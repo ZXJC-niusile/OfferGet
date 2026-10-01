@@ -49,6 +49,7 @@ class MaterialProposal:
     accepted_patch_ids: List[int] = field(default_factory=list)
     proposal_hash: str = ""
     conflict_reason: str = ""
+    applied_phase: str = ""
 
     def __post_init__(self) -> None:
         if isinstance(self.status, str):
@@ -70,6 +71,7 @@ class MaterialProposal:
         data = asdict(self)
         data["status"] = self.status.value
         data["patches"] = copy.deepcopy(self.patches)
+        data["applied_phase"] = self.applied_phase
         return data
 
     @classmethod
@@ -84,6 +86,7 @@ class MaterialProposal:
             accepted_patch_ids=list(data.get("accepted_patch_ids", [])),
             proposal_hash=str(data.get("proposal_hash", "")),
             conflict_reason=str(data.get("conflict_reason", "")),
+            applied_phase=str(data.get("applied_phase", "")),
         )
 
     def check_sources(
@@ -107,13 +110,25 @@ class MaterialProposal:
     ) -> List[Dict[str, Any]]:
         if self.status == MaterialProposalStatus.REJECTED:
             raise ValueError("rejected proposal cannot be accepted")
-        if self.status == MaterialProposalStatus.ACCEPTED:
-            return copy.deepcopy(self.patches)
+
         current, reason = self.check_sources(profile, jd_text)
         if not current:
-            self.status = MaterialProposalStatus.CONFLICTED
-            self.conflict_reason = reason
+            if self.status != MaterialProposalStatus.ACCEPTED:
+                self.status = MaterialProposalStatus.CONFLICTED
+                self.conflict_reason = reason
             raise ValueError(f"proposal source changed: {reason}")
+
+        if self.status == MaterialProposalStatus.ACCEPTED:
+            # Re-accepting an already accepted proposal:
+            # Must strictly preserve originally accepted patch selection
+            if patch_ids is not None:
+                if set(patch_ids) != set(self.accepted_patch_ids):
+                    raise ValueError(
+                        f"proposal is already accepted with patch_ids={self.accepted_patch_ids}, "
+                        f"cannot alter approved selection to {patch_ids}"
+                    )
+            return [copy.deepcopy(self.patches[i]) for i in self.accepted_patch_ids]
+
         selected = list(range(len(self.patches))) if patch_ids is None else list(patch_ids)
         if any(i < 0 or i >= len(self.patches) for i in selected):
             raise ValueError("patch_ids contains an unknown patch index")
@@ -136,14 +151,38 @@ def apply_material_proposal(
     """Accept selected patches and return a new profile version.
 
     The source profile is never mutated. Only explicit experience/project bullet
-    paths are accepted; an old or ambiguous path fails closed.
+    paths are accepted; an old or ambiguous path fails closed. Pre-validates
+    all target paths atomically before committing the proposal's accepted status.
     """
-    selected = proposal.accept(profile, jd_text, patch_ids=patch_ids)
+    if proposal.status == MaterialProposalStatus.REJECTED:
+        raise ValueError("rejected proposal cannot be accepted")
+
+    current, reason = proposal.check_sources(profile, jd_text)
+    if not current:
+        if proposal.status != MaterialProposalStatus.ACCEPTED:
+            proposal.status = MaterialProposalStatus.CONFLICTED
+            proposal.conflict_reason = reason
+        raise ValueError(f"proposal source changed: {reason}")
+
+    if proposal.status == MaterialProposalStatus.ACCEPTED:
+        if patch_ids is not None and set(patch_ids) != set(proposal.accepted_patch_ids):
+            raise ValueError(
+                f"proposal is already accepted with patch_ids={proposal.accepted_patch_ids}, "
+                f"cannot alter approved selection to {patch_ids}"
+            )
+        selected = list(proposal.accepted_patch_ids)
+    else:
+        selected = list(range(len(proposal.patches))) if patch_ids is None else list(patch_ids)
+        if any(i < 0 or i >= len(proposal.patches) for i in selected):
+            raise ValueError("patch_ids contains an unknown patch index")
+
     result = copy.deepcopy(
         profile.normalized_profile if isinstance(profile, ProfileContext)
         else build_profile_context(profile).normalized_profile
     )
-    for patch in selected:
+    patches_to_apply = [copy.deepcopy(proposal.patches[i]) for i in selected]
+
+    for patch in patches_to_apply:
         target = str(patch.get("target_path", ""))
         match = re.fullmatch(r"(experience|projects)\[(\d+)\]\.bullets\[(\d+)\]", target)
         if not match:
@@ -168,6 +207,11 @@ def apply_material_proposal(
             proposal.conflict_reason = f"target_changed:{target}"
             raise ValueError(f"proposal target changed: {target}")
         bullets[bullet_idx] = patch.get("after", "")
+
+    # All patches applied and verified without error: now record accepted state
+    proposal.accepted_patch_ids = selected
+    proposal.status = MaterialProposalStatus.ACCEPTED
+    proposal.applied_phase = "verified"
     return result
 
 

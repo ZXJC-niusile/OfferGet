@@ -123,13 +123,50 @@ class TestCliHelpers(unittest.TestCase):
         self.assertIsNone(parsed)
         self.assertEqual(text, raw)
 
+    def test_read_text_with_slashes_in_natural_text(self):
+        """Verifies that in-text slashes (e.g. C/C++, CI/CD, TCP/IP) are treated as natural text,
+        not as missing file paths."""
+        raw = "职位：后台开发\n熟悉 C/C++ 与 CI/CD 流程，精通 TCP/IP 与 A/B 测试"
+        self.assertEqual(read_text(raw), raw)
+        single_line = "熟悉 C/C++ 和 CI/CD 架构优化"
+        self.assertEqual(read_text(single_line), single_line)
+
+    def test_jd_service_decodes_raw_jd_with_slashes(self):
+        """Regression test for JDService decoding raw text with C/C++ and CI/CD."""
+        from services.jd_service import JDService
+        decoded = JDService().decode_jd("岗位：后端架构师\n要求：精通 C/C++ 与 CI/CD 自动化流水线")
+        self.assertIsNotNone(decoded)
+
+    def test_read_text_and_load_json_strict_path_errors(self):
+        """Verifies that missing Path objects or missing .json files raise FileNotFoundError."""
+        with self.assertRaises(FileNotFoundError):
+            read_text(Path("non_existent_file.txt"))
+        with self.assertRaises(FileNotFoundError):
+            read_text("missing_file.txt")
+        with self.assertRaises(FileNotFoundError):
+            load_json_or_text("missing_profile.json")
+
+    def test_load_json_or_text_raises_on_corrupted_json_file(self):
+        """Verifies that an explicit .json file with invalid syntax raises ValueError,
+        and does not silently degrade to raw text."""
+        bad_json = self.base_path / "corrupted.json"
+        bad_json.write_text("{invalid json: [1, 2", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            load_json_or_text(bad_json)
+
+    def test_resolve_input_fails_fast_on_corrupted_json(self):
+        """Verifies that parse_input fails fast with ValueError if expected_type='json' cannot be parsed."""
+        from core.input_router import parse_input
+        with self.assertRaises(ValueError):
+            parse_input("plain text not json", expected_type="json")
+
     def test_write_json_creates_parent_dirs(self):
         target = self.base_path / "nested" / "dir" / "out.json"
         data = {"status": "ok", "count": 42}
         written_path = write_json(data, str(target))
 
         self.assertTrue(target.exists())
-        self.assertEqual(written_path, str(target))
+        self.assertEqual(Path(written_path).resolve(), target.resolve())
         loaded = json.loads(target.read_text(encoding="utf-8"))
         self.assertEqual(loaded, data)
 
@@ -139,7 +176,7 @@ class TestCliHelpers(unittest.TestCase):
         written_path = write_text(content, str(target))
 
         self.assertTrue(target.exists())
-        self.assertEqual(written_path, str(target))
+        self.assertEqual(Path(written_path).resolve(), target.resolve())
         self.assertEqual(target.read_text(encoding="utf-8"), content)
 
     def test_emit_json_isolated(self):

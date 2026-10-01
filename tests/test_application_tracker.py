@@ -849,6 +849,78 @@ class TestMaterialProposal(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     store.save_material_proposal(proposal)
 
+    def test_reaccepting_preserves_partial_approval_and_checks_sources(self):
+        """Verifies that re-accepting an already accepted proposal retains the original selection,
+        does not expand to unapproved patches, and still enforces source JD/profile drift checks."""
+        from core.material_proposal import (
+            MaterialProposal,
+            MaterialProposalStatus,
+            profile_fingerprint,
+            jd_fingerprint,
+        )
+        proposal = MaterialProposal(
+            proposal_id="PROP-REACCEPT",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+            patches=[
+                {"target_path": "experience[0].bullets[0]", "before": "完成接口开发", "after": "Patch A", "validation_status": "applied"},
+                {"target_path": "experience[0].bullets[0]", "before": "完成接口开发", "after": "Patch B", "validation_status": "applied"},
+            ],
+        )
+        # 1. First acceptance: user only approves Patch 0
+        accepted_first = proposal.accept(self.profile, self.jd, patch_ids=[0])
+        self.assertEqual(len(accepted_first), 1)
+        self.assertEqual(accepted_first[0]["after"], "Patch A")
+        self.assertEqual(proposal.accepted_patch_ids, [0])
+        self.assertEqual(proposal.status, MaterialProposalStatus.ACCEPTED)
+
+        # 2. Simulate saving to DB and reloading
+        reloaded = MaterialProposal.from_dict(proposal.to_dict())
+        self.assertEqual(reloaded.status, MaterialProposalStatus.ACCEPTED)
+        self.assertEqual(reloaded.accepted_patch_ids, [0])
+
+        # 3. Second acceptance with no patch_ids must return ONLY Patch 0 (never all patches!)
+        accepted_second = reloaded.accept(self.profile, self.jd)
+        self.assertEqual(len(accepted_second), 1)
+        self.assertEqual(accepted_second[0]["after"], "Patch A")
+
+        # 4. Attempting to expand or alter selection on accepted proposal must raise ValueError
+        with self.assertRaises(ValueError) as ctx:
+            reloaded.accept(self.profile, self.jd, patch_ids=[1])
+        self.assertIn("cannot alter approved selection", str(ctx.exception))
+
+        # 5. Modifying JD or profile must trigger source drift failure even if already ACCEPTED
+        drifted_jd = self.jd + "\n加分项：具备分布式经验"
+        with self.assertRaises(ValueError) as ctx_drift:
+            reloaded.accept(self.profile, drifted_jd)
+        self.assertIn("source_jd_changed", str(ctx_drift.exception))
+
+    def test_apply_failure_does_not_mutate_draft_to_accepted(self):
+        """Verifies that an unsupported or unavailable target path fails closed without
+        leaving the proposal in an invalid 'accepted' status."""
+        from core.material_proposal import (
+            MaterialProposal,
+            MaterialProposalStatus,
+            apply_material_proposal,
+            profile_fingerprint,
+            jd_fingerprint,
+        )
+        proposal = MaterialProposal(
+            proposal_id="PROP-INVALID-TARGET",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+            patches=[
+                {"target_path": "experience[99].bullets[0]", "before": "", "after": "Bad", "validation_status": "applied"},
+            ],
+        )
+        self.assertEqual(proposal.status, MaterialProposalStatus.DRAFT)
+        with self.assertRaises(ValueError) as ctx:
+            apply_material_proposal(proposal, self.profile, self.jd)
+        self.assertIn("proposal target is no longer available", str(ctx.exception))
+        # Proposal status MUST remain DRAFT, not falsely accepted
+        self.assertEqual(proposal.status, MaterialProposalStatus.DRAFT)
+        self.assertEqual(proposal.accepted_patch_ids, [])
+
 
 class TestProposalService(unittest.TestCase):
     def setUp(self):
@@ -913,6 +985,35 @@ class TestProposalService(unittest.TestCase):
                 self.assertEqual(stored.status, MaterialProposalStatus.CONFLICTED)
                 self.assertEqual(stored.conflict_reason, "source_profile_changed")
                 self.assertFalse(output.exists())
+
+    def test_service_accept_propagates_shadow_path(self):
+        """Verifies that if target file write downgrades to a shadow file, ProposalService.accept
+        propagates the actual shadow path in profile_output rather than the locked original path."""
+        from unittest.mock import patch
+        from core.services import ProposalService
+        from core.atomic_writer import SafeSaveResult
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "svc.db"
+            target_out = Path(tmp) / "out.json"
+            shadow_out = Path(tmp) / "out_shadow_12345.json"
+
+            with ProposalService(db_path) as service:
+                service.store.save(ApplicationRecord("APP-SVC", "公司A", "工程师"))
+                service.save(self._proposal("PROP-SHADOW"))
+
+                with patch("core.artifacts.safe_save_file") as mock_save:
+                    mock_save.return_value = SafeSaveResult(
+                        success=True,
+                        final_path=shadow_out,
+                        is_shadow=True,
+                        original_path=target_out,
+                        notice="saved to shadow copy",
+                    )
+                    res = service.accept("PROP-SHADOW", self.profile, self.jd, target_out)
+                    self.assertEqual(res["profile_output"], str(shadow_out))
+                    stored = service.get("PROP-SHADOW")
+                    self.assertEqual(stored.applied_phase, "profile_written")
 
 
 if __name__ == "__main__":

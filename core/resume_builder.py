@@ -132,8 +132,8 @@ class ResumeBuilder:
 
         self.template_dir = Path(template_dir).resolve() if template_dir else get_theme_dir()
 
-        self.renderer = renderer or BrowserRenderer()
-        self.autofit_engine = autofit_engine or AutoFitEngine(self.renderer)
+        self._renderer = renderer
+        self._autofit_engine = autofit_engine
 
         self.html_renderer = HtmlThemeRenderer()
         self.ats_renderer = AtsPlainRenderer()
@@ -142,6 +142,26 @@ class ResumeBuilder:
             photo_path=self.photo_path,
             reserve_photo=True,
         )
+
+    @property
+    def renderer(self) -> BrowserRenderer:
+        if self._renderer is None:
+            self._renderer = BrowserRenderer()
+        return self._renderer
+
+    @renderer.setter
+    def renderer(self, value: Optional[BrowserRenderer]) -> None:
+        self._renderer = value
+
+    @property
+    def autofit_engine(self) -> AutoFitEngine:
+        if self._autofit_engine is None:
+            self._autofit_engine = AutoFitEngine(self.renderer)
+        return self._autofit_engine
+
+    @autofit_engine.setter
+    def autofit_engine(self, value: Optional[AutoFitEngine]) -> None:
+        self._autofit_engine = value
 
     def _get_view_model(
         self,
@@ -291,7 +311,10 @@ class ResumeBuilder:
                 if not success:
                     # Fallback write and render
                     write_text_atomic(populated_html, html_path)
-                    self.renderer.render_pdf(html_path, pdf_path)
+                    pdf_path.unlink(missing_ok=True)
+                    render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
+                    if not render_ok or not pdf_path.exists():
+                        raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
             finally:
                 if tmp_path.exists():
                     try:
@@ -300,7 +323,10 @@ class ResumeBuilder:
                         pass
         else:
             write_text_atomic(populated_html, html_path)
-            self.renderer.render_pdf(html_path, pdf_path)
+            pdf_path.unlink(missing_ok=True)
+            render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
+            if not render_ok or not pdf_path.exists():
+                raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
 
         result_paths: Dict[str, Path] = {"html": html_path, "pdf": pdf_path}
 
@@ -380,7 +406,10 @@ class ResumeBuilder:
         write_text_atomic(html_content, html_path)
 
         pdf_path = out_dir / "resume_ats_plain.pdf"
-        self.renderer.render_pdf(html_path, pdf_path)
+        pdf_path.unlink(missing_ok=True)
+        render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
+        if not render_ok or not pdf_path.exists():
+            raise RuntimeError(f"Failed to render ATS plain PDF: {render_msg}")
 
         return {"md": md_path, "html": html_path, "pdf": pdf_path}
 
@@ -431,7 +460,10 @@ class ResumeBuilder:
         pdf_path = out_dir / "resume_academic_latex.pdf"
         # Try native LaTeX compile first; if unavailable, render the LaTeX-style HTML
         if not self.academic_exporter.compile_latex(tex_path, pdf_path):
-            self.renderer.render_pdf(html_path, pdf_path)
+            pdf_path.unlink(missing_ok=True)
+            render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
+            if not render_ok or not pdf_path.exists():
+                raise RuntimeError(f"Failed to render academic LaTeX PDF: {render_msg}")
 
         return {"tex": tex_path, "html": html_path, "pdf": pdf_path}
 
@@ -475,7 +507,10 @@ class ResumeBuilder:
             )
             html_path = out_dir / "resume_academic_typst.html"
             write_text_atomic(html_src, html_path)
-            self.renderer.render_pdf(html_path, pdf_path)
+            pdf_path.unlink(missing_ok=True)
+            render_ok, _, render_msg = self.renderer.render_pdf(html_path, pdf_path)
+            if not render_ok or not pdf_path.exists():
+                raise RuntimeError(f"Failed to render academic Typst PDF: {render_msg}")
 
         return {"typ": typ_path, "pdf": pdf_path}
 

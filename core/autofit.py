@@ -135,7 +135,9 @@ class AutoFitEngine:
                 if output_html_path:
                     Path(output_html_path).write_text(raw_html, encoding="utf-8")
                 if output_pdf_path:
-                    self.renderer.render_pdf(test_html, output_pdf_path)
+                    pdf_ok, _, pdf_msg = self.renderer.render_pdf(test_html, output_pdf_path)
+                    if not pdf_ok or not Path(output_pdf_path).exists():
+                        return False, f"Failed to render output PDF: {pdf_msg}", {"step": 0, "pages": 1}
                 return True, "Resume already fits onto 1 page cleanly without modifications.", {
                     "step": 0, "pages": 1, "profile": TUNING_LADDER[0].name
                 }
@@ -151,7 +153,9 @@ class AutoFitEngine:
                     if output_html_path:
                         Path(output_html_path).write_text(tuned_html, encoding="utf-8")
                     if output_pdf_path:
-                        self.renderer.render_pdf(test_html, output_pdf_path)
+                        pdf_ok, _, pdf_msg = self.renderer.render_pdf(test_html, output_pdf_path)
+                        if not pdf_ok or not Path(output_pdf_path).exists():
+                            return False, f"Failed to render output PDF: {pdf_msg}", {"step": step_idx, "pages": 1}
 
                     msg = (
                         f"AutoFit Success: Compressed from {initial_pages} pages down to 1 page "

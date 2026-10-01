@@ -20,19 +20,27 @@ COMMON_FILE_EXTENSIONS = {
 }
 
 
-def read_text(path_or_str: str, must_exist: bool = False) -> str:
+def read_text(path_or_str: Union[str, Path], must_exist: bool = False) -> str:
     """
     Read text content from a file path or return the raw string.
 
+    - If path_or_str is a Path, it is treated as a file path; FileNotFoundError if missing.
     - If path_or_str matches an existing file, its UTF-8 content is returned.
     - If path_or_str is a directory, IsADirectoryError is raised.
     - If must_exist is True and file does not exist, FileNotFoundError is raised.
-    - If path_or_str looks like a file path (has known extension or path separators)
+    - If path_or_str has a known file extension or explicit path prefixes (./, ../, /, \\, C:\\),
       and does not contain newlines, FileNotFoundError is raised when not found.
-    - Otherwise, path_or_str itself is returned as raw text.
+    - Otherwise, path_or_str itself is returned as raw text (e.g. "熟悉 C/C++ 和 CI/CD").
     """
+    if isinstance(path_or_str, Path):
+        if not path_or_str.exists():
+            raise FileNotFoundError(f"File not found: {path_or_str}")
+        if path_or_str.is_dir():
+            raise IsADirectoryError(f"Target path is a directory, not a file: {path_or_str}")
+        return path_or_str.read_text(encoding="utf-8")
+
     if not isinstance(path_or_str, str):
-        raise TypeError(f"Expected str, got {type(path_or_str).__name__}")
+        raise TypeError(f"Expected str or Path, got {type(path_or_str).__name__}")
 
     p = Path(path_or_str)
     try:
@@ -50,14 +58,13 @@ def read_text(path_or_str: str, must_exist: bool = False) -> str:
     if must_exist:
         raise FileNotFoundError(f"File not found: {path_or_str}")
 
-    # Check if path_or_str resembles a file path
     has_newline = "\n" in path_or_str or "\r" in path_or_str
-    looks_like_file = (
-        p.suffix.lower() in COMMON_FILE_EXTENSIONS
-        or "/" in path_or_str
-        or "\\" in path_or_str
-        or path_or_str.startswith((".", "~"))
+    is_path_syntax = (
+        path_or_str.startswith((".", "~", "/", "\\"))
+        or (len(path_or_str) > 2 and path_or_str[1] == ":" and path_or_str[2] in ("\\", "/"))
     )
+    looks_like_file = p.suffix.lower() in COMMON_FILE_EXTENSIONS or is_path_syntax
+
     if looks_like_file and not has_newline:
         raise FileNotFoundError(f"File not found: {path_or_str}")
 
@@ -104,6 +111,10 @@ def load_json_or_text(path_or_str: Union[str, Path, os.PathLike[str]]) -> Tuple[
         Tuple of (parsed_json_dict_or_none, raw_text_content).
         If JSON parsing succeeds and result is a dict (or list), parsed_json is returned.
         Otherwise, parsed_json is None and raw_text contains the UTF-8 text.
+
+    Raises:
+        FileNotFoundError: If given an explicit Path that does not exist, or a missing .json file.
+        ValueError / json.JSONDecodeError: If an explicit .json file contains invalid JSON.
     """
     if not isinstance(path_or_str, (str, Path, os.PathLike)):
         raise TypeError(f"Expected str or Path, got {type(path_or_str).__name__}")
@@ -112,17 +123,40 @@ def load_json_or_text(path_or_str: Union[str, Path, os.PathLike[str]]) -> Tuple[
     p = Path(path_or_str)
     is_file = False
     try:
-        if p.exists() and p.is_file():
-            text = p.read_text(encoding="utf-8")
-            is_file = True
+        if p.exists():
+            if p.is_file():
+                text = p.read_text(encoding="utf-8")
+                is_file = True
+            elif p.is_dir():
+                raise IsADirectoryError(f"Target path is a directory, not a file: {path_or_str}")
         else:
+            is_path_syntax = (
+                isinstance(path_or_str, Path)
+                or raw_str.startswith((".", "~", "/", "\\"))
+                or (len(raw_str) > 2 and raw_str[1] == ":" and raw_str[2] in ("\\", "/"))
+            )
+            has_newline = "\n" in raw_str or "\r" in raw_str
+            if p.suffix.lower() == ".json":
+                raise FileNotFoundError(f"JSON file not found: {path_or_str}")
+            elif (isinstance(path_or_str, Path) or is_path_syntax) and not has_newline:
+                raise FileNotFoundError(f"File not found: {path_or_str}")
             text = raw_str
-    except OSError:
+    except OSError as e:
+        if isinstance(e, (FileNotFoundError, IsADirectoryError)):
+            raise
         text = raw_str
 
     stripped = text.strip()
     parsed_json = None
-    if (is_file and p.suffix.lower() == ".json") or stripped.startswith(("{", "[")):
+    if is_file and p.suffix.lower() == ".json":
+        try:
+            data = json.loads(stripped)
+            if isinstance(data, (dict, list)):
+                return data, text
+            raise ValueError(f"JSON file must contain object or array, got {type(data).__name__}")
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON syntax in {path_or_str}: {exc}") from exc
+    elif stripped.startswith(("{", "[")):
         try:
             data = json.loads(stripped)
             if isinstance(data, (dict, list)):

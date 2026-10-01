@@ -542,6 +542,70 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertTrue(diff_md.exists())
         self.assertTrue(diff_json.exists())
 
+    def test_pdf_rendering_failure_raises_runtime_error_and_cleans_stale_pdf(self):
+        """Verifies that when PDF rendering fails or times out, ResumeBuilder raises RuntimeError
+        and does NOT leave or report a stale pre-existing PDF as successful."""
+        class FailingRenderer(BrowserRenderer):
+            def __init__(self):
+                self.browser_path = "mock-failing-browser"
+
+            def render_pdf(self, html_path, pdf_path, timeout_seconds=30):
+                # Simulate timeout or crash without creating the file
+                return False, 0, "Headless browser timed out after 30s"
+
+            def measure_overflow(self, html_path, a4_target_height=1122.5):
+                return 1000, 0
+
+        builder = ResumeBuilder(
+            profile_or_path=self.profile_json_path,
+            renderer=FailingRenderer(),
+        )
+
+        out_sub = self.test_dir / "failing_render_out"
+        out_sub.mkdir(parents=True, exist_ok=True)
+
+        # Place a pre-existing stale PDF to ensure it is not mistaken for a new build
+        stale_pdf = out_sub / "resume_classic_tech.pdf"
+        stale_pdf.write_text("STALE DUMMY PDF", encoding="utf-8")
+
+        with self.assertRaises(RuntimeError) as ctx:
+            builder.build_theme("classic-tech", out_sub, autofit=False)
+        self.assertIn("Failed to render PDF", str(ctx.exception))
+        # The stale PDF must have been unlinked
+        self.assertFalse(stale_pdf.exists())
+
+        # Verify build_ats_plain also raises
+        with self.assertRaises(RuntimeError) as ctx_ats:
+            builder.build_ats_plain(out_sub)
+        self.assertIn("Failed to render ATS plain PDF", str(ctx_ats.exception))
+
+    def test_lazy_browser_renderer_allows_ats_docx_without_chrome(self):
+        """Verifies that ResumeBuilder does not eagerly initialize BrowserRenderer,
+        allowing DOCX builds to complete even if Chrome/Edge is missing."""
+        from unittest.mock import patch
+
+        with patch("core.resume_builder.BrowserRenderer") as mock_renderer_cls:
+            mock_renderer_cls.side_effect = RuntimeError("BrowserRenderer must not be instantiated for DOCX!")
+            builder = ResumeBuilder(self.profile_json_path, renderer=None)
+            out_docx_dir = self.test_dir / "docx_pure"
+            res = builder.build_ats_docx(out_docx_dir)
+            self.assertIn("docx", res)
+            self.assertTrue(res["docx"].exists())
+            mock_renderer_cls.assert_not_called()
+
+    def test_cmd_resume_build_cli_supports_ats_docx(self):
+        """Tests that cmd_resume_build CLI choice 'ats-docx' works end-to-end."""
+        from presentation.commands.resume_cmd import cmd_resume_build
+
+        out_docx_cli = self.test_dir / "cli_docx_out"
+        cmd_resume_build([
+            str(self.profile_json_path),
+            "--theme", "ats-docx",
+            "--output-dir", str(out_docx_cli),
+        ])
+        docx_file = out_docx_cli / "resume_ats.docx"
+        self.assertTrue(docx_file.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
