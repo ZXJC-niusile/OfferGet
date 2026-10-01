@@ -61,6 +61,16 @@ class TestBrowserTimeoutAndDiagnostics(unittest.TestCase):
             args = mock_run.call_args[0][0]
             self.assertEqual(args, ["taskkill", "/F", "/T", "/PID", "9988"])
 
+    def test_kill_process_tree_posix_process_group(self):
+        """On POSIX systems, kill_process_tree signals the process group via os.killpg."""
+        import signal
+        mock_killpg = MagicMock()
+        mock_sigkill = getattr(signal, "SIGKILL", 9)
+        with patch("sys.platform", "linux"), \
+             patch("os.killpg", mock_killpg, create=True):
+            _kill_process_tree(5678)
+            mock_killpg.assert_called_once_with(5678, mock_sigkill)
+
     def test_render_pdf_timeout_triggers_retry_and_succeeds(self):
         """Verifies that transient timeout on attempt 1 triggers retry with fresh user-data-dir and succeeds on attempt 2."""
         renderer = BrowserRenderer(browser_path="mock_browser")
@@ -96,6 +106,12 @@ class TestBrowserTimeoutAndDiagnostics(unittest.TestCase):
         self.assertTrue("initial_render" in user_data_dirs[0])
         self.assertTrue("retry_render" in user_data_dirs[1])
         self.assertTrue(self.pdf_file.exists())
+        self.assertTrue(res.recovered_after_retry)
+        self.assertEqual(res.attempts, 2)
+        self.assertEqual(len(res.diagnostics["attempts_history"]), 1)
+        self.assertEqual(len(res.attempts_history), 1)
+        self.assertIn("recovered on retry attempt 2/2", res.msg)
+        self.assertGreater(res.total_elapsed_seconds, 0)
 
     def test_render_pdf_timeout_exhaustion_returns_structured_diagnostics(self):
         """When both attempt 1 and retry attempt 2 time out, returns structured diagnostics in RenderResult."""
@@ -119,13 +135,42 @@ class TestBrowserTimeoutAndDiagnostics(unittest.TestCase):
         diag = res.diagnostics
         self.assertIsInstance(diag, dict)
         self.assertEqual(diag["attempt"], 2)
+        self.assertEqual(diag["attempts"], 2)
         self.assertEqual(diag["max_attempts"], 2)
+        self.assertFalse(res.recovered_after_retry)
+        self.assertEqual(res.attempts, 2)
+        self.assertEqual(len(res.attempts_history), 2)
+        self.assertEqual(len(diag["attempts_history"]), 2)
+        self.assertGreater(res.total_elapsed_seconds, 0)
         self.assertEqual(diag["phase"], "retry_render")
         self.assertEqual(diag["timeout_budget"], 5)
         self.assertEqual(diag["browser_path"], "mock_timeout_browser")
         self.assertIn("rendering process timed out", diag["stderr"])
         self.assertEqual(diag["temp_pdf_exists"], False)
         self.assertEqual(diag["temp_pdf_size"], 0)
+
+    def test_run_subprocess_timeout_output_draining_and_reaping(self):
+        """Verifies that _run_subprocess kills process tree, drains output with bounded timeout, and waits for process."""
+        mock_proc = MagicMock()
+        mock_proc.pid = 4321
+        mock_proc.communicate.side_effect = [
+            subprocess.TimeoutExpired(cmd=["mock_browser"], timeout=10, output=None, stderr=None),
+            (b"drained output stream", b"drained error stream"),
+        ]
+        mock_proc.wait.return_value = 0
+
+        with patch("subprocess.Popen", return_value=mock_proc), \
+             patch("core.browser_renderer._kill_process_tree") as mock_kill_tree:
+            with self.assertRaises(subprocess.TimeoutExpired) as ctx:
+                BrowserRenderer._run_subprocess(["mock_browser", "--headless"], timeout_seconds=10)
+
+            mock_kill_tree.assert_called_once_with(4321)
+            mock_proc.kill.assert_called_once()
+            self.assertEqual(mock_proc.communicate.call_count, 2)
+            self.assertEqual(mock_proc.communicate.call_args_list[1][1], {"timeout": 5})
+            mock_proc.wait.assert_called_once_with(timeout=2)
+            self.assertEqual(ctx.exception.output, "drained output stream")
+            self.assertEqual(ctx.exception.stderr, "drained error stream")
 
     def test_render_pdf_configurable_timeout_from_env(self):
         """Verifies that BROWSER_TIMEOUT_SECONDS environment variable configures timeout budget."""

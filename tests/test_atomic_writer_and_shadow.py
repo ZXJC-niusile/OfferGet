@@ -393,14 +393,17 @@ def test_browser_renderer_resilient_under_lock(tmp_path: Path):
 
     shadow_pdf = tmp_path / "target_shadow_20260930_999999.pdf"
 
-    # Mock subprocess.run so Chrome writes rendered.pdf to the temp directory
-    def fake_subprocess_run(cmd, **kwargs):
+    # Mock subprocess.Popen so Chrome writes rendered.pdf to the temp directory
+    def fake_subprocess_popen(cmd, **kwargs):
         # cmd: [... '--print-to-pdf=PATH', file_url]
         for arg in cmd:
             if arg.startswith("--print-to-pdf="):
                 out_path = Path(arg.split("=", 1)[1])
                 out_path.write_bytes(b"%PDF-1.4\n/Type /Page\n rendered bytes")
-        return MagicMock(returncode=0, stderr="")
+        proc_mock = MagicMock()
+        proc_mock.returncode = 0
+        proc_mock.communicate.return_value = (b"", b"")
+        return proc_mock
 
     mock_shadow_result = SafeSaveResult(
         success=True,
@@ -411,7 +414,7 @@ def test_browser_renderer_resilient_under_lock(tmp_path: Path):
         notice=f"Saved to shadow copy: {shadow_pdf.name}",
     )
 
-    with patch("subprocess.run", side_effect=fake_subprocess_run), \
+    with patch("subprocess.Popen", side_effect=fake_subprocess_popen), \
          patch("core.atomic_writer.safe_save_file", return_value=mock_shadow_result):
 
         res = renderer.render_pdf(html_file, locked_pdf)

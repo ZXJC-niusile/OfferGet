@@ -794,6 +794,41 @@ class TestResumeBuilder(unittest.TestCase):
         docx_file = out_docx_cli / "resume_ats.docx"
         self.assertTrue(docx_file.exists())
 
+    def test_ats_docx_safe_save_failure_preserves_existing_file_and_raises(self):
+        """Verifies that when safe_save_file fails, AtsDocxRenderer raises OSError and
+        does not overwrite or corrupt an existing target file."""
+        import hashlib
+        from unittest.mock import patch
+        from core.ats_docx_renderer import AtsDocxRenderer
+        from core.atomic_writer import SafeSaveResult
+
+        target_file = self.test_dir / "resume_ats.docx"
+        original_bytes = b"EXISTING_DOCX_PRISTINE_CONTENT_12345"
+        target_file.write_bytes(original_bytes)
+        original_hash = hashlib.sha256(original_bytes).hexdigest()
+
+        mock_fail_result = SafeSaveResult(
+            success=False,
+            final_path=target_file,
+            is_shadow=False,
+            original_path=target_file,
+            error_message="Simulated atomic save failure: access denied",
+        )
+
+        builder = ResumeBuilder(self.minimal_profile)
+        vm = builder._get_view_model(profile=self.minimal_profile)
+        renderer = AtsDocxRenderer()
+
+        with patch("core.atomic_writer.safe_save_file", return_value=mock_fail_result):
+            with self.assertRaises(OSError) as ctx:
+                renderer.render(vm, target_file)
+            self.assertIn("Simulated atomic save failure", str(ctx.exception))
+
+        # Ensure original file was preserved, untouched by fallback doc.save
+        self.assertTrue(target_file.exists())
+        self.assertEqual(target_file.read_bytes(), original_bytes)
+        self.assertEqual(hashlib.sha256(target_file.read_bytes()).hexdigest(), original_hash)
+
 
 if __name__ == "__main__":
     unittest.main()

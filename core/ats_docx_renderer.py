@@ -125,10 +125,9 @@ class AtsDocxRenderer:
         try:
             doc.save(str(tmp_docx_path))
             save_res = atomic_writer.safe_save_file(out_file, tmp_docx_path, allow_shadow=True)
-            if save_res.success:
-                return Path(save_res.final_path)
-            doc.save(str(out_file))
-            return out_file
+            if not save_res.success:
+                raise OSError(save_res.error_message or f"Failed to safely save DOCX: {out_file}")
+            return Path(save_res.final_path)
         finally:
             tmp_docx_path.unlink(missing_ok=True)
 
