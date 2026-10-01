@@ -11,6 +11,7 @@ import sys
 
 from core.cli_helpers import (
     load_json,
+    load_profile,
     emit_json,
     emit_stderr,
 )
@@ -31,7 +32,8 @@ def cmd_offer_eval(args):
         if not os.path.exists(args.profile):
             emit_stderr(f"[-] Error: Profile file not found: {args.profile}")
             sys.exit(1)
-        profile_data = load_json(args.profile)
+        profile_data = load_profile(args.profile)
+
 
     result = OfferService().evaluate_offer(offer_data, candidate_profile=profile_data)
 
@@ -76,7 +78,8 @@ def cmd_offer_counter(args):
 
     profile_data = None
     if args.profile and os.path.exists(args.profile):
-        profile_data = load_json(args.profile)
+        profile_data = load_profile(args.profile)
+
 
     competing = None
     if args.competing and os.path.exists(args.competing):

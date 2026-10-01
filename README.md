@@ -7,7 +7,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Tests-652%20passed%20100%25%20green-brightgreen.svg" alt="Tests">
+  <img src="https://img.shields.io/badge/Tests-658%20passed%20100%25%20green-brightgreen.svg" alt="Tests">
   <a href="https://github.com/ZXJC-niusile/OfferGet/actions"><img src="https://github.com/ZXJC-niusile/OfferGet/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Themes-9%20HTML%20%2B%20LaTeX%20%2B%20Typst%20%2B%20DOCX-purple.svg" alt="Themes">
@@ -30,7 +30,7 @@
 - [🏛️ 全景双轨架构拓扑 (Architecture)](#️-全景双轨架构拓扑-architecture)
 - [📋 CLI 命令完整速查手册 (Cheat Sheet)](#-cli-命令完整速查手册-cheat-sheet)
 - [📦 预置开箱测试用例索引 (`examples/`)](#-预置开箱测试用例索引-examples)
-- [🧪 质量工程与全量自检 (652 项测试)](#-质量工程与全量自检-652-项测试)
+- [🧪 质量工程与全量自检 (658 项测试)](#-质量工程与全量自检-658-项测试)
 - [🔒 核心设计哲学与安全护栏](#-核心设计哲学与安全护栏)
 
 ---
@@ -50,7 +50,9 @@
 
 ## 🌟 5 分钟极速上手：四大场景实操路线图
 
-> 💡 **提示**：项目内置了完整的 `examples/` 示例数据。即使您还没准备好自己的简历 JSON，也可以直接复制下述命令运行，直观体验完整流水线！
+> 💡 **无需手写繁琐的 JSON！**  
+> 系统现已**原生支持 Markdown (`.md`) 或纯文本 (`.txt`) 简历**（参考 `examples/sample_resume.md`）。所有接收 `--profile` 的命令均可直接传入 `.md` / `.txt` 简历，后台自动完成提取与结构化解析。您也可以运行 `python cli.py profile parse examples/sample_resume.md --output my_profile.json` 导出。
+
 
 ### 场景 1：企业技术求职定制与面试通关（求职者首选）
 
@@ -269,32 +271,38 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 
 ## 📋 CLI 命令完整速查手册 (Cheat Sheet)
 
-以下是 OfferGet 提供的 **26 个核心命令入口** 与常用参数速查：
+以下是 OfferGet 提供的 **27 个核心命令入口** 与常用参数速查（所有接受 `--profile` 的命令均原生支持直接传入 `.md` / `.txt` 文本简历）：
 
-### 1. 岗位画像与 JD 分析 (`offerget jd`)
+### 1. 简历自动解析与档案管理 (`offerget profile`)
+| 命令 | 核心参数与选项 | 功能说明 |
+| :--- | :--- | :--- |
+| `python cli.py profile parse <resume>` | `[--output <json>] [--json]` | 自动解析 Markdown 或纯文本简历并导出为结构化 Profile |
+
+### 2. 岗位画像与 JD 分析 (`offerget jd`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py jd decode <jd.txt>` | `[--json]` | 5 图层穿透解码 JD，输出技术栈、潜台词与技术红旗 |
-| `python cli.py jd match <jd.txt>` | `--profile <path> [--json]` | 计算候选人画像与 JD 的加权匹配分及雷达分析 |
+| `python cli.py jd match <jd.txt>` | `--profile <path> [--json]` | 计算候选人画像与 JD 的加权匹配分及雷达分析（支持 `.md` / `.json`） |
 | `python cli.py jd report <jd.txt>` | `--profile <path> [--output <file>]` | 生成中英双语战略战报 HTML |
 
-### 2. 简历审计与防伪质检 (`offerget ats` / `fact` / `diff`)
+### 3. 简历审计与防伪质检 (`offerget ats` / `fact` / `diff`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
-| `python cli.py ats audit <profile>` | `[--jd <file>] [--tag <tag>] [--json]` | 4 维 ATS 综合打分，包含反 AI 指纹拦截与虚标过滤 |
+| `python cli.py ats audit <profile>` | `[--jd <file>] [--tag <tag>] [--json]` | 4 维 ATS 综合打分，包含反 AI 指纹拦截与虚标过滤（支持 `.md` / `.json`） |
 | `python cli.py ats ledger <profile>` | `--jd <file> [--json]` | 生成 Verified / Claimed / Gap 三态技能台账 |
 | `python cli.py fact verify <text>` | `--profile <path> [--json]` | 严格比对经历陈述与真实底稿，拦截指标虚标夸大 |
 | `python cli.py diff audit <base>` | `<tailored> [--output-dir <dir>]` | 比对改写前后的事实变更，生成 Diff 溯源台账 |
 
-### 3. 多主题简历排版与编译 (`offerget resume`)
+
+### 4. 多主题简历排版与编译 (`offerget resume`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
-| `python cli.py resume build <profile>`| `--theme <name> [--pages 1/2/auto]` | 编译指定主题的 HTML 与 PDF 简历 |
+| `python cli.py resume build <profile>`| `--theme <name> [--pages 1/2/auto]` | 编译指定主题的 HTML 与 PDF 简历（支持 `.md` / `.json`） |
 | | `[--adaptive-fill] [--anonymize strict]` | 开启呼吸感间距自适应填充，或双向脱敏导出 |
 | `python cli.py resume audit` | `--claims <json> --html <html_path>` | 确定性凭证防伪核验 |
 | `python cli.py resume autofit <in>` | `<out.html> [--pdf <out.pdf>]` | 像素级单页压页紧凑化与 PDF 导出 |
 
-### 4. 学术推免与保研复试 (`offerget baoyan`)
+### 5. 学术推免与保研复试 (`offerget baoyan`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py baoyan audit <text>` | `[--role <身份>] [--tier 简历版]` | 4 大学术诚信红线审查与字数合规检测 |
@@ -302,12 +310,12 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | `python cli.py baoyan advisor <adv>` | `--profile <path> [--scenario camp]` | 导师研究方向契合度计算与高情商自荐信 |
 | `python cli.py baoyan checklist` | `[--profile <path>] [--stage 夏令营]` | 生成包含 21 项物料的动态合规自查清单 |
 
-### 5. 项目答辩红蓝攻防 (`offerget defense`)
+### 6. 项目答辩红蓝攻防 (`offerget defense`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py defense simulate` | `<profile> [--intensity hell]` | 模拟技术考官或复试专家展开 3 轮压力拷打模拟 |
 
-### 6. 投递追踪与人机协同 (`offerget application` / `proposal` / `review`)
+### 7. 投递追踪与人机协同 (`offerget application` / `proposal` / `review`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py review <jd.txt>` | `--profile <path> [--output <file>]` | 端到端全流程审查闭环，生成改写提案草稿 |
@@ -317,17 +325,17 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | `python cli.py application status` | `<id> <interview/offer/closed>` | 流转投递看板状态机 |
 | `python cli.py application outcome` | `<id> --stage interview --result rejected`| 录入面试结果、复盘反思与标签洞察 |
 
-### 7. Offer 薪酬博弈与合同分析 (`offerget offer`)
+### 8. Offer 薪酬博弈与合同分析 (`offerget offer`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py offer evaluate <offer>`| `[--profile <path>] [--json]` | 真实时薪折算，扫描 6 大劳动合同陷阱 |
 | `python cli.py offer counter <offer>` | `--target-base <薪资> [--profile <path>]`| 生成高情商薪酬争取邮件与口头谈判对谈话术 |
 
-### 8. 系统自检与生态互通 (`offerget doctor` / `selftest` / `rendercv`)
+### 9. 系统自检与生态互通 (`offerget doctor` / `selftest` / `rendercv`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py doctor` | *(无参数)* | 检查 Python 运行环境、无头浏览器与可选排版工具 |
-| `python cli.py selftest` | *(无参数)* | 执行全系统 652 项自动化测试套件自检 |
+| `python cli.py selftest` | *(无参数)* | 执行全系统 658 项自动化测试套件自检 |
 | `python cli.py rendercv import <in>` | `--output profile.json` | 将 RenderCV JSON 导入转换为 OfferGet Profile |
 | `python cli.py rendercv export <in>` | `--output rendercv.json` | 将 OfferGet Profile 导出为标准 RenderCV JSON |
 
@@ -337,7 +345,8 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 
 仓库自带真实场景的高质量测试数据集，位于 [`examples/`](file:///D:/User%20Hub/GitHub/OfferGet/examples/) 目录下：
 
-* **`candidate_profile.json`**：互联网技术候选人完整档案（包含工作经历、开源项目、量化指标）。
+* **`sample_resume.md`**：🌟 **纯 Markdown 个人简历范本**，无需手写 JSON，支持直接作为 `--profile` 传给所有命令！
+* **`candidate_profile.json`**：互联网技术候选人完整结构化档案（包含工作经历、开源项目、量化指标）。
 * **`sample_ai_jd.txt`**：国内头部大厂 AI / 分布式后端架构师真实招聘 JD 文本。
 * **`academic_profile.json`**：985 高校计算机学子标准保研/学术简历数据（科研项目、顶会投稿、学科竞赛）。
 * **`sample_advisor.json`**：国家级重点实验室博导学术画像（含近 3 年重点论文与范式演进）。
@@ -346,7 +355,8 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 
 ---
 
-## 🧪 质量工程与全量自检 (652 项测试)
+## 🧪 质量工程与全量自检 (658 项测试)
+
 
 OfferGet 追求航空级的代码可靠性与工业级稳健度：
 

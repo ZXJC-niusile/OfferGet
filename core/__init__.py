@@ -126,6 +126,9 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "safe_save_file": ("core.atomic_writer", "safe_save_file"),
     "atomic_write": ("core.atomic_writer", "atomic_write"),
     "is_file_locked": ("core.atomic_writer", "is_file_locked"),
+    # core.resume_parser
+    "ResumeTextParser": ("core.resume_parser", "ResumeTextParser"),
+    "parse_resume_to_profile": ("core.resume_parser", "parse_resume_to_profile"),
 }
 
 _SUBMODULES: set[str] = {
@@ -138,6 +141,8 @@ _SUBMODULES: set[str] = {
     "ats_checker",
     "baoyan_auditor",
     "baoyan_pipeline",
+    "resume_parser",
+
     "cli_helpers",
     "defense_simulator",
     "fact_guard",

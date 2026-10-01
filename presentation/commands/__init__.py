@@ -73,6 +73,9 @@ from presentation.commands.rendercv_cmd import (
 from presentation.commands.diff_cmd import (
     cmd_diff_audit,
 )
+from presentation.commands.profile_cmd import (
+    cmd_profile_parse,
+)
 
 __all__ = [
     "cmd_jd_decode",
@@ -117,4 +120,6 @@ __all__ = [
     "cmd_rendercv_import",
     "cmd_rendercv_export",
     "cmd_diff_audit",
+    "cmd_profile_parse",
 ]
+

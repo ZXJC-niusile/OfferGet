@@ -15,11 +15,13 @@ import sys
 from core.cli_helpers import (
     read_text,
     load_json,
+    load_profile,
     load_json_or_text,
     write_text,
     emit_json,
     emit_stderr,
 )
+
 from services.academic_service import AcademicService
 from core.defense.simulator import DefenseSimulator
 
@@ -39,7 +41,7 @@ def cmd_defense_simulate(args):
         if not os.path.exists(args.profile):
             emit_stderr(f"[-] Error: Profile file not found: {args.profile}")
             sys.exit(1)
-        profile_data = load_json(args.profile)
+        profile_data = load_profile(args.profile)
 
     simulator = DefenseSimulator(profile_context=profile_data)
     result = simulator.simulate(
@@ -199,7 +201,7 @@ def cmd_baoyan_advisor(args):
         sys.exit(1)
 
     adv_data = load_json(args.advisor)
-    prof_data = load_json(args.profile)
+    prof_data = load_profile(args.profile)
 
     result = AcademicService().match_advisor(
         advisor_data=adv_data,
@@ -260,7 +262,8 @@ def cmd_baoyan_checklist(args):
         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
         sys.exit(1)
 
-    prof_data = load_json(profile_path)
+    prof_data = load_profile(profile_path)
+
 
     stage = args.stage or "夏令营"
     track = args.track or "直博"

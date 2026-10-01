@@ -116,3 +116,13 @@ class ProfileService:
         from core.fact_guard import verify_resume_facts
 
         return verify_resume_facts(profile_data, text_or_claims)
+
+    def parse_resume_text(
+        self,
+        text_or_path: Union[str, Path],
+    ) -> Dict[str, Any]:
+        """Parses Markdown or plain-text resume into structured OfferGet profile dict."""
+        from core.resume_parser import parse_resume_to_profile
+
+        return parse_resume_to_profile(text_or_path)
+

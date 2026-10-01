@@ -13,9 +13,11 @@ import sys
 from core.cli_helpers import (
     read_text,
     load_json,
+    load_profile,
     emit_json,
     emit_stderr,
 )
+
 from services.jd_service import JDService
 from services.match_service import MatchService
 from services.report_service import ReportService
@@ -83,7 +85,7 @@ def cmd_jd_match(args):
         sys.exit(1)
 
     jd_text = read_text(jd_path)
-    profile_data = load_json(profile_path)
+    profile_data = load_profile(profile_path)
 
     decoded = JDService().decode_jd(jd_text)
     match_result = MatchService().match(decoded, profile_data)
@@ -140,7 +142,7 @@ def cmd_jd_report(args):
 
     print(f"[*] Decoding Job Description: {jd_path} ...")
     jd_text = read_text(jd_path)
-    profile_data = load_json(profile_path)
+    profile_data = load_profile(profile_path)
 
     decoded = JDService().decode_jd(jd_text)
 

@@ -211,6 +211,33 @@ def fail_cli(args: Any, error_type: str, message: str, exit_code: int = 1) -> No
     exit_cli_error(error_type, message, exit_code=exit_code, as_json=bool(getattr(args, "json", False)))
 
 
+def load_profile(path_or_str: Union[str, Path]) -> Dict[str, Any]:
+    """
+    Load candidate profile from a JSON file, Markdown (.md), plain text (.txt), or raw text string.
+    Automatically parses non-JSON files or markdown text using core.resume_parser.ResumeTextParser.
+    """
+    if not isinstance(path_or_str, (str, Path)):
+        raise TypeError(f"Expected str or Path, got {type(path_or_str).__name__}")
+
+    p = Path(path_or_str)
+    if p.exists() and p.is_file():
+        if p.suffix.lower() == ".json":
+            return load_json(str(p))
+        from core.resume_parser import parse_resume_to_profile
+        return parse_resume_to_profile(p)
+
+    has_newline = "\n" in str(path_or_str) or "\r" in str(path_or_str)
+    if not has_newline and (
+        p.suffix.lower() in COMMON_FILE_EXTENSIONS
+        or "/" in str(path_or_str)
+        or "\\" in str(path_or_str)
+    ):
+        raise FileNotFoundError(f"Profile file not found: {path_or_str}")
+
+    from core.resume_parser import parse_resume_to_profile
+    return parse_resume_to_profile(str(path_or_str))
+
+
 def open_application_store(args_or_path: Any = None):
     """Create the shared SQLite store used by application-related commands."""
     from core.application_tracker import ApplicationStore
@@ -226,6 +253,7 @@ __all__ = [
     "read_text",
     "load_json",
     "load_json_or_text",
+    "load_profile",
     "write_json",
     "write_text",
     "emit_json",
@@ -236,3 +264,4 @@ __all__ = [
     "open_application_store",
     "require_file",
 ]
+

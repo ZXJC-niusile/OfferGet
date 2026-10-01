@@ -27,8 +27,9 @@ OfferGet 涵盖**工业界技术求职战略**与**国内顶级高校学术推�
 │ (Industry Job-Hunt OS)   │ 5 图层穿透、黑话与红旗   │ 单事实源、Mini-RFC、压页 │ 4 维评分、三态台账、Diff │ 双向可逆脱敏、指标抗漂移  │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────────────────┼───────────────────────────┤
 │ Track 2: 学术推免与复试  │   Module 5: Offer & Track│  Module 6: Academic Baoyan│ Module 7: Review Loop    │  Full Traceability & Guard│
-│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 652 项全量单测 100% 自动化│
+│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 658 项全量单测 100% 自动化│
 └──────────────────────────┴──────────────────────────┴──────────────────────────┴──────────────────────────┴───────────────────────────┘
+
 ```
 
 ---
@@ -251,15 +252,18 @@ $$S_{\text{ATS}} = 0.30 \times S_{\text{threshold}} + 0.25 \times S_{\text{keywo
 
 ## 命令行操作指南 (CLI Quickstart)
 
-```bash
+# 0. 纯文本 / Markdown 简历自动解析导入 (彻底免去手工手写 JSON 负担，系统所有命令均原生支持 .md / .txt)
+python cli.py profile parse examples/sample_resume.md --output my_profile.json
+
 # 1. 5 图层 JD 深度解码
 python cli.py jd decode examples/sample_ai_jd.txt
 
 # 2. 输出解码 JSON 结构
 python cli.py jd decode examples/sample_ai_jd.txt --json
 
-# 3. 候选人档案事实匹配与缺口评估
-python cli.py jd match examples/sample_ai_jd.txt --profile examples/candidate_profile.json
+# 3. 候选人档案事实匹配与缺口评估 (支持直接传入 sample_resume.md 或 candidate_profile.json)
+python cli.py jd match examples/sample_ai_jd.txt --profile examples/sample_resume.md
+
 
 # 4. 技能差距 ROI 引擎：分析 50%-80% 错失岗位，计算高杠杆技能提升收益
 python cli.py gap roi examples/sample_ai_jd.txt --profile examples/candidate_profile.json
@@ -317,8 +321,9 @@ python cli.py resume autofit ApexResume/examples/sample-resume.html output_fit.h
 # 20. 环境诊断与无头浏览器依赖检查 (Doctor)
 python cli.py doctor
 
-# 21. 全局统一环境与自动化测试套件自检（OfferGet 618 项 + ApexResume 34 项，共 652 项 100% 绿灯）
+# 21. 全局统一环境与自动化测试套件自检（OfferGet 624 项 + ApexResume 34 项，共 658 项 100% 绿灯）
 python cli.py selftest
+
 
 # 22. 持久化投递管理：创建投递记录，跟踪状态与证据快照
 python cli.py application add "APP-001" --company "示例科技" --role "后端工程师"

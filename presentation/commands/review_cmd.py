@@ -13,6 +13,7 @@ import sys
 from core.cli_helpers import (
     read_text,
     load_json,
+    load_profile,
     write_json,
     emit_json,
     emit_stderr,
@@ -38,7 +39,8 @@ def cmd_career_review(args):
         sys.exit(1)
 
     jd_text = read_text(jd_path)
-    profile_data = load_json(profile_path)
+    profile_data = load_profile(profile_path)
+
     review_service = CareerReviewService()
 
     session_data = None

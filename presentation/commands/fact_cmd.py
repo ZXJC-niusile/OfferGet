@@ -12,12 +12,14 @@ import sys
 
 from core.cli_helpers import (
     load_json,
+    load_profile,
     load_json_or_text,
     write_json,
     write_text,
     emit_json,
     emit_stderr,
 )
+
 from core.anonymizer import PrivacyAnonymizer
 from core.fact_guard import FactVerificationGuard
 
@@ -104,7 +106,7 @@ def cmd_fact_verify(args):
         emit_stderr(f"[-] Error: Master profile file not found: {profile_path}")
         sys.exit(1)
 
-    master_profile = load_json(profile_path)
+    master_profile = load_profile(profile_path)
 
     json_data, text_data = load_json_or_text(args.target)
     target_data = json_data if json_data is not None else text_data

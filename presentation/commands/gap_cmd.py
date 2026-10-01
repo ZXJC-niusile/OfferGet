@@ -9,7 +9,7 @@ import os
 import sys
 
 from core.cli_helpers import (
-    load_json,
+    load_profile,
     emit_json,
     emit_stderr,
 )
@@ -23,7 +23,8 @@ def cmd_gap_roi(args):
         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
         sys.exit(1)
 
-    profile_data = load_json(profile_path)
+    profile_data = load_profile(profile_path)
+
 
     jd_files = args.jd_files
     for p in jd_files:

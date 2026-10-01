@@ -65,7 +65,9 @@ from presentation.commands import (
     cmd_selftest,
     cmd_doctor,
     cmd_diff_audit,
+    cmd_profile_parse,
 )
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -386,6 +388,14 @@ Examples:
     rendercv_export.add_argument("--output", required=True)
     rendercv_export.add_argument("--json", action="store_true")
 
+    # `offerget profile ...`
+    profile_parser = subparsers.add_parser("profile", help="Candidate profile operations and auto-ingestion")
+    profile_subparsers = profile_parser.add_subparsers(dest="profile_command")
+    profile_parse = profile_subparsers.add_parser("parse", help="Parse Markdown or plain-text resume into OfferGet profile")
+    profile_parse.add_argument("input_file", help="Path to resume file (.md, .txt, .json)")
+    profile_parse.add_argument("--output", help="Path to save parsed profile JSON")
+    profile_parse.add_argument("--json", action="store_true", help="Output raw JSON")
+
     # `offerget resume ...`
     subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")
 
@@ -409,9 +419,11 @@ Examples:
         "proposal": proposal_parser,
         "application": application_parser,
         "rendercv": rendercv_parser,
+        "profile": profile_parser,
     }
 
     return parser
+
 
 
 def main():
@@ -544,12 +556,22 @@ def main():
             handler(args)
         else:
             parser.subparsers["baoyan"].print_help()
+    elif args.command == "profile":
+        dispatch = {
+            "parse": cmd_profile_parse,
+        }
+        handler = dispatch.get(args.profile_command)
+        if handler:
+            handler(args)
+        else:
+            parser.subparsers["profile"].print_help()
     elif args.command == "selftest":
         cmd_selftest(args)
     elif args.command == "doctor":
         sys.exit(cmd_doctor(args))
     else:
         parser.print_help()
+
 
 
 if __name__ == "__main__":

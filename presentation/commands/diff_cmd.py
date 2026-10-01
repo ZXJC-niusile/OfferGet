@@ -13,6 +13,7 @@ from typing import Any
 
 from core.cli_helpers import (
     load_json,
+    load_profile,
     load_json_or_text,
     emit_json,
     emit_stderr,
@@ -33,7 +34,8 @@ def cmd_diff_audit(args: Any) -> None:
         emit_stderr(f"[-] Error: Tailored resume file not found: {tailored_path}")
         sys.exit(1)
 
-    baseline_data = load_json(str(baseline_path))
+    baseline_data = load_profile(str(baseline_path))
+
     json_data, text_data = load_json_or_text(str(tailored_path))
     tailored_data = json_data if json_data is not None else text_data
 

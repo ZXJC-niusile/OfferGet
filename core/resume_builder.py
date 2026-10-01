@@ -115,14 +115,19 @@ class ResumeBuilder:
             p_path = Path(profile_or_path).resolve()
             if not p_path.exists():
                 raise FileNotFoundError(f"Candidate profile not found at {p_path}")
-            with open(p_path, "r", encoding="utf-8") as f:
-                raw_data = json.load(f)
+            if p_path.suffix.lower() == ".json":
+                with open(p_path, "r", encoding="utf-8") as f:
+                    raw_data = json.load(f)
+            else:
+                from core.resume_parser import parse_resume_to_profile
+                raw_data = parse_resume_to_profile(p_path)
         elif hasattr(profile_or_path, "raw_profile") and hasattr(profile_or_path, "normalized_profile"):
             raw_data = profile_or_path.raw_profile
         elif isinstance(profile_or_path, dict):
             raw_data = profile_or_path
         else:
             raise TypeError("profile_or_path must be a dictionary, ProfileContext, or file path")
+
 
         self.raw_profile = raw_data
         self.anonymize = anonymize
