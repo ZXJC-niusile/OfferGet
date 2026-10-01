@@ -25,7 +25,6 @@ if str(PROJECT_ROOT) not in sys.path:
 from presentation.commands import (
     cmd_advisor_match,
     cmd_anon_mask,
-    cmd_anon_profile,
     cmd_anon_unmask,
     cmd_application_add,
     cmd_application_list,
@@ -52,7 +51,6 @@ from presentation.commands import (
     cmd_jd_match,
     cmd_jd_report,
     cmd_offer_counter,
-    cmd_offer_eval,
     cmd_offer_evaluate,
     cmd_proposal_accept,
     cmd_proposal_list,

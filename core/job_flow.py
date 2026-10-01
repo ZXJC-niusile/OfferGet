@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 import re
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.artifacts import write_json_atomic
 from core.paths import get_project_root

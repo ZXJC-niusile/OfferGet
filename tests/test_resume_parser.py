@@ -170,8 +170,6 @@ def test_cli_profile_parse():
 
 import pytest
 
-from core.resume_parser import ResumeTextParser
-
 
 def test_parse_gbk_encoded_txt_resume():
     """Legacy Notepad/WPS GBK exports must not crash with UnicodeDecodeError."""

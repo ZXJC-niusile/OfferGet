@@ -23,11 +23,11 @@ OfferGet 涵盖**工业界技术求职战略**与**国内顶级高校学术推�
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                              OfferGet Dual-Track Master Operating System                                              │
 ├──────────────────────────┬──────────────────────────┬──────────────────────────┬──────────────────────────┬───────────────────────────┤
-│ Track 1: 企业求职与闭环  │   Module 1: JDAnalyst    │   Module 2: ApexResume   │   Module 3: ATSAuditor   │  Module 4: Privacy & Fact │
+│ Track 1: 企业求职与闭环  │   Module 1: JDAnalyst    │   Module 2: ResumeForge  │   Module 3: ATSAuditor   │  Module 4: Privacy & Fact │
 │ (Industry Job-Hunt OS)   │ 5 图层穿透、黑话与红旗   │ 单事实源、Mini-RFC、压页 │ 4 维评分、三态台账、Diff │ 双向可逆脱敏、指标抗漂移  │
 ├──────────────────────────┼──────────────────────────┼──────────────────────────┼──────────────────────────┼───────────────────────────┤
 │ Track 2: 学术推免与复试  │   Module 5: Offer & Track│  Module 6: Academic Baoyan│ Module 7: Review Loop    │  Full Traceability & Guard│
-│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 658 项全量单测 100% 自动化│
+│ (Chinese Academic Track) │ 薪酬谈判、申请与版本追踪 │ 4 红线诚信、字数压缩、套磁│ 5 步问答复盘、红蓝对抗拷打│ 662 项全量单测 100% 自动化│
 └──────────────────────────┴──────────────────────────┴──────────────────────────┴──────────────────────────┴───────────────────────────┘
 
 ```
@@ -321,7 +321,7 @@ python cli.py resume autofit examples/sample-resume.html output_fit.html --pdf m
 # 20. 环境诊断与无头浏览器依赖检查 (Doctor)
 python cli.py doctor
 
-# 21. 全局统一环境与自动化测试套件自检（共 658 项测试 100% 绿灯）
+# 21. 全局统一环境与自动化测试套件自检（共 662 项测试 100% 绿灯）
 python cli.py selftest
 
 

@@ -305,7 +305,27 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
             self.assertEqual(payload["accept_phase"], "completed")
             self.assertEqual(set(payload["artifact_status"].values()), {"present"})
 
+    def test_runtime_contract_exports_and_annotations(self):
+        """Verifies core exports, submodule attributes, and typing annotations have zero runtime contract breakages."""
+        import typing
+        from core import FORBIDDEN_BUZZWORDS, AI_BUZZWORDS_LEXICON
+        self.assertIsInstance(FORBIDDEN_BUZZWORDS, list)
+        self.assertIsInstance(AI_BUZZWORDS_LEXICON, list)
+
+        import core
+        self.assertTrue(hasattr(core, "defense"))
+        self.assertTrue(hasattr(core, "jd_analyst"))
+        self.assertTrue(hasattr(core, "evidence"))
+
+        from core.profile_adapter import ProfileContext
+        hints = typing.get_type_hints(ProfileContext.to_view_model)
+        self.assertIn("photo_path", hints)
+
+        import cli
+        self.assertTrue(callable(cli.main))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
