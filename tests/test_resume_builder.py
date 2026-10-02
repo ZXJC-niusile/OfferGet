@@ -623,6 +623,150 @@ class TestResumeBuilder(unittest.TestCase):
         # The locked PDF remains untouched with old content
         self.assertEqual(locked_pdf.read_text(encoding="utf-8"), "OLD LOCKED PDF")
 
+    def test_intermediate_source_shadow_propagation_ats_plain(self):
+        """Verifies that when intermediate Markdown or HTML files degrade to shadow copies,
+        ResumeBuilder passes the actual shadow HTML to render_pdf and returns shadow paths in manifest."""
+        from unittest.mock import patch, MagicMock
+
+        out_sub = self.test_dir / "ats_shadow_out"
+        out_sub.mkdir(parents=True, exist_ok=True)
+
+        shadow_md = out_sub / "resume_ats_plain_shadow_md.md"
+        shadow_html = out_sub / "resume_ats_plain_shadow_html.html"
+        shadow_md.write_text("# Mock ATS Markdown", encoding="utf-8")
+        shadow_html.write_text("<html>ATS HTML</html>", encoding="utf-8")
+
+        mock_renderer = FastBrowserRenderer()
+        render_calls = []
+        orig_render = mock_renderer.render_pdf
+
+        def tracked_render(html_path, pdf_path, timeout_seconds=30):
+            render_calls.append((Path(html_path), Path(pdf_path)))
+            return orig_render(html_path, pdf_path, timeout_seconds)
+
+        mock_renderer.render_pdf = tracked_render
+
+        builder = ResumeBuilder(
+            profile_or_path=self.profile_json_path,
+            renderer=mock_renderer,
+        )
+
+        def mock_write_text_atomic(content, path):
+            p = Path(path)
+            if p.suffix == ".md":
+                return str(shadow_md)
+            if p.suffix == ".html":
+                return str(shadow_html)
+            return str(p)
+
+        with patch("core.resume_builder.write_text_atomic", side_effect=mock_write_text_atomic):
+            res = builder.build_ats_plain(out_sub)
+
+        # Downstream render_pdf must have received the actual shadow HTML path
+        self.assertTrue(len(render_calls) > 0)
+        self.assertEqual(render_calls[0][0].resolve(), shadow_html.resolve())
+
+        # Returned manifest must reflect actual shadow paths
+        self.assertEqual(res["md"].resolve(), shadow_md.resolve())
+        self.assertEqual(res["html"].resolve(), shadow_html.resolve())
+        self.assertTrue(res["pdf"].exists())
+
+    def test_intermediate_source_shadow_propagation_academic_latex(self):
+        """Verifies that Academic LaTeX builder forwards actual shadow .tex and .html paths
+        to compiler and fallback renderer, and records shadow compiled PDF."""
+        from unittest.mock import patch, MagicMock
+        from core.atomic_writer import SafeSaveResult
+
+        out_sub = self.test_dir / "academic_latex_shadow_out"
+        out_sub.mkdir(parents=True, exist_ok=True)
+
+        shadow_tex = out_sub / "resume_academic_latex_shadow.tex"
+        shadow_tex.write_text(r"\documentclass{article}", encoding="utf-8")
+        shadow_pdf = out_sub / "resume_academic_latex_shadow.pdf"
+        shadow_pdf.write_bytes(b"%PDF-latex-shadow")
+
+        builder = ResumeBuilder(
+            profile_or_path=self.profile_json_path,
+            renderer=FastBrowserRenderer(),
+        )
+
+        compile_calls = []
+
+        def mock_compile_latex(tex_path, pdf_target):
+            compile_calls.append(Path(tex_path))
+            builder.academic_exporter.last_compile_result = SafeSaveResult(
+                success=True,
+                final_path=shadow_pdf,
+                is_shadow=True,
+                original_path=Path(pdf_target),
+                error_message=None,
+            )
+            return True
+
+        builder.academic_exporter.compile_latex = mock_compile_latex
+
+        def mock_write_text_atomic(content, path):
+            if Path(path).suffix == ".tex":
+                return str(shadow_tex)
+            return str(path)
+
+        with patch("core.resume_builder.write_text_atomic", side_effect=mock_write_text_atomic):
+            res = builder.build_academic_latex(out_sub)
+
+        # Compiler must have received shadow .tex
+        self.assertEqual(compile_calls[0].resolve(), shadow_tex.resolve())
+        # Returned manifest must point to shadow .tex and shadow compiled .pdf
+        self.assertEqual(res["tex"].resolve(), shadow_tex.resolve())
+        self.assertEqual(res["pdf"].resolve(), shadow_pdf.resolve())
+
+    def test_intermediate_source_shadow_propagation_academic_typst(self):
+        """Verifies that Academic Typst builder forwards actual shadow .typ path to compiler
+        and records shadow compiled PDF in manifest."""
+        from unittest.mock import patch, MagicMock
+        from core.atomic_writer import SafeSaveResult
+
+        out_sub = self.test_dir / "academic_typst_shadow_out"
+        out_sub.mkdir(parents=True, exist_ok=True)
+
+        shadow_typ = out_sub / "resume_academic_typst_shadow.typ"
+        shadow_typ.write_text("= Typst Resume", encoding="utf-8")
+        shadow_pdf = out_sub / "resume_academic_typst_shadow.pdf"
+        shadow_pdf.write_bytes(b"%PDF-typst-shadow")
+
+        builder = ResumeBuilder(
+            profile_or_path=self.profile_json_path,
+            renderer=FastBrowserRenderer(),
+        )
+
+        compile_calls = []
+
+        def mock_compile_typst(typ_path, pdf_target):
+            compile_calls.append(Path(typ_path))
+            builder.academic_exporter.last_compile_result = SafeSaveResult(
+                success=True,
+                final_path=shadow_pdf,
+                is_shadow=True,
+                original_path=Path(pdf_target),
+                error_message=None,
+            )
+            return True
+
+        builder.academic_exporter.compile_typst = mock_compile_typst
+
+        def mock_write_text_atomic(content, path):
+            if Path(path).suffix == ".typ":
+                return str(shadow_typ)
+            return str(path)
+
+        with patch("core.resume_builder.write_text_atomic", side_effect=mock_write_text_atomic):
+            res = builder.build_academic_typst(out_sub)
+
+        # Compiler must have received shadow .typ
+        self.assertEqual(compile_calls[0].resolve(), shadow_typ.resolve())
+        # Returned manifest must reflect shadow .typ and shadow .pdf
+        self.assertEqual(res["typ"].resolve(), shadow_typ.resolve())
+        self.assertEqual(res["pdf"].resolve(), shadow_pdf.resolve())
+
     def test_lazy_browser_renderer_allows_ats_docx_without_chrome(self):
         """Verifies that ResumeBuilder does not eagerly initialize BrowserRenderer,
         allowing DOCX builds to complete even if Chrome/Edge is missing."""
@@ -649,6 +793,41 @@ class TestResumeBuilder(unittest.TestCase):
         ])
         docx_file = out_docx_cli / "resume_ats.docx"
         self.assertTrue(docx_file.exists())
+
+    def test_ats_docx_safe_save_failure_preserves_existing_file_and_raises(self):
+        """Verifies that when safe_save_file fails, AtsDocxRenderer raises OSError and
+        does not overwrite or corrupt an existing target file."""
+        import hashlib
+        from unittest.mock import patch
+        from core.ats_docx_renderer import AtsDocxRenderer
+        from core.atomic_writer import SafeSaveResult
+
+        target_file = self.test_dir / "resume_ats.docx"
+        original_bytes = b"EXISTING_DOCX_PRISTINE_CONTENT_12345"
+        target_file.write_bytes(original_bytes)
+        original_hash = hashlib.sha256(original_bytes).hexdigest()
+
+        mock_fail_result = SafeSaveResult(
+            success=False,
+            final_path=target_file,
+            is_shadow=False,
+            original_path=target_file,
+            error_message="Simulated atomic save failure: access denied",
+        )
+
+        builder = ResumeBuilder(self.minimal_profile)
+        vm = builder._get_view_model(profile=self.minimal_profile)
+        renderer = AtsDocxRenderer()
+
+        with patch("core.atomic_writer.safe_save_file", return_value=mock_fail_result):
+            with self.assertRaises(OSError) as ctx:
+                renderer.render(vm, target_file)
+            self.assertIn("Simulated atomic save failure", str(ctx.exception))
+
+        # Ensure original file was preserved, untouched by fallback doc.save
+        self.assertTrue(target_file.exists())
+        self.assertEqual(target_file.read_bytes(), original_bytes)
+        self.assertEqual(hashlib.sha256(target_file.read_bytes()).hexdigest(), original_hash)
 
 
 if __name__ == "__main__":

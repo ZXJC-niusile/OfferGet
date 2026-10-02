@@ -67,6 +67,9 @@ class AcademicExporter:
     with photo reservation and compilation support.
     """
 
+    def __init__(self) -> None:
+        self.last_compile_result: Any = None
+
     def _resolve_view_model(
         self,
         profile_or_vm: Union[Any, Dict[str, Any]],
@@ -985,8 +988,10 @@ class AcademicExporter:
 
             if compiled:
                 save_res = safe_save_file(dest_path=pdf_file, content=temp_pdf, allow_shadow=True)
+                self.last_compile_result = save_res
                 return save_res.success
 
+            self.last_compile_result = None
             return False
 
     def compile_latex(self, tex_path: str | Path, pdf_path: str | Path) -> bool:
@@ -997,6 +1002,7 @@ class AcademicExporter:
 
         xelatex_cli = shutil.which("xelatex")
         if not xelatex_cli:
+            self.last_compile_result = None
             return False
 
         from core.atomic_writer import safe_save_file
@@ -1017,13 +1023,16 @@ class AcademicExporter:
 
                 if compiled_pdf.exists() and compiled_pdf.stat().st_size > 0:
                     save_res = safe_save_file(dest_path=pdf_file, content=compiled_pdf, allow_shadow=True)
+                    self.last_compile_result = save_res
                     if compiled_pdf != Path(tmp_dir) / f"{tex_file.stem}.pdf":
                         try:
                             compiled_pdf.unlink(missing_ok=True)
                         except Exception:
                             pass
                     return save_res.success
+                self.last_compile_result = None
                 return False
             except Exception:
+                self.last_compile_result = None
                 return False
 

@@ -15,8 +15,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
-from typing import Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     try:
@@ -26,6 +27,46 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
         pass
 
 import core.atomic_writer as atomic_writer
+
+
+def _safe_decode(val: Any) -> str:
+    """Safely decodes subprocess output or error, handling bytes, string, or None."""
+    if val is None:
+        return ""
+    if isinstance(val, bytes):
+        return val.decode("utf-8", errors="replace")
+    return str(val)
+
+
+def _kill_process_tree(pid: Optional[int]) -> None:
+    """Safely and forcefully terminates a child process and its child processes without affecting other processes."""
+    if not pid or pid <= 0:
+        return
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
+                capture_output=True,
+                timeout=5,
+            )
+        else:
+            import signal
+            sig = getattr(signal, "SIGKILL", 9)
+            # When started with start_new_session=True, the process group ID equals pid
+            killpg = getattr(os, "killpg", None)
+            if killpg is not None:
+                try:
+                    killpg(pid, sig)
+                    return
+                except Exception:
+                    pass
+            try:
+                os.kill(pid, sig)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 
 CANDIDATE_PATHS = {
     "win32": [
@@ -80,6 +121,7 @@ class RenderResult(tuple):
         res.final_path (Optional[Path])
         res.is_shadow (bool)
         res.error (str)
+        res.diagnostics (Dict[str, Any])
     """
 
     def __new__(
@@ -90,11 +132,13 @@ class RenderResult(tuple):
         final_path: Optional[Union[str, Path]] = None,
         is_shadow: bool = False,
         error: str = "",
+        diagnostics: Optional[Dict[str, Any]] = None,
     ) -> "RenderResult":
         instance = super().__new__(cls, (ok, pages, msg))
         instance._final_path = Path(final_path) if final_path else None
         instance._is_shadow = is_shadow
         instance._error = error
+        instance._diagnostics = diagnostics or {}
         return instance
 
     @property
@@ -124,6 +168,26 @@ class RenderResult(tuple):
     @property
     def error(self) -> str:
         return self._error
+
+    @property
+    def diagnostics(self) -> Dict[str, Any]:
+        return self._diagnostics
+
+    @property
+    def attempts(self) -> int:
+        return self._diagnostics.get("attempts", self._diagnostics.get("attempt", 1))
+
+    @property
+    def recovered_after_retry(self) -> bool:
+        return bool(self._diagnostics.get("recovered_after_retry", False))
+
+    @property
+    def total_elapsed_seconds(self) -> float:
+        return float(self._diagnostics.get("total_elapsed_seconds", 0.0))
+
+    @property
+    def attempts_history(self) -> List[Dict[str, Any]]:
+        return list(self._diagnostics.get("attempts_history", []))
 
 
 class BrowserRenderer:
@@ -235,16 +299,66 @@ class BrowserRenderer:
         matches = re.findall(rb"/Type\s*/Page[^s]", data)
         return max(1, len(matches))
 
+    @classmethod
+    def _run_subprocess(
+        cls,
+        cmd: list[str],
+        timeout_seconds: int,
+    ) -> Tuple[int, str, str, float]:
+        """Runs browser command, safely handling timeout, process-tree termination, output draining, and decoding."""
+        t0 = time.monotonic()
+        popen_kwargs: Dict[str, Any] = {
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+        }
+        if sys.platform != "win32":
+            popen_kwargs["start_new_session"] = True
+
+        proc = subprocess.Popen(cmd, **popen_kwargs)
+        try:
+            out_b, err_b = proc.communicate(timeout=timeout_seconds)
+            elapsed = time.monotonic() - t0
+            return proc.returncode, _safe_decode(out_b), _safe_decode(err_b), elapsed
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.monotonic() - t0
+            _kill_process_tree(proc.pid)
+            try:
+                proc.kill()
+            except Exception:
+                pass
+
+            # Output draining and process waiting as recommended by Python documentation
+            try:
+                out_drain, err_drain = proc.communicate(timeout=5)
+            except Exception:
+                out_drain, err_drain = b"", b""
+
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                pass
+
+            out_str = _safe_decode(out_drain) or _safe_decode(exc.output)
+            err_str = _safe_decode(err_drain) or _safe_decode(exc.stderr)
+            raise subprocess.TimeoutExpired(cmd, timeout_seconds, output=out_str, stderr=err_str)
+
     def render_pdf(
         self,
         html_path: str | Path,
         pdf_path: str | Path,
-        timeout_seconds: int = 30,
+        timeout_seconds: Optional[int] = None,
+        max_retries: int = 1,
     ) -> RenderResult:
         """Renders an HTML file to an A4 PDF using headless browser CLI.
 
         Returns: RenderResult(ok: bool, pages: int, message: str, final_path: Path, is_shadow: bool)
         """
+        if timeout_seconds is None:
+            try:
+                timeout_seconds = int(os.environ.get("BROWSER_TIMEOUT_SECONDS", "30"))
+            except (ValueError, TypeError):
+                timeout_seconds = 30
+
         html_file = Path(html_path).resolve()
         pdf_file = Path(pdf_path).resolve()
         pdf_file.parent.mkdir(parents=True, exist_ok=True)
@@ -253,58 +367,154 @@ class BrowserRenderer:
             err = f"HTML file not found: {html_file}"
             return RenderResult(False, 0, err, error=err)
 
-        temp_user_data = tempfile.mkdtemp(prefix="offerget_browser_")
-        temp_rendered_pdf = Path(temp_user_data) / "rendered.pdf"
         file_url = html_file.as_uri()
+        total_t0 = time.monotonic()
+        attempts_history: List[Dict[str, Any]] = []
+        max_attempts = 1 + max(0, max_retries)
 
-        cmd = [
-            self.browser_path,
-            "--headless=new",
-            "--disable-gpu",
-            "--no-pdf-header-footer",
-            f"--user-data-dir={temp_user_data}",
-            f"--print-to-pdf={str(temp_rendered_pdf)}",
-            file_url,
-        ]
+        for attempt in range(1, max_attempts + 1):
+            phase = "initial_render" if attempt == 1 else "retry_render"
+            temp_user_data = tempfile.mkdtemp(prefix=f"offerget_browser_{phase}_")
+            temp_rendered_pdf = Path(temp_user_data) / "rendered.pdf"
 
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout_seconds,
-            )
-            if proc.returncode != 0 and not temp_rendered_pdf.exists():
-                err = f"Browser returned code {proc.returncode}: {proc.stderr}"
+            cmd = [
+                self.browser_path,
+                "--headless=new",
+                "--disable-gpu",
+                "--no-pdf-header-footer",
+                f"--user-data-dir={temp_user_data}",
+                f"--print-to-pdf={str(temp_rendered_pdf)}",
+                file_url,
+            ]
+
+            try:
+                returncode, stdout_str, stderr_str, elapsed = self._run_subprocess(cmd, timeout_seconds)
+
+                if returncode != 0 and not temp_rendered_pdf.exists():
+                    err = f"Browser returned code {returncode}: {stderr_str}"
+                    total_elapsed = time.monotonic() - total_t0
+                    diag = {
+                        "phase": phase,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "elapsed_seconds": round(elapsed, 2),
+                        "total_elapsed_seconds": round(total_elapsed, 2),
+                        "timeout_budget": timeout_seconds,
+                        "browser_path": self.browser_path,
+                        "python_version": sys.version,
+                        "stdout": stdout_str,
+                        "stderr": stderr_str,
+                        "temp_pdf_exists": False,
+                        "temp_pdf_size": 0,
+                        "user_data_dir": temp_user_data,
+                        "attempts_history": attempts_history,
+                        "recovered_after_retry": False,
+                    }
+                    return RenderResult(False, 0, err, error=err, diagnostics=diag)
+
+                if not temp_rendered_pdf.exists() or temp_rendered_pdf.stat().st_size == 0:
+                    err = "PDF was not generated or generated empty."
+                    total_elapsed = time.monotonic() - total_t0
+                    diag = {
+                        "phase": phase,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "elapsed_seconds": round(elapsed, 2),
+                        "total_elapsed_seconds": round(total_elapsed, 2),
+                        "timeout_budget": timeout_seconds,
+                        "browser_path": self.browser_path,
+                        "python_version": sys.version,
+                        "stdout": stdout_str,
+                        "stderr": stderr_str,
+                        "temp_pdf_exists": temp_rendered_pdf.exists(),
+                        "temp_pdf_size": temp_rendered_pdf.stat().st_size if temp_rendered_pdf.exists() else 0,
+                        "user_data_dir": temp_user_data,
+                        "attempts_history": attempts_history,
+                        "recovered_after_retry": False,
+                    }
+                    return RenderResult(False, 0, err, error=err, diagnostics=diag)
+
+                pages = self.count_pages(temp_rendered_pdf)
+
+                res = atomic_writer.safe_save_file(pdf_file, temp_rendered_pdf, allow_shadow=True)
+                if not res.success:
+                    err = f"Failed to save PDF to {pdf_file}: {res.error_message}"
+                    return RenderResult(False, 0, err, error=res.error_message)
+
+                total_elapsed = time.monotonic() - total_t0
+                recovered = (attempt > 1)
+                success_diag = {
+                    "phase": phase,
+                    "attempts": attempt,
+                    "max_attempts": max_attempts,
+                    "recovered_after_retry": recovered,
+                    "elapsed_seconds": round(elapsed, 2),
+                    "total_elapsed_seconds": round(total_elapsed, 2),
+                    "attempts_history": attempts_history,
+                }
+
+                if res.is_shadow:
+                    msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
+                else:
+                    msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
+
+                if recovered:
+                    msg += f" [recovered on retry attempt {attempt}/{max_attempts}]"
+
+                return RenderResult(
+                    True,
+                    pages,
+                    msg,
+                    final_path=res.final_path,
+                    is_shadow=res.is_shadow,
+                    diagnostics=success_diag,
+                )
+
+            except subprocess.TimeoutExpired as exc:
+                stdout_str = _safe_decode(getattr(exc, "output", ""))
+                stderr_str = _safe_decode(getattr(exc, "stderr", ""))
+                pdf_exists = temp_rendered_pdf.exists()
+                pdf_size = temp_rendered_pdf.stat().st_size if pdf_exists else 0
+                attempt_diag = {
+                    "phase": phase,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "elapsed_seconds": timeout_seconds,
+                    "timeout_budget": timeout_seconds,
+                    "browser_path": self.browser_path,
+                    "python_version": sys.version,
+                    "stdout": stdout_str,
+                    "stderr": stderr_str,
+                    "temp_pdf_exists": pdf_exists,
+                    "temp_pdf_size": pdf_size,
+                    "user_data_dir": temp_user_data,
+                }
+                attempts_history.append(attempt_diag)
+
+                if attempt < max_attempts:
+                    # Clean up first attempt and retry with fresh user-data-dir
+                    shutil.rmtree(temp_user_data, ignore_errors=True)
+                    time.sleep(0.2)
+                    continue
+
+                total_elapsed = time.monotonic() - total_t0
+                err = (
+                    f"Rendering timed out after {timeout_seconds}s (attempt {attempt}/{max_attempts}). "
+                    f"[diag: elapsed={timeout_seconds}s, budget={timeout_seconds}s, pdf_created={pdf_exists}]"
+                )
+                exhausted_diag = dict(attempt_diag)
+                exhausted_diag["attempts"] = max_attempts
+                exhausted_diag["total_elapsed_seconds"] = round(total_elapsed, 2)
+                exhausted_diag["attempts_history"] = attempts_history
+                exhausted_diag["recovered_after_retry"] = False
+                return RenderResult(False, 0, err, error=err, diagnostics=exhausted_diag)
+            except Exception as e:
+                err = f"Render error: {str(e)}"
                 return RenderResult(False, 0, err, error=err)
+            finally:
+                shutil.rmtree(temp_user_data, ignore_errors=True)
 
-            if not temp_rendered_pdf.exists() or temp_rendered_pdf.stat().st_size == 0:
-                err = "PDF was not generated or generated empty."
-                return RenderResult(False, 0, err, error=err)
-
-            pages = self.count_pages(temp_rendered_pdf)
-
-            res = atomic_writer.safe_save_file(pdf_file, temp_rendered_pdf, allow_shadow=True)
-            if not res.success:
-                err = f"Failed to save PDF to {pdf_file}: {res.error_message}"
-                return RenderResult(False, 0, err, error=res.error_message)
-
-            if res.is_shadow:
-                msg = f"Successfully rendered {pages} page(s) (Saved to shadow copy: {res.final_path.name} due to lock)"
-            else:
-                msg = f"Successfully rendered {pages} page(s) ({res.final_path.stat().st_size} bytes)"
-
-            return RenderResult(True, pages, msg, final_path=res.final_path, is_shadow=res.is_shadow)
-        except subprocess.TimeoutExpired:
-            err = f"Rendering timed out after {timeout_seconds}s"
-            return RenderResult(False, 0, err, error=err)
-        except Exception as e:
-            err = f"Render error: {str(e)}"
-            return RenderResult(False, 0, err, error=err)
-        finally:
-            shutil.rmtree(temp_user_data, ignore_errors=True)
+        return RenderResult(False, 0, "Unknown render error", error="Unknown render error")
 
     def measure_overflow(
         self,

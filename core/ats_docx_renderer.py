@@ -118,8 +118,18 @@ class AtsDocxRenderer:
 
         out_file = Path(output_path).resolve()
         out_file.parent.mkdir(parents=True, exist_ok=True)
-        doc.save(str(out_file))
-        return out_file
+        import tempfile
+        import core.atomic_writer as atomic_writer
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_docx:
+            tmp_docx_path = Path(tmp_docx.name)
+        try:
+            doc.save(str(tmp_docx_path))
+            save_res = atomic_writer.safe_save_file(out_file, tmp_docx_path, allow_shadow=True)
+            if not save_res.success:
+                raise OSError(save_res.error_message or f"Failed to safely save DOCX: {out_file}")
+            return Path(save_res.final_path)
+        finally:
+            tmp_docx_path.unlink(missing_ok=True)
 
     def _apply_page_margins(self, doc: Any) -> None:
         """Applies uniform 0.75-inch margins for ATS scanning standards."""

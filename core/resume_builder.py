@@ -412,18 +412,18 @@ class ResumeBuilder:
         html_content = self.ats_renderer.render_html(vm)
 
         md_path = out_dir / "resume_ats_plain.md"
-        write_text_atomic(md_content, md_path)
+        actual_md_path = Path(write_text_atomic(md_content, md_path))
 
         html_path = out_dir / "resume_ats_plain.html"
-        write_text_atomic(html_content, html_path)
+        actual_html_path = Path(write_text_atomic(html_content, html_path))
 
         pdf_target = out_dir / "resume_ats_plain.pdf"
-        render_res = self.renderer.render_pdf(html_path, pdf_target)
+        render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
         render_ok, _, render_msg, pdf_path = _parse_render_result(render_res, pdf_target)
         if not render_ok:
             raise RuntimeError(f"Failed to render ATS plain PDF: {render_msg}")
 
-        return {"md": Path(md_path), "html": Path(html_path), "pdf": Path(pdf_path)}
+        return {"md": actual_md_path, "html": actual_html_path, "pdf": Path(pdf_path)}
 
     def build_academic_latex(
         self,
@@ -454,7 +454,7 @@ class ResumeBuilder:
             section_titles=section_titles,
         )
         tex_path = out_dir / "resume_academic_latex.tex"
-        write_text_atomic(tex_src, tex_path)
+        actual_tex_path = Path(write_text_atomic(tex_src, tex_path))
 
         html_src = self.academic_exporter.generate_latex_html_preview(
             vm,
@@ -467,20 +467,21 @@ class ResumeBuilder:
             section_titles=section_titles,
         )
         html_path = out_dir / "resume_academic_latex.html"
-        write_text_atomic(html_src, html_path)
+        actual_html_path = Path(write_text_atomic(html_src, html_path))
 
         pdf_target = out_dir / "resume_academic_latex.pdf"
         # Try native LaTeX compile first; if unavailable, render the LaTeX-style HTML
-        if not self.academic_exporter.compile_latex(tex_path, pdf_target):
-            render_res = self.renderer.render_pdf(html_path, pdf_target)
+        if not self.academic_exporter.compile_latex(actual_tex_path, pdf_target):
+            render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
             render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
             if not render_ok:
                 raise RuntimeError(f"Failed to render academic LaTeX PDF: {render_msg}")
             pdf_path = actual_pdf
         else:
-            pdf_path = pdf_target
+            last_res = getattr(self.academic_exporter, "last_compile_result", None)
+            pdf_path = getattr(last_res, "final_path", None) or pdf_target
 
-        return {"tex": Path(tex_path), "html": Path(html_path), "pdf": Path(pdf_path)}
+        return {"tex": actual_tex_path, "html": actual_html_path, "pdf": Path(pdf_path)}
 
     def build_academic_typst(
         self,
@@ -509,11 +510,15 @@ class ResumeBuilder:
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
         typ_src = self.academic_exporter.generate_typst(vm, reserve_photo=photo, photo_path=typ_photo)
         typ_path = out_dir / "resume_academic_typst.typ"
-        write_text_atomic(typ_src, typ_path)
+        actual_typ_path = Path(write_text_atomic(typ_src, typ_path))
 
         pdf_target = out_dir / "resume_academic_typst.pdf"
-        compiled = self.academic_exporter.compile_typst(typ_path, pdf_target)
-        if not compiled or not pdf_target.exists():
+        compiled = self.academic_exporter.compile_typst(actual_typ_path, pdf_target)
+        last_res = getattr(self.academic_exporter, "last_compile_result", None)
+        actual_compiled_pdf = getattr(last_res, "final_path", None) or pdf_target
+
+        actual_html_path: Optional[Path] = None
+        if not compiled or not Path(actual_compiled_pdf).exists():
             html_src = self.academic_exporter.generate_latex_html_preview(
                 vm,
                 reserve_photo=photo,
@@ -521,16 +526,19 @@ class ResumeBuilder:
                 lang="zh",
             )
             html_path = out_dir / "resume_academic_typst.html"
-            write_text_atomic(html_src, html_path)
-            render_res = self.renderer.render_pdf(html_path, pdf_target)
+            actual_html_path = Path(write_text_atomic(html_src, html_path))
+            render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
             render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
             if not render_ok:
                 raise RuntimeError(f"Failed to render academic Typst PDF: {render_msg}")
             pdf_path = actual_pdf
         else:
-            pdf_path = pdf_target
+            pdf_path = actual_compiled_pdf
 
-        return {"typ": Path(typ_path), "pdf": Path(pdf_path)}
+        res = {"typ": actual_typ_path, "pdf": Path(pdf_path)}
+        if actual_html_path is not None:
+            res["html"] = actual_html_path
+        return res
 
     def build_theme(
         self,
@@ -633,8 +641,8 @@ class ResumeBuilder:
         prof = self._resolve_profile(anonymize)
         vm = self._get_view_model(profile=prof)
         docx_path = out_dir / "resume_ats.docx"
-        AtsDocxRenderer().render(vm, docx_path)
-        return {"docx": docx_path}
+        actual_docx = AtsDocxRenderer().render(vm, docx_path)
+        return {"docx": Path(actual_docx)}
 
     def build_all(
         self,
