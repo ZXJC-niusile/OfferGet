@@ -7,7 +7,6 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9%2B-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Tests-679%20passed-brightgreen.svg" alt="Tests">
   <a href="https://github.com/ZXJC-niusile/OfferGet/actions"><img src="https://github.com/ZXJC-niusile/OfferGet/actions/workflows/ci.yml/badge.svg" alt="CI Status"></a>
   <img src="https://img.shields.io/badge/Architecture-Dual--Track%20(Industry%20%2B%20Academic)-indigo.svg" alt="Architecture">
   <img src="https://img.shields.io/badge/Themes-9%20HTML%20%2B%20LaTeX%20%2B%20Typst%20%2B%20DOCX-purple.svg" alt="Themes">
@@ -31,7 +30,7 @@
 - [📋 CLI 命令完整速查手册 (Cheat Sheet)](#-cli-命令完整速查手册-cheat-sheet)
 - [📦 预置开箱测试用例索引 (`examples/`)](#-预置开箱测试用例索引-examples)
 - [📚 战略方法论与基准词典 (`references/`)](#-战略方法论与基准词典-references)
-- [🧪 质量工程与全量自检 (679 项测试)](#-质量工程与全量自检-679-项测试)
+- [🧪 质量工程与全量自检 (自动化测试)](#-质量工程与全量自检-自动化测试)
 - [🔒 核心设计哲学与安全护栏](#-核心设计哲学与安全护栏)
 
 ---
@@ -45,14 +44,14 @@
 3. **学术端：保研学术失信与导师博弈风险**：夏令营报名系统存在严苛字数限制，学生常犯“在投论文虚报为已发表、单机仿真冒充硬件实测、动词越权”等学术不端红线；在联系导师时缺乏学术范式认知，容易遭遇口头承诺毁约（被鸽或鸽导师）。
 4. **决策端：薪酬陷阱隐蔽与有效时薪失真**：大厂高薪往往包裹着严苛的“绩效对半拆分、期权 4 年悬崖、单边竞业、无效加班”，缺乏科学的多 Offer 真实时薪折算模型。
 
-**OfferGet** 打造了一套 **“本地化、规则确定性、零幻觉” 的双轨操作系统**，让每一次求职与学术材料准备都有据可依、有数可查、抗辩抗漂移。
+**OfferGet** 打造了一套 **“本地化、规则确定性、以证据约束内容” 的双轨操作系统**，让每一次求职与学术材料准备都有据可依、有数可查、抗辩抗漂移。
 
 ---
 
 ## 🌟 5 分钟极速上手：四大场景实操路线图
 
 > 💡 **无需手写繁琐的 JSON！**  
-> 系统现已**原生支持 Markdown (`.md`) 或纯文本 (`.txt`) 简历**（参考 `examples/sample_resume.md`）。所有接收 `--profile` 的命令均可直接传入 `.md` / `.txt` 简历，后台自动完成提取与结构化解析。您也可以运行 `python cli.py profile parse examples/sample_resume.md --output my_profile.json` 导出。
+> 系统现已**原生支持 Markdown (`.md`) 或纯文本 (`.txt`) 简历**（参考 `examples/sample_resume.md`）。多数分析及构建命令可直接传入 `.md` / `.txt` 简历；`proposal accept` 需先解析并核对为 JSON，后台自动完成提取与结构化解析。您也可以运行 `python cli.py profile parse examples/sample_resume.md --output my_profile.json` 导出。
 
 
 ### 场景 1：企业技术求职定制与面试通关（求职者首选）
@@ -201,16 +200,25 @@ python cli.py resume build examples/candidate_profile.json --anonymize strict
 
 OfferGet 不仅是一个 CLI 工具，更是一个符合现代智能体标准的 **Agent Skill**。配置后，您可以直接在 AI 聊天框中用**纯自然语言**操作所有功能！
 
-### 1. 挂载安装 (只需 1 条命令)
-在支持 Antigravity / Gemini CLI 的环境中，通过软链接将仓库挂载为全局技能：
-* **Windows (PowerShell)**：
-  ```powershell
-  New-Item -ItemType Junction -Path "$HOME\.gemini\config\skills\offerget" -Target "你的本地路径\OfferGet"
-  ```
-* **macOS / Linux**：
-  ```bash
-  ln -s "/path/to/OfferGet" "$HOME/.gemini/config/skills/offerget"
-  ```
+### 1. 本地安装与按需工作流
+
+仓库根目录的 `SKILL.md` 是技能入口。先克隆仓库并安装需要的 Python 依赖；技能本身不会安装运行环境，也不会把简历上传到 API。支持本地技能的 Codex 可将完整仓库链接到技能目录（请替换为真实绝对路径）：
+
+```bash
+mkdir -p "$HOME/.agents/skills"
+ln -s "/absolute/path/to/OfferGet" "$HOME/.agents/skills/offerget"
+```
+
+Windows PowerShell（完整仓库链接，不只复制 `SKILL.md`）：
+
+```powershell
+New-Item -ItemType Directory -Force "$HOME\.agents\skills"
+New-Item -ItemType Junction -Path "$HOME\.agents\skills\offerget" -Target "C:\absolute\path\to\OfferGet"
+```
+
+其他支持本地技能的客户端可使用其各自的技能目录。运行命令前进入 OfferGet 仓库根目录，输入路径使用绝对路径。重新加载客户端技能后，明确调用 `offerget` 或提出匹配的简历任务。
+
+技能会按请求选择最短必要路径：只排版不强制索要 JD；定制改写先生成提案并等待确认；审计请求只返回审计结果。默认示例选择一个主题，避免无意编译所有格式。详见 [任务工作流](references/task-workflows.md) 和 [官方指导依据](references/skill-design.md)。
 
 ### 2. 自然语言交互范例
 挂载后，您无需记忆任何 CLI 参数，直接对 AI 提问即可：
@@ -236,7 +244,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | `academic-postgraduate`| HTML/PDF | 国内保研、考研复试、高校求职 | 中文宋体/黑体严谨规范、强调科研论文与获奖位次 |
 | `engineering-sb2nov` | HTML/PDF | 经典 Overleaf 极客圈风靡模板复刻 | 纯正 LaTeX 经典质感 HTML 完美复刻 |
 | `modern-corporate` | HTML/PDF | 国央企、金融科技、传统企业技术部 | 严谨庄重商务风、正规证件照卡位、层次分明 |
-| `ats-plain` | Text/HTML | ATS 投递直通车、猎聘/Boss/Workday | 零 CSS 干扰、纯粹文本树、100% 机器解析穿透 |
+| `ats-plain` | Text/HTML | ATS 投递直通车、猎聘/Boss/Workday | 简洁文本结构、标准模块标题；实际解析效果需在目标 ATS 验证 |
 | `academic-latex` | XeLaTeX | 计算机/数学系海外申请、学术夏令营 | 原生 XeLaTeX 编译，支持公式、宏包与顶会排版 |
 | `academic-typst` | Typst | 新一代高性能学术排版爱好者 | 毫秒级极速编译、现代化现代排版美学 |
 | `ats-docx` | Word DOCX| 猎头报备、国企内部审批系统 | 兼容 Microsoft Word，标准化表格与段落结构 |
@@ -272,7 +280,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 
 ## 📋 CLI 命令完整速查手册 (Cheat Sheet)
 
-以下是 OfferGet 提供的 **27 个核心命令入口** 与常用参数速查（所有接受 `--profile` 的命令均原生支持直接传入 `.md` / `.txt` 文本简历）：
+以下是 OfferGet 提供的 **27 个核心命令入口** 与常用参数速查（多数分析及构建命令支持 `.md` / `.txt`；`proposal accept` 使用经核对的 JSON）：
 
 ### 1. 简历自动解析与档案管理 (`offerget profile`)
 | 命令 | 核心参数与选项 | 功能说明 |
@@ -322,7 +330,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | :--- | :--- | :--- |
 | `python cli.py review <jd.txt>` | `--profile <path> [--output <file>]` | 端到端全流程审查闭环，生成改写提案草稿 |
 | `python cli.py proposal list` | `[--status draft] [--db <file>]` | 查看待人工确认的改写建议提案 |
-| `python cli.py proposal accept <id>` | `--profile <path> --jd <file> --output <new>`| 人工显式接受提案，生成新版 Profile 并自动编译 |
+| `python cli.py proposal accept <id>` | `--profile <path> --jd <file> --output <new>`| 人工显式接受提案，生成新版 Profile；添加 `--build-resume` 才编译 |
 | `python cli.py application add <id>` | `--company <name> --role <role>` | 新建求职投递记录，录入跟踪看板 |
 | `python cli.py application status` | `<id> <interview/offer/closed>` | 流转投递看板状态机 |
 | `python cli.py application outcome` | `<id> --stage interview --result rejected`| 录入面试结果、复盘反思与标签洞察 |
@@ -337,7 +345,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py doctor` | *(无参数)* | 检查 Python 运行环境、无头浏览器与可选排版工具 |
-| `python cli.py selftest` | *(无参数)* | 执行全系统 679 项自动化测试套件自检 |
+| `python cli.py selftest` | *(无参数)* | 执行全系统自动化测试套件自检 |
 | `python cli.py rendercv import <in>` | `--output profile.json` | 将 RenderCV JSON 导入转换为 OfferGet Profile |
 | `python cli.py rendercv export <in>` | `--output rendercv.json` | 将 OfferGet Profile 导出为标准 RenderCV JSON |
 
@@ -345,51 +353,51 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 
 ## 📦 预置开箱测试用例索引 (`examples/`)
 
-仓库自带真实业务与科研场景的 15 项高质量测试数据集，位于 [`examples/`](file:///D:/User%20Hub/GitHub/OfferGet/examples/) 目录下，开箱即用：
+仓库自带真实业务与科研场景的 15 项高质量测试数据集，位于 [`examples/`](examples/) 目录下，开箱即用：
 
 | 分类 | 样例文件 | 场景与核心用途 |
 | :--- | :--- | :--- |
-| **简历范本与画像** | [`sample_resume.md`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample_resume.md) | 🌟 **纯 Markdown 个人简历范本**，无需手写 JSON，支持直接作为 `--profile` 传给所有命令！ |
-| | [`candidate_profile.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/candidate_profile.json) | 互联网技术研发候选人完整标准档案（含架构经历、量化战功、技能与技术栈） |
-| | [`candidate_profile_minimal.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/candidate_profile_minimal.json) | 极简技术候选人档案（含基础个人信息、单项经历与技能），用于冷启动测试 |
-| | [`candidate_product_intern.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/candidate_product_intern.json) | 互联网大模型与数据产品经理/日常实习生画像样本（含跨端协同、数据指标驱动） |
-| **保研与学术深造** | [`academic_profile.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/academic_profile.json) | 计算机学术保研与直博推荐免试候选人画像（含论文 CCF 等级、科研实验分类） |
-| | [`candidate_academic_baoyan.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/candidate_academic_baoyan.json) | 985 高校计算机学子标准保研/学术简历数据（科研项目、顶会投稿、学科竞赛） |
-| | [`sample_advisor.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample_advisor.json) | 国家级重点实验室博导学术画像（含近 3 年重点论文、招收偏好、实验室研究范式） |
-| | [`sample_baoyan_entry.txt`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample_baoyan_entry.txt) | 典型的学术经历申报文本段落（包含仿真、在投等典型边界测试场景） |
-| **岗位招聘 JD** | [`sample_ai_jd.txt`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample_ai_jd.txt) | 国内头部大厂 AI / 分布式后端架构师真实招聘 JD 文本（含高并发指标与硬门槛） |
-| | [`sample_career_jd.txt`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample_career_jd.txt) | 传统业务线资深后端技术专家岗位招聘 JD 文本（含微服务治理与系统设计） |
-| **决策、防伪与复盘** | [`sample_offer.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample_offer.json) | 包含底薪、期权、绩效对半拆分及竞业条款的典型大厂真实 Offer 结构 |
-| | [`claims.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/claims.json) | 原子主张事实台账样本（Claim Ledger Schema，含 4 维证据定级与置信状态机） |
-| | [`answers_example.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/answers_example.json) | 面试复盘与实战问答结构化答辩样本（结构化还原真实面试问答与复盘要点） |
-| | [`resume-data.json`](file:///D:/User%20Hub/GitHub/OfferGet/examples/resume-data.json) | 多模板简历渲染核心 View Model 标准数据结构（供各主题模板排版调试） |
-| | [`sample-resume.html`](file:///D:/User%20Hub/GitHub/OfferGet/examples/sample-resume.html) | 编译产物参考样例（展示多模板引擎编译出的标准化单页 HTML 简历样式） |
+| **简历范本与画像** | [`sample_resume.md`](examples/sample_resume.md) | 🌟 **纯 Markdown 个人简历范本**，无需手写 JSON，可用于分析及构建；提案接受前需先解析并核对为 JSON。 |
+| | [`candidate_profile.json`](examples/candidate_profile.json) | 互联网技术研发候选人完整标准档案（含架构经历、量化战功、技能与技术栈） |
+| | [`candidate_profile_minimal.json`](examples/candidate_profile_minimal.json) | 极简技术候选人档案（含基础个人信息、单项经历与技能），用于冷启动测试 |
+| | [`candidate_product_intern.json`](examples/candidate_product_intern.json) | 互联网大模型与数据产品经理/日常实习生画像样本（含跨端协同、数据指标驱动） |
+| **保研与学术深造** | [`academic_profile.json`](examples/academic_profile.json) | 计算机学术保研与直博推荐免试候选人画像（含论文 CCF 等级、科研实验分类） |
+| | [`candidate_academic_baoyan.json`](examples/candidate_academic_baoyan.json) | 985 高校计算机学子标准保研/学术简历数据（科研项目、顶会投稿、学科竞赛） |
+| | [`sample_advisor.json`](examples/sample_advisor.json) | 国家级重点实验室博导学术画像（含近 3 年重点论文、招收偏好、实验室研究范式） |
+| | [`sample_baoyan_entry.txt`](examples/sample_baoyan_entry.txt) | 典型的学术经历申报文本段落（包含仿真、在投等典型边界测试场景） |
+| **岗位招聘 JD** | [`sample_ai_jd.txt`](examples/sample_ai_jd.txt) | 国内头部大厂 AI / 分布式后端架构师真实招聘 JD 文本（含高并发指标与硬门槛） |
+| | [`sample_career_jd.txt`](examples/sample_career_jd.txt) | 传统业务线资深后端技术专家岗位招聘 JD 文本（含微服务治理与系统设计） |
+| **决策、防伪与复盘** | [`sample_offer.json`](examples/sample_offer.json) | 包含底薪、期权、绩效对半拆分及竞业条款的典型大厂真实 Offer 结构 |
+| | [`claims.json`](examples/claims.json) | 原子主张事实台账样本（Claim Ledger Schema，含 4 维证据定级与置信状态机） |
+| | [`answers_example.json`](examples/answers_example.json) | 面试复盘与实战问答结构化答辩样本（结构化还原真实面试问答与复盘要点） |
+| | [`resume-data.json`](examples/resume-data.json) | 多模板简历渲染核心 View Model 标准数据结构（供各主题模板排版调试） |
+| | [`sample-resume.html`](examples/sample-resume.html) | 编译产物参考样例（展示多模板引擎编译出的标准化单页 HTML 简历样式） |
 
 ---
 
 ## 📚 战略方法论与基准词典 (`references/`)
 
-仓库在 [`references/`](file:///D:/User%20Hub/GitHub/OfferGet/references/) 目录内置了 13 项完整的求职军火库与方法论基准：
+仓库在 [`references/`](references/) 目录内置了 13 项完整的求职军火库与方法论基准：
 
 | 文档规范 | 核心内容与设计准则 |
 | :--- | :--- |
-| [`jd-layers-5.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/jd-layers-5.md) | **5 图层 JD 拆解标准**：组织定位、硬核技术架构、商业影响、隐性黑话、红旗考核指标 |
-| [`hidden-signals-lexicon.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/hidden-signals-lexicon.md) | **32 项黑话潜台词词典**：大厂话术对照真相与候选人应对战术 |
-| [`red-flags-guide.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/red-flags-guide.md) | **技术陷阱与反问求证指南**：5 大致命红旗与 15 道黄金面试反问探针 |
-| [`anti-ai-slop.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/anti-ai-slop.md) | **反 AI 写作指纹规范**：四大特征拦截、硬指标双重锚定与 CAR 事实因果重构 |
-| [`sentence-patterns.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/sentence-patterns.md) | **简历战术句式库**：STAR+CAR 因果句型、动词阶梯与工程成果句式 |
-| [`inflation-patterns.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/inflation-patterns.md) | **虚标膨胀特征词典与防伪审查基准**：高频虚高修饰词、算力欺诈识别与真实锚定法则 |
-| [`interview-questions-bank.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/interview-questions-bank.md) | **大厂大模型面试 Top 20 深度题库**：3D 并行、MLA、MoE 路由、GRPO、PagedAttention 等 |
-| [`claim-ledger-schema.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/claim-ledger-schema.md) | **原子主张事实台账规范**：4 维解耦、JSON Schema、证据定级与置信状态机 |
-| [`methods-11.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/methods-11.md) | **ApexResume 战术手法 11 讲**：Mini-RFC、参数威慑、动词定级、因果反事实基线 |
-| [`evidence-rules.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/evidence-rules.md) | **凭证等级与核验法则**：Level A/B/C/D 证据链支撑体系 |
-| [`jd-matrix-framework.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/jd-matrix-framework.md) | **岗位匹配度矩阵分析框架**：多维权重打分模型与漏斗型筛选题库 |
-| [`ai-agent-lexicon.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/ai-agent-lexicon.md) | **AI Agent / LLM 核心技术栈与架构分级词典**：从底层算子到上层 Agent 工作流标准化术语 |
-| [`hr-pitch-guide.md`](file:///D:/User%20Hub/GitHub/OfferGet/references/hr-pitch-guide.md) | **HR / 业务 Leader 破冰与三段式沟通话术指南**：高情商自荐、改期协调与薪酬谈判话术模板 |
+| [`jd-layers-5.md`](references/jd-layers-5.md) | **5 图层 JD 拆解标准**：组织定位、硬核技术架构、商业影响、隐性黑话、红旗考核指标 |
+| [`hidden-signals-lexicon.md`](references/hidden-signals-lexicon.md) | **32 项黑话潜台词词典**：大厂话术对照真相与候选人应对战术 |
+| [`red-flags-guide.md`](references/red-flags-guide.md) | **技术陷阱与反问求证指南**：5 大致命红旗与 15 道黄金面试反问探针 |
+| [`anti-ai-slop.md`](references/anti-ai-slop.md) | **反 AI 写作指纹规范**：四大特征拦截、硬指标双重锚定与 CAR 事实因果重构 |
+| [`sentence-patterns.md`](references/sentence-patterns.md) | **简历战术句式库**：STAR+CAR 因果句型、动词阶梯与工程成果句式 |
+| [`inflation-patterns.md`](references/inflation-patterns.md) | **虚标膨胀特征词典与防伪审查基准**：高频虚高修饰词、算力欺诈识别与真实锚定法则 |
+| [`interview-questions-bank.md`](references/interview-questions-bank.md) | **大厂大模型面试 Top 20 深度题库**：3D 并行、MLA、MoE 路由、GRPO、PagedAttention 等 |
+| [`claim-ledger-schema.md`](references/claim-ledger-schema.md) | **原子主张事实台账规范**：4 维解耦、JSON Schema、证据定级与置信状态机 |
+| [`methods-11.md`](references/methods-11.md) | **ApexResume 战术手法 11 讲**：Mini-RFC、参数威慑、动词定级、因果反事实基线 |
+| [`evidence-rules.md`](references/evidence-rules.md) | **凭证等级与核验法则**：Level A/B/C/D 证据链支撑体系 |
+| [`jd-matrix-framework.md`](references/jd-matrix-framework.md) | **岗位匹配度矩阵分析框架**：多维权重打分模型与漏斗型筛选题库 |
+| [`ai-agent-lexicon.md`](references/ai-agent-lexicon.md) | **AI Agent / LLM 核心技术栈与架构分级词典**：从底层算子到上层 Agent 工作流标准化术语 |
+| [`hr-pitch-guide.md`](references/hr-pitch-guide.md) | **HR / 业务 Leader 破冰与三段式沟通话术指南**：高情商自荐、改期协调与薪酬谈判话术模板 |
 
 ---
 
-## 🧪 质量工程与全量自检 (679 项测试)
+## 🧪 质量工程与全量自检 (自动化测试)
 
 
 OfferGet 追求航空级的代码可靠性与工业级稳健度：
@@ -398,7 +406,7 @@ OfferGet 追求航空级的代码可靠性与工业级稳健度：
 # 1. 环境依赖诊断
 python cli.py doctor
 
-# 2. 运行系统级统一自检流水线 (全量 679 项测试 100% 绿灯)
+# 2. 运行系统级统一自检流水线 (全量自动化测试；以本次执行结果为准)
 python cli.py selftest
 
 # 3. 运行端到端全链路集成测试 (E2E Integration)
@@ -424,3 +432,4 @@ python -m pytest tests -q
 本项目遵循 **[CC BY-NC-SA 4.0](LICENSE)** (知识共享 署名-非商业性使用-相同方式共享 4.0 国际) 协议开源。
 
 > **免责声明**：OfferGet 致力于提升求职者与升学学子的真实表达质量与职场信息对称度。系统提供的匹配得分、时薪测算、合同陷阱提示及防守策略仅作为个人材料准备与决策辅助工具，不构成任何形式的法律建议、保研录取承诺或招聘保证。用户对其提交的一切申请材料真实性与法律后果负全责。
+
