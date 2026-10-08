@@ -416,6 +416,16 @@ python -m pytest tests/test_e2e_pipeline.py -v
 python -m pytest tests -q
 ```
 
+### Skill 工作流评测
+
+```bash
+python scripts/eval_offerget_skill.py validate
+python scripts/eval_offerget_skill.py smoke
+python scripts/eval_offerget_skill.py grade
+```
+
+前两项分别检查合成用例结构与固定 CLI 契约，不代表模型表现。`grade` 只核验已采集并标注的运行记录；没有真实记录时报告 `not_run`，不会自动调用模型或付费 API。输入、证据与评分规范见 [Skill 评测指南](docs/SKILL_EVALUATION.md)。
+
 ---
 
 ## 🔒 核心设计哲学与安全护栏

@@ -1,0 +1,5 @@
+Company: Example Services
+Role: Python backend engineer
+Requirements: Python, SQL, API performance analysis, testing, production debugging.
+Preferred: Kubernetes operations and distributed tracing.
+Describe individual contributions and measurement methodology accurately.
