@@ -5,41 +5,31 @@
   <title>Resume - Academic Postgraduate Theme</title>
   <style>
     :root {
-      /* Formal Chinese Academic Typography */
-      --font-serif: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, "SimSun", serif;
-      --font-sans: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", -apple-system, sans-serif;
-      --font-mono: "JetBrains Mono", Consolas, "Courier New", monospace;
-
-      /* Academic Burgundy & Ink Palette */
-      --color-primary: #8B1E1E;         /* Academic Crimson / Burgundy (学术红) */
-      --color-primary-dark: #661010;    /* Deep Crimson */
-      --color-text: #1A1A1A;            /* Ink Black */
-      --color-muted: #555555;           /* Charcoal Gray */
-      --color-border: #D1D5DB;          /* Formal Gray Rule */
-      --color-bg-subtle: #FDFBF7;       /* Warm Parchment Tint */
+      /* A formal Chinese academic document: Song-style headings and quiet ink. */
+      --font-serif: "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", STSong, "SimSun", Georgia, serif;
+      --font-sans: Arial, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: Consolas, "Courier New", monospace;
+      --color-primary: #672F35;
+      --color-primary-dark: #262323;
+      --color-accent: #454040;
+      --color-text: #262323;
+      --color-muted: #514B4B;
+      --color-border: #B9B0AE;
+      --color-bg-subtle: #FFFFFF;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
 
-      /* Dynamic Layout Tokens for Auto-Fit Compaction Engine */
-      --page-padding-y: 9.2mm;
-      --page-padding-x: 11.5mm;
-      --body-font-size: 11.8px;
-      --body-line-height: 1.60;
-      --item-gap: 4.5px;
-      --section-gap: 10.5px;
+      /* Keep every token editable by the existing AutoFit engine. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 15mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.5;
+      --item-gap: 4px;
+      --section-gap: 12px;
     }
 
-    @page {
-      size: A4 portrait;
-      margin: 0;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    @page { size: A4 portrait; margin: var(--page-padding-y) 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: var(--font-sans);
       font-size: var(--body-font-size);
@@ -50,248 +40,209 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-
     .page {
       width: 210mm;
       min-height: 297mm;
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
       background: #FFFFFF;
-      position: relative;
     }
+    a { color: inherit; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+    .num, .metric { font-variant-numeric: tabular-nums; }
 
-    /* Academic Header with Double Rule */
+    /* These narrow overrides also apply to the production renderer's inline
+       defaults. Content, the optional photo, and other themes are unchanged. */
     header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-top: 1px solid var(--color-primary);
-      border-bottom: 2.5px solid var(--color-primary);
-      padding: 6px 0;
-      margin-bottom: var(--section-gap);
+      gap: 14px;
+      border-top: 0 !important;
+      border-bottom: 1.2px solid var(--color-primary) !important;
+      padding: 0 0 10px !important;
+      margin-bottom: 0 !important;
     }
-
+    header > div:first-child { min-width: 0; padding-right: 0 !important; }
     .header-top {
       display: flex;
-      align-items: baseline;
-      justify-content: space-between;
+      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: center !important;
+      gap: 3px;
+      text-align: center;
     }
-
+    .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
     h1 {
       font-family: var(--font-serif);
-      font-size: 24px;
+      font-size: 26px !important;
       font-weight: 700;
-      color: var(--color-primary);
-      letter-spacing: 2px;
+      color: var(--color-text) !important;
+      letter-spacing: 1px !important;
+      line-height: 1.3;
     }
-
+    .header-top > span { font-size: 1em !important; font-weight: 400 !important; }
     .contacts {
       display: flex;
-      gap: 12px;
-      font-size: 11.2px;
-      color: var(--color-muted);
-      margin-top: 4px;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: baseline;
+      gap: 3px 8px !important;
+      font-size: 0.9em !important;
     }
+    .contacts span { display: inline-flex; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .contacts a { min-width: 0; overflow-wrap: anywhere; }
+    .headline, .lead { margin-top: 4px; overflow-wrap: anywhere; }
 
-    /* Section Headers */
     .section-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+      display: block;
       margin-top: var(--section-gap);
       margin-bottom: 5px;
-      border-bottom: 1.5px solid var(--color-primary);
-      padding-bottom: 2.5px;
+      padding-bottom: 2px;
+      border-bottom: 1px solid var(--color-border);
     }
-
     .section-header h2 {
       font-family: var(--font-serif);
-      font-size: 14px;
+      font-size: 1.1em;
       font-weight: 700;
       color: var(--color-primary);
-      letter-spacing: 1px;
+      letter-spacing: 0.5px;
     }
+    .section-header .rule { display: none; }
 
-    .section-header .rule {
-      display: none;
-    }
-
-    /* Organization Bars */
-    .org-bar {
+    /* School/research group first, role below, dates aligned to the right. */
+    .org-bar, .project-header {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: baseline;
-      margin-top: var(--item-gap);
-      margin-bottom: 3.5px;
+      gap: 2px 14px;
+      padding: 0;
+      background: transparent;
+      border: 0;
     }
-
-    .org-title {
+    .org-left, .project-header > div:first-child {
+      display: flex;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 0 !important;
+      min-width: 0;
+    }
+    .org-left > *, .project-header > div:first-child > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .org-title, .project-header > div:first-child > span:first-child {
       font-family: var(--font-serif);
+      font-size: 1.02em !important;
       font-weight: 700;
-      font-size: 12.8px;
-      color: var(--color-text);
+      color: var(--color-text) !important;
     }
-
-    .org-role {
-      font-weight: 600;
-      font-size: 11.8px;
-      color: var(--color-primary);
-      margin-left: 8px;
+    .org-role, .project-header > div:first-child > span + span {
+      font-size: 0.95em !important;
+      font-weight: 400 !important;
+      color: var(--color-muted) !important;
     }
-
-    .org-right {
-      font-size: 11.0px;
+    .org-right, .project-header > div:last-child {
+      flex: 0 1 auto;
+      margin-left: auto;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      text-align: right;
+      font-size: 0.9em !important;
+      font-variant-numeric: tabular-nums;
       color: var(--color-muted);
-      font-family: var(--font-mono);
     }
-
-    /* Academic Bullet Lists */
-    ul {
-      list-style: none;
-      padding-left: 0;
-      margin-top: 2px;
-      margin-bottom: 4px;
-    }
-
-    li {
-      position: relative;
-      padding-left: 14px;
-      margin-bottom: var(--item-gap);
-      font-size: var(--body-font-size);
-      line-height: var(--body-line-height);
-    }
-
-    li::before {
-      content: "◆";
-      position: absolute;
-      left: 1px;
-      color: var(--color-primary);
-      font-size: 7.5px;
-      top: 1px;
-    }
-
-    /* Education Grid */
     .edu-grid {
-      display: grid;
-      row-gap: 3px;
-      font-size: 11.2px;
-      color: var(--color-muted);
-      background: var(--color-bg-subtle);
-      border: 1px solid #EFE8DC;
-      padding: 5px 8px;
-      border-radius: 3px;
-      margin-top: 3.5px;
+      display: flex !important;
+      flex-wrap: wrap;
+      gap: 3px 20px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      font-size: 0.92em !important;
     }
+    .edu-grid > div { flex: 1 1 16em; min-width: 0; overflow-wrap: anywhere; }
+    h3 { font-family: var(--font-serif); font-size: 1em; }
+    .project-tag { color: var(--color-muted); }
 
-    b, strong {
-      color: var(--color-text);
-      font-weight: 700;
+    /* Standard hanging bullets, without decorative diamonds or highlighted cards. */
+    ul { list-style: disc; padding-left: 17px; margin-top: 2px; }
+    li { padding-left: 1px; margin-bottom: var(--item-gap); overflow-wrap: anywhere; }
+    li::marker { color: var(--color-text); font-size: 0.85em; }
+    li.sub { margin-left: 14px; list-style-type: circle; }
+    #skills li { flex-wrap: wrap; padding-left: 0; font-size: 1em !important; }
+    #skills li > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
+    b, strong, .skill-category { font-weight: 700; color: var(--color-text); }
+
+    /* A restrained academic score table. Keep every score visible and selectable. */
+    .exam-target-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px 16px;
+      font-size: 0.95em !important;
     }
-
-    .num, .metric {
-      font-family: var(--font-serif);
-      font-weight: 600;
-      color: var(--color-primary);
+    .exam-target-bar > span { flex: 1 1 16em; min-width: 0; overflow-wrap: anywhere; }
+    .exam-score-table {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      border: 0 !important;
+      border-top: 1px solid var(--color-border) !important;
+      border-bottom: 1px solid var(--color-border) !important;
+      font-size: 0.9em !important;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
     }
-
-    .skill-category {
-      font-weight: 700;
-      color: var(--color-primary);
-      margin-right: 6px;
+    .exam-score-table tr { background: transparent !important; border: 0 !important; }
+    .exam-score-table th, .exam-score-table td {
+      background: transparent !important;
+      border: 0 !important;
+      padding: 5px 4px !important;
+      overflow-wrap: anywhere;
+      line-height: 1.45;
     }
+    .exam-score-table thead th { border-bottom: 1px solid var(--color-border) !important; }
+    .exam-score-table .score-total-val { font-size: 1em !important; }
 
+    /* Missing facts remain visibly marked rather than silently removed. */
     .todo {
-      background-color: var(--color-todo-bg);
+      background: var(--color-todo-bg);
       color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
+      padding: 0 3px;
       border: 1px dashed var(--color-todo-text);
       font-weight: 600;
     }
-
-    /* Postgraduate Exam Score Table & Target Bar */
-    .exam-target-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      font-size: 11.8px;
-      color: var(--color-text);
-      margin-top: var(--item-gap, 4px);
-      margin-bottom: 4px;
-      font-family: var(--font-sans);
-    }
-
-    .exam-score-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 3px;
-      margin-bottom: 6px;
-      text-align: center;
-      font-size: 11.2px;
-      border: 1.2px solid var(--color-primary);
-    }
-
-    .exam-score-table th,
-    .exam-score-table td {
-      border: 1px solid #D8CFC4;
-      padding: 3.5px 5px;
-      line-height: 1.35;
-    }
-
-    .exam-score-table thead th {
-      background-color: var(--color-bg-subtle);
-      font-weight: 600;
-      color: var(--color-text);
-      border-bottom: 1.5px solid var(--color-primary);
-    }
-
-    .exam-score-table th.score-label {
-      background-color: #F5EFEB;
-      color: var(--color-primary-dark);
-      font-weight: 700;
-      font-family: var(--font-serif);
-      width: 16%;
-    }
-
-    .exam-score-table td.score-sublabel {
-      background-color: var(--color-bg-subtle);
-      font-weight: 600;
-      color: var(--color-muted);
-    }
-
-    .exam-score-table th.score-total-head {
-      background-color: #F8ECE8;
-      color: var(--color-primary);
-      font-weight: 700;
-    }
-
-    .exam-score-table td.score-total-val {
-      font-family: var(--font-serif);
-      font-weight: 700;
-      color: var(--color-primary);
-      font-size: 12px;
-      background-color: #FCF6F4;
+    @media print {
+      .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      header, .section-header, .org-bar, .project-header, .exam-target-bar {
+        break-inside: avoid;
+        break-after: avoid;
+      }
+      .exam-score-table { break-inside: avoid; }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
     }
   </style>
 </head>
 <body>
   <div class="page">
     <header>
-      <div style="flex:1;">
+      <div>
         <div class="header-top">
           <h1>{{NAME}}</h1>
-          <span style="font-size:12.5px; font-weight:600; color:var(--color-primary);">申请方向：{{TITLE}}</span>
+          <span>申请方向：{{TITLE}}</span>
         </div>
         <div class="contacts">
-          <span>{{PHONE}}</span>
-          <span>|</span>
-          <span>{{EMAIL}}</span>
-          <span>|</span>
-          <span>{{LOCATION}}</span>
+          <span>{{PHONE}}</span><span>•</span><span>{{EMAIL}}</span><span>•</span><span>{{LOCATION}}</span>
         </div>
       </div>
     </header>
-
     {{SECTIONS_CONTENT}}
   </div>
 </body>
