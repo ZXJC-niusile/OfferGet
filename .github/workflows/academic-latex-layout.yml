@@ -1,0 +1,42 @@
+name: Academic LaTeX visual QA
+on:
+  pull_request:
+    paths:
+      - 'core/academic_exporter.py'
+      - 'core/resume_view_model.py'
+      - 'core/profile_adapter.py'
+      - 'scripts/qa_academic_latex_layout.py'
+      - 'scripts/qa_ats_docx_layout.py'
+      - 'scripts/qa_modern_navy_layout.py'
+      - 'tests/test_academic_latex_design.py'
+      - '.github/workflows/academic-latex-layout.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  latex-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native TeX, browser and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y texlive-xetex texlive-lang-chinese fonts-noto-cjk fonts-texgyre
+          python -m pip install -e '.[all]' 'playwright==1.62.0'
+          python -m playwright install --with-deps chromium
+      - name: Check source escaping and compilation failure handling
+        run: python -m pytest tests/test_academic_latex_design.py -v
+      - name: Render native and fallback separately
+        run: python scripts/qa_academic_latex_layout.py --output artifacts/academic-latex
+      - name: Preserve native and fallback source, PDF, pages and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: academic-latex-${{ github.sha }}
+          path: artifacts/academic-latex
+          if-no-files-found: error
+          retention-days: 14
