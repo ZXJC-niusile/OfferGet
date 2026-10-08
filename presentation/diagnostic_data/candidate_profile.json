@@ -1,0 +1,41 @@
+{
+  "fixture_note": "Synthetic diagnostic data, not a real person or resume.",
+  "candidate": {
+    "name": "Synthetic Candidate",
+    "email": "candidate@example.invalid",
+    "title_zh": "Python 工程师",
+    "years_of_experience": 3
+  },
+  "narrative": {
+    "summary_zh": "使用 Python 和 PyTorch 开发训练工具，维护 Linux 服务。",
+    "summary_en": "Developed Python and PyTorch training tools and maintained Linux services."
+  },
+  "competencies": {
+    "programming": [
+      "Python",
+      "PyTorch",
+      "Linux",
+      "Git"
+    ]
+  },
+  "experience": [
+    {
+      "company": "Synthetic Company",
+      "role": "Python 工程师",
+      "period": "2021 - 2024",
+      "visibility": [
+        "always"
+      ],
+      "highlights": [
+        {
+          "claim_id": "SYNTHETIC-01",
+          "claim_zh": "使用 Python 和 PyTorch 开发训练工具，在 Linux 上通过 Git 维护代码，测试覆盖率达到 54.2%。",
+          "claim_en": "Developed Python and PyTorch tools on Linux with Git; test coverage reached 54.2%.",
+          "verified_metrics": {
+            "test_coverage": "54.2%"
+          }
+        }
+      ]
+    }
+  ]
+}

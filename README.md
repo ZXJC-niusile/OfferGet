@@ -352,10 +352,18 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 | `python cli.py offer counter <offer>` | `--target-base <薪资> [--profile <path>]`| 生成高情商薪酬争取邮件与口头谈判对谈话术 |
 
 ### 9. 系统自检与生态互通 (`offerget doctor` / `selftest` / `rendercv`)
+
+Installed packages can run `python -m cli doctor` and `python -m cli selftest` from any directory.
+Selftest uses bundled synthetic fixtures and temporary output files. It checks core runtime behavior;
+optional browser/compiler rendering is not exercised. Run `python -m pytest tests/` from a source
+checkout for the developer regression suite and rendering integration tests. The wheel-install
+regression also requires the existing build tools: `setuptools>=68`, `wheel`, and `pip`.
+It builds and installs with network package indexes disabled.
+
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
 | `python cli.py doctor` | *(无参数)* | 检查 Python 运行环境、无头浏览器与可选排版工具 |
-| `python cli.py selftest` | *(无参数)* | 执行全系统自动化测试套件自检 |
+| `python cli.py selftest` | *(无参数)* | 执行已安装包的核心 smoke checks（不运行开发测试套件或真实 PDF 渲染） |
 | `python cli.py rendercv import <in>` | `--output profile.json` | 将 RenderCV JSON 导入转换为 OfferGet Profile |
 | `python cli.py rendercv export <in>` | `--output rendercv.json` | 将 OfferGet Profile 导出为标准 RenderCV JSON |
 
@@ -416,7 +424,7 @@ OfferGet 追求航空级的代码可靠性与工业级稳健度：
 # 1. 环境依赖诊断
 python cli.py doctor
 
-# 2. 运行系统级统一自检流水线 (全量自动化测试；以本次执行结果为准)
+# 2. 运行已安装包的核心 smoke checks（不包含开发测试套件或真实渲染）
 python cli.py selftest
 
 # 3. 运行端到端全链路集成测试 (E2E Integration)

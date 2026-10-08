@@ -1,0 +1,16 @@
+{
+  "fixture_note": "Synthetic diagnostic data, not a real person or application.",
+  "candidate": {
+    "name": "Synthetic Student",
+    "university": "Synthetic University",
+    "major": "Computer Science",
+    "email": "student@example.invalid",
+    "phone": "000-000-0000"
+  },
+  "academic_standing": {"gpa": 3.5, "rank": "10/100", "english": {"cet6": 550}},
+  "skills": {"programming_languages": ["Python", "PyTorch"]},
+  "research_interests": ["machine learning"],
+  "projects": [],
+  "publications": [],
+  "target_schools": [{"school_name": "Synthetic University", "track": "学硕"}]
+}

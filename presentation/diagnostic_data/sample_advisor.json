@@ -1,0 +1,7 @@
+{
+  "fixture_note": "Synthetic diagnostic data, not a real advisor.",
+  "name": "陈示例",
+  "institution": "Synthetic University",
+  "email": "advisor@example.invalid",
+  "research_topics": ["machine learning", "Python", "PyTorch"]
+}

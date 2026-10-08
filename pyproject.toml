@@ -54,3 +54,5 @@ include = ["core*", "presentation*", "templates*", "themes*", "services*"]
 "*" = ["*.html", "*.md"]
 "templates" = ["*.html"]
 "themes" = ["*.html", "*.md"]
+
+"presentation.diagnostic_data" = ["*.json", "*.txt"]

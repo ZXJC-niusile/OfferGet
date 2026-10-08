@@ -1,0 +1,4 @@
+Synthetic diagnostic job, not a real vacancy.
+Python 工程师
+岗位职责：使用 Python 和 PyTorch 开发模型训练工具，维护 Linux 服务。
+任职要求：熟悉 Python、PyTorch、Linux 和 Git，具备软件测试经验。
