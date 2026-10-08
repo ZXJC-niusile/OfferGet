@@ -584,6 +584,9 @@ class FactVerificationGuard:
         }
         if subtopic:
             anchor["subtopic"] = subtopic
+        anchor.update(self._anchor_provenance(claim_id))
+        if key.endswith("_before") or key.endswith("_after"):
+            anchor["metric_role"] = key.rsplit("_", 1)[-1]
         self.baseline_anchors.append(anchor)
         self.all_verified_numbers.add(baseline_value)
 
@@ -611,8 +614,47 @@ class FactVerificationGuard:
                 "baseline_value": m["value"],
                 "baseline_raw": m["raw"],
                 "unit": m.get("unit", ""),
-                "metric_type": m.get("type", "generic")
+                "metric_type": m.get("type", "generic"),
+                **self._anchor_provenance(source_id),
+                **self._metric_position_context(text, m),
             })
+
+    def _anchor_provenance(self, source_id: str) -> Dict[str, str]:
+        """Keep exact claim/entry identity instead of inferring it from numbers."""
+        matches = [claim_id for claim_id in self._claim_id_to_scope if source_id == claim_id or source_id.startswith(claim_id + ":")]
+        if matches:
+            claim_id = max(matches, key=len)
+            return {"claim_id": claim_id, "scope": self._claim_id_to_scope[claim_id]}
+        for name, index in self._project_name_to_proj_idx.items():
+            if source_id.lower().startswith(name + ":"):
+                return {"scope": f"projects[{index}]"}
+        return {}
+
+    @staticmethod
+    def _metric_position_context(text: str, metric: Dict[str, Any]) -> Dict[str, str]:
+        """Retain explicit before/after roles and the nearby named percentage.
+
+        This intentionally recognizes only explicit transition phrasing. It does
+        not promote an unrelated source value merely because the number matches.
+        """
+        if metric.get("type") != "percentage":
+            return {}
+        prefix = text[:metric.get("start", 0)].lower()
+        clause = re.split(r"[。；;!?\n]|(?<!\d)\.(?!\d)", prefix)[-1]
+        role = ""
+        if re.search(r"(?:\bfrom|从|起始)\s*$", clause):
+            role = "before"
+        elif re.search(r"(?:\bto|至|到)\s*$", clause):
+            role = "after"
+        if not role:
+            return {}
+        transitions = list(re.finditer(r"\bfrom\b|从|起始", clause))
+        name = clause[:transitions[-1].start()] if transitions else clause
+        if role == "after" and not transitions:
+            name = re.sub(r"(?:提升至|优化至|下降至|压减至|达到|至|到|\bto)\s*$", "", name)
+        name = re.split(r"[，,]", name)[-1]
+        name = re.sub(r"\b(?:increased|improved|reduced|decreased|rose|fell)\s*$", "", name).strip(" ，,:：")
+        return {"metric_role": role, "metric_name": name}
 
     def _extract_raw_metrics_from_text(self, text: str) -> List[Dict[str, Any]]:
         """
@@ -1668,6 +1710,7 @@ class FactVerificationGuard:
 
         # Resolve scope_key if provided
         scope_key = self._resolve_scope_key(target_scope, target_claim_id)
+        claimed_context = self._metric_position_context(bullet_text, metric)
 
         # Extract local context around metric
         start = metric.get("start", 0)
@@ -1691,8 +1734,24 @@ class FactVerificationGuard:
             if topic not in allowed_topics:
                 continue
 
-            # Scope filtering: if scope_key is set, restrict non-candidate anchors to that scope
-            if scope_key:
+            # Exact provenance wins over legacy identifier-name heuristics.
+            if target_claim_id and anchor.get("claim_id") and anchor["claim_id"] != target_claim_id:
+                continue
+            if scope_key and anchor.get("scope") and anchor["scope"] != scope_key:
+                continue
+            claimed_role = claimed_context.get("metric_role")
+            anchor_role = anchor.get("metric_role")
+            if claimed_role and anchor_role and claimed_role != anchor_role:
+                continue
+            if topic == "percentage" and claimed_role:
+                if anchor_role != claimed_role:
+                    continue
+                source_name = anchor.get("metric_name")
+                if source_name and claimed_context.get("metric_name") and source_name != claimed_context["metric_name"]:
+                    continue
+
+            # Scope filtering for older anchors without explicit provenance.
+            if scope_key and not anchor.get("scope"):
                 anchor_id = anchor.get("anchor_id", "")
                 is_cand = (
                     anchor_id.startswith("candidate:")
@@ -1830,7 +1889,13 @@ class FactVerificationGuard:
             baseline_comp = baseline_val
             claimed_comp = claimed_val
 
-        # Allow small floating point rounding tolerance
+        # Explicit generic percentage endpoints are factual roles, not ceilings.
+        # Preserve their values instead of allowing a different lower baseline,
+        # swapped endpoint, or a change hidden by the legacy rounding tolerance.
+        if topic == "percentage" and anchor.get("metric_role") in {"before", "after"}:
+            return abs(claimed_comp - baseline_comp) > 1e-9, baseline_raw
+
+        # Preserve existing tolerance for other legacy metric categories.
         if abs(claimed_comp - baseline_comp) < 0.2:
             return False, baseline_raw
 
