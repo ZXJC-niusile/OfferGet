@@ -1,33 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Unit Test Suite for OfferGet Diff Ledger & Change Traceability Engine (core/diff_ledger.py).
-
-Verifies:
-1. DiffEntry and DiffLedger data structure integrity, serialization and deserialization.
-2. Filtering, querying, and category/severity aggregations.
-3. Automatic extraction and alignment from FactVerificationGuard results and Candidate Profile.
-4. Comprehensive coverage of all key substantive issues:
-   - Role Hierarchy Alignment:
-     * 原“编辑部成员” -> Editorial Team Member (已核验未作越级提拔)
-     * 原“推广成员” -> 拦截 Specialist, 采用 Promotion Team Member
-     * 原“志愿实践成员” -> 拦截 Lead, 采用 Field Research Volunteer
-     * 原“班级心理委员” -> 拦截 Student Affairs, 保留 Class Mental Health Representative
-   - Metric Scope Alignment:
-     * 原“为30+场直播制作” -> 明确采用 for 30+ livestream sessions (场次 vs 物料件数)
-     * 原“单日触达 200+ 潜在用户” -> 明确采用 200+ prospective users (个人用户 vs 企业线索)
-     * 原“单篇最高 5,000+” -> 保留单篇峰值，未虚构为累计阅读 (单篇峰值 vs 累计总量)
-     * 原“GMV 超 80万元” -> 保留 RMB 800,000，未擅自增加美元换算 (币种保真)
-     * 原“GPA 3.12” -> 保留原样，未脑补 /4.0 分母 (分母保真)
-   - Credential & Coursework Fidelity:
-     * 全国计算机二级 (WPS Office) 科目全称保留
-     * 四门工科专业课采用英文全称 (Probability and Mathematical Statistics; Engineering Economics; Engineering Project Management; Foundation Engineering)
-   - Layout Micro-adjustments:
-     * 字号底线遵守 >=9.5pt
-     * 孤字消除
-     * 弹性垂直间距微调
-5. Markdown, JSON, and CLI Summary generation and formatting.
-6. Saving to disk (.md and .json) functionality.
-"""
+"""Diff ledger regressions: actual source values, detections, and unknown layout."""
 
 from __future__ import annotations
 
@@ -382,118 +354,39 @@ def test_04_from_fact_guard_result_inflated_resume(sample_candidate_profile, sam
     assert "metric.prospective_users" in metric_fields
     assert "metric.gmv_currency" in metric_fields
 
-    # Verify that severities reflect prevented inflation
+    # Detection does not mean the input was corrected or an inflation prevented
     for e in role_entries:
         if e.tailored_en in ["Volunteer Field Lead", "Brand Promotion Specialist", "Student Affairs Representative"]:
-            assert e.severity == DiffSeverity.INFLATION_PREVENTED
+            assert e.severity == DiffSeverity.CAUTION
+    assert ledger.to_dict()["summary"]["inflations_prevented"] == 0
+    assert ledger.to_dict()["summary"]["issues_detected"] > 0
 
 
 def test_05_from_fact_guard_result_substantive_coverage(sample_candidate_profile, sample_grounded_tailored):
-    """
-    Test 100% complete coverage of all required substantive issues:
-    1. Roles:
-       - 原“编辑部成员” -> Editorial Team Member (已核验未作越级提拔)
-       - 原“推广成员” -> 拦截 Specialist, 采用 Promotion Team Member
-       - 原“志愿实践成员” -> 拦截 Lead, 采用 Field Research Volunteer
-       - 原“班级心理委员” -> 拦截 Student Affairs, 保留 Class Mental Health Representative
-    2. Metric Scopes:
-       - 原“为30+场直播制作” -> 明确采用 for 30+ livestream sessions
-       - 原“单日触达 200+ 潜在用户” -> 明确采用 200+ prospective users
-       - 原“单篇最高 5,000+” -> 保留单篇峰值，未虚构为累计阅读
-       - 原“GMV 超 80万元” -> 保留 RMB 800,000，未擅自增加美元换算
-       - 原“GPA 3.12” -> 保留原样，未脑补 /4.0 分母
-    3. Credentials & Coursework:
-       - NCRE Level 2 — WPS Office 科目保留
-       - 四门专业课采用全称 (Probability and Mathematical Statistics; Engineering Economics; Engineering Project Management; Foundation Engineering)
-    4. Layout Actions:
-       - 字号底线遵守 >=9.5pt
-       - 孤字消除
-       - 弹性间距微调
-    """
-    guard = FactVerificationGuard(sample_candidate_profile)
-    guard_result = guard.verify_facts(sample_grounded_tailored)
-
+    """Actual translations are observed differences, not invented corrections."""
     ledger = DiffLedger.from_fact_guard_result(
-        guard_result=guard_result,
+        guard_result=FactVerificationGuard(sample_candidate_profile).verify_facts(sample_grounded_tailored),
         baseline_profile=sample_candidate_profile,
         tailored_data=sample_grounded_tailored,
     )
-
-    # 1. Check Roles
-    role_map = {e.field: e for e in ledger.get_entries_by_category(DiffCategory.ROLE_HIERARCHY)}
-    assert "role.editorial" in role_map
-    assert role_map["role.editorial"].baseline_zh == "编辑部成员"
-    assert "Editorial Team Member" in role_map["role.editorial"].tailored_en
-    assert role_map["role.editorial"].severity == DiffSeverity.ALIGNED
-    assert "越级提拔" in role_map["role.editorial"].explanation
-
-    assert "role.promotion" in role_map
-    assert role_map["role.promotion"].baseline_zh == "推广成员"
-    assert "Promotion Team Member" in role_map["role.promotion"].tailored_en
-    assert "Specialist" in role_map["role.promotion"].action_taken
-
-    assert "role.volunteer" in role_map
-    assert role_map["role.volunteer"].baseline_zh == "志愿实践成员"
-    assert "Field Research Volunteer" in role_map["role.volunteer"].tailored_en
-    assert "Lead" in role_map["role.volunteer"].action_taken
-
-    assert "role.mental_health" in role_map
-    assert role_map["role.mental_health"].baseline_zh == "班级心理委员"
-    assert "Class Mental Health Representative" in role_map["role.mental_health"].tailored_en
-    assert "Student Affairs" in role_map["role.mental_health"].action_taken
-
-    # 2. Check Metric Scopes
-    metric_map = {e.field: e for e in ledger.get_entries_by_category(DiffCategory.METRIC_SCOPE)}
-    assert "metric.livestream_sessions" in metric_map
-    assert "30+" in metric_map["metric.livestream_sessions"].baseline_zh
-    assert "30+ livestream sessions" in metric_map["metric.livestream_sessions"].tailored_en
-    assert "30件物料" in metric_map["metric.livestream_sessions"].action_taken
-
-    assert "metric.prospective_users" in metric_map
-    assert "200+" in metric_map["metric.prospective_users"].baseline_zh
-    assert "200+ prospective users" in metric_map["metric.prospective_users"].tailored_en
-    assert "企业线索" in metric_map["metric.prospective_users"].action_taken
-
-    assert "metric.peak_readership" in metric_map
-    assert "5,000+" in metric_map["metric.peak_readership"].baseline_zh
-    assert "5,000+" in metric_map["metric.peak_readership"].tailored_en
-    assert "单篇峰值" in metric_map["metric.peak_readership"].action_taken
-
-    assert "metric.gmv_currency" in metric_map
-    assert "80万" in metric_map["metric.gmv_currency"].baseline_zh
-    assert "RMB 800,000" in metric_map["metric.gmv_currency"].tailored_en
-    assert "美元换算" in metric_map["metric.gmv_currency"].action_taken
-
-    assert "metric.gpa_denominator" in metric_map
-    assert "3.12" in metric_map["metric.gpa_denominator"].baseline_zh
-    assert "/4.0" in metric_map["metric.gpa_denominator"].action_taken
-
-    # 3. Check Credentials & Coursework
-    cred_map = {e.field: e for e in ledger.get_entries_by_category(DiffCategory.CREDENTIAL_FIDELITY)}
-    assert "credential.ncre_wps" in cred_map
-    assert "WPS Office" in cred_map["credential.ncre_wps"].baseline_zh
-    assert "WPS Office" in cred_map["credential.ncre_wps"].tailored_en
-    assert cred_map["credential.ncre_wps"].severity == DiffSeverity.ALIGNED
-
-    assert "coursework.engineering_core" in cred_map
-    assert "Probability and Mathematical Statistics" in cred_map["coursework.engineering_core"].tailored_en
-    assert "Engineering Economics" in cred_map["coursework.engineering_core"].tailored_en
-    assert "Engineering Project Management" in cred_map["coursework.engineering_core"].tailored_en
-    assert "Foundation Engineering" in cred_map["coursework.engineering_core"].tailored_en
-    assert cred_map["coursework.engineering_core"].severity == DiffSeverity.ALIGNED
-
-    # 4. Check Layout Actions
-    layout_map = {e.field: e for e in ledger.get_entries_by_category(DiffCategory.LAYOUT_ACTION)}
-    assert "layout.font_size_floor" in layout_map
-    assert ">=9.5pt" in layout_map["layout.font_size_floor"].baseline_zh
-    assert layout_map["layout.font_size_floor"].severity == DiffSeverity.ALIGNED
-
-    assert "layout.orphan_elimination" in layout_map
-    assert "孤字" in layout_map["layout.orphan_elimination"].baseline_zh
-    assert "orphan" in layout_map["layout.orphan_elimination"].tailored_en.lower()
-
-    assert "layout.elastic_spacing" in layout_map
-    assert "垂直间距" in layout_map["layout.elastic_spacing"].baseline_zh
+    entries = {e.field: e for e in ledger.entries}
+    for index in range(3):
+        entry = entries[f"projects[{index}].role"]
+        assert entry.baseline_zh == sample_candidate_profile["projects"][index]["role"]
+        assert entry.tailored_en == sample_grounded_tailored["projects"][index]["role"]
+        assert entry.severity == DiffSeverity.CAUTION
+        assert entry.metadata["change_type"] == "modified"
+    assert entries["experience[1].role"].tailored_en == "Editorial Team Member"
+    assert entries["candidate.education[0].details"].baseline_zh == "GPA 3.12（专业前15%）"
+    assert entries["candidate.education[0].details"].tailored_en == sample_grounded_tailored["candidate"]["education"][0]["details"]
+    assert entries["candidate.certifications[0]"].tailored_en == sample_grounded_tailored["candidate"]["certifications"][0]
+    assert entries["candidate.education[0].coursework[0]"].metadata["change_type"] == "removed"
+    assert entries["candidate.education[0].coursework"].metadata["change_type"] == "added"
+    assert ledger.to_dict()["summary"]["inflations_prevented"] == 0
+    assert ledger.to_dict()["summary"]["actions_applied"] == 0
+    assert ledger.metadata["layout_verification"] == "unknown"
+    assert "layout.font_size_floor" not in entries
+    assert "layout.orphan_elimination" not in entries
 
 
 def test_06_markdown_output_format(sample_candidate_profile, sample_grounded_tailored):
@@ -518,7 +411,7 @@ def test_06_markdown_output_format(sample_candidate_profile, sample_grounded_tai
     assert "## 📊 审计概览 (Executive Summary)" in md
     assert "| **审计条目总数 (Total Entries Audited)** |" in md
     assert "| **拦截虚假拔高/范围漂移 (Inflations Prevented)** |" in md
-    assert "| **完全对齐基线事实 (Aligned SSOT)** |" in md
+    assert "| **输入值相同 (Input Values Match)** |" in md
 
     # Categorized Tables
     assert "## 🎖️ 1. 职务与头衔层级对齐 (Role Hierarchy Alignment)" in md
@@ -700,3 +593,91 @@ def test_12_cmd_diff_audit_cli(sample_candidate_profile, capsys):
         assert parsed["candidate_name"] == "张明"
         assert parsed["summary"]["total_entries"] > 0
 
+
+
+@pytest.mark.parametrize("trigger", [
+    "Maintained 30+ services.", "GPA 3.8/4.0", "Processed 800,000 records.",
+    "Served 5,000+ requests.", "推广成员", "志愿实践成员", "班级心理委员",
+    "WPS spreadsheet user", "NCRE Python", "工程经济学",
+])
+def test_identical_profile_never_invents_example_facts(trigger):
+    profile = {"candidate": {"name": "Synthetic Auditor", "details": trigger}}
+    ledger = DiffLedger.from_fact_guard_result({}, profile, profile)
+    source_entries = [e for e in ledger.entries if e.category != DiffCategory.LAYOUT_ACTION]
+    assert [e.field for e in source_entries] == ["candidate.details", "candidate.name"]
+    assert source_entries[0].baseline_zh == trigger
+    assert source_entries[0].tailored_en == trigger
+    assert all(e.metadata["event_status"] == "unchanged" for e in source_entries)
+    assert ledger.to_dict()["summary"]["observed_changes"] == 0
+    assert ledger.to_dict()["summary"]["inflations_prevented"] == 0
+    assert len(ledger.get_entries_by_category(DiffCategory.LAYOUT_ACTION)) == 1
+
+
+def test_reports_exact_additions_deletions_and_typed_values():
+    before = {"candidate": {"school": "Synthetic School", "gpa": 3.8, "empty": None}, "skills": ["Python"], "flag": False}
+    after = {"candidate": {"school": "Different School", "gpa": 3.9, "empty": ""}, "skills": ["Python", "Rust"], "flag": 0}
+    ledger = DiffLedger.from_fact_guard_result({}, before, after)
+    entries = {e.field: e for e in ledger.entries}
+    assert entries["candidate.school"].baseline_zh == "Synthetic School"
+    assert entries["candidate.school"].tailored_en == "Different School"
+    assert entries["candidate.gpa"].metadata["baseline_value"] == 3.8
+    assert entries["candidate.empty"].metadata["change_type"] == "modified"
+    assert entries["flag"].metadata["change_type"] == "modified"
+    added = entries["skills[1]"]
+    assert added.metadata["baseline_present"] is False
+    assert added.metadata["tailored_value"] == "Rust"
+    removed = DiffLedger.from_fact_guard_result({}, after, before)
+    assert next(e for e in removed.entries if e.field == "skills[1]").metadata["change_type"] == "removed"
+
+
+def test_guard_suggestions_remain_detected_and_do_not_mutate_inputs():
+    import copy
+    before = {"role": "Member"}
+    after = {"role": "Lead"}
+    result = {"role_inflations": [{"claimed_role": "Lead", "baseline_role": "Member", "fix_suggestion": "Member"}],
+              "drifts": [{"rule_id": "METRIC_DRIFT", "claimed_metric": 20, "verified_baseline": 0, "fix_suggestion": "Use 0"}]}
+    original = copy.deepcopy((before, after, result))
+    ledger = DiffLedger.from_fact_guard_result(result, before, after)
+    assert (before, after, result) == original
+    assert ledger.to_dict()["summary"]["issues_detected"] == 2
+    assert ledger.to_dict()["summary"]["inflations_prevented"] == 0
+    assert ledger.to_dict()["summary"]["actions_applied"] == 0
+    detected = [e for e in ledger.entries if e.metadata["event_status"] == "detected"]
+    assert all(e.severity == DiffSeverity.CAUTION for e in detected)
+    assert detected[1].baseline_zh == "0"
+    assert "Member" in detected[0].action_taken
+    assert "未应用" in detected[0].action_taken
+    assert "🛡️ 口径校准" not in ledger.generate_cli_summary()
+    assert "✅ 对齐: 原“Member”" not in ledger.generate_cli_summary()
+
+
+@pytest.mark.parametrize("metadata", [None, {}, {"body_font_pt": 8.0}, {"solved": False, "orphans_mitigated": 0},
+                                        {"solved": True, "body_font_pt": 10.5, "applied_compressions": ["Synthetic action"]}])
+def test_layout_metadata_never_implies_render_verification(metadata):
+    ledger = DiffLedger.from_fact_guard_result({}, {}, {}, layout_metadata=metadata)
+    entries = ledger.get_entries_by_category(DiffCategory.LAYOUT_ACTION)
+    assert ledger.metadata["layout_verification"] == "unknown"
+    assert entries[0].field == "layout.verification"
+    assert entries[0].severity == DiffSeverity.CAUTION
+    assert all(e.severity != DiffSeverity.ALIGNED for e in entries)
+    assert len(entries) == 1 + len(metadata or {})
+    for entry in entries[1:]:
+        key = entry.field.removeprefix("layout.")
+        assert entry.metadata["reported_value"] == metadata[key]
+        assert entry.metadata["event_status"] == "reported"
+    report = ledger.generate_markdown()
+    assert "微调完成" not in report
+    assert "排版自适应微调完成" not in report
+    assert ledger.to_dict()["summary"]["actions_applied"] == 0
+
+
+def test_missing_inputs_or_text_comparison_have_explicit_limits():
+    unknown = DiffLedger.from_fact_guard_result()
+    assert unknown.metadata["comparison"]["status"] == "unknown"
+    assert unknown.metadata["fact_verification"]["status"] == "unknown"
+    text = DiffLedger.from_fact_guard_result(None, {"school": "Synthetic School"}, "A different school")
+    assert text.metadata["comparison"]["status"] == "text_only"
+    assert text.entries[0].field == "document"
+    assert text.entries[0].baseline_zh == '{"school": "Synthetic School"}'
+    assert text.entries[0].tailored_en == "A different school"
+    assert text.entries[0].severity == DiffSeverity.CAUTION
