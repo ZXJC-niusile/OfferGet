@@ -75,8 +75,10 @@ def test_corporate_presentation_has_plain_entries_and_keeps_wrapping_contracts()
     assert "overflow: hidden" not in template
 
 
-def test_academic_exam_fixtures_cover_every_field_and_long_subjects():
-    cases = [case for case in fixtures("academic-postgraduate") if case["name"].startswith("exam-")]
+@pytest.mark.parametrize("theme", ["academic-postgraduate", "sidebar-clean"])
+def test_academic_exam_fixtures_cover_every_field_and_long_subjects(theme):
+    cases = [case for case in fixtures(theme) if case["name"].startswith("exam-")]
+    assert len(fixtures(theme)) == 20
     assert len(cases) == 4
     assert {case["photo"] for case in cases} == {"none", "reserved"}
     assert all(case["mode"] == "builder" for case in cases)
@@ -140,3 +142,11 @@ def test_stress_builder_can_report_real_multi_page_branch_without_single_page_au
         _, result = render_production(ROOT, case, output)
         assert result["trace"]["renders"][0]["pages"] == 4
         assert result["trace"]["autofit"] == []
+
+
+def test_sidebar_exam_coverage_does_not_expand_unrelated_themes():
+    for theme in THEMES:
+        cases = fixtures(theme)
+        has_exam = theme in {"academic-postgraduate", "sidebar-clean"}
+        assert len(cases) == (20 if has_exam else 16)
+        assert any(case["name"].startswith("exam-") for case in cases) == has_exam

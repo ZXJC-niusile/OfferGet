@@ -107,7 +107,7 @@ trace = {'production': not request['source_only'], 'renders': []}
 try:
     if request['source_only']:
         vm = ResumeViewModel.from_profile(request['profile'], photo_path=request.get('photo_path'),
-                                          reserve_photo=request['photo'] == 'reserved')
+                                          reserve_photo=request['photo'] != 'none')
         result = {}
         for kind, text in AtsPlainRenderer().render(vm).items():
             result[kind] = output / ('resume.' + kind)
@@ -123,7 +123,7 @@ try:
         renderer = TracedBrowser()
         trace['browserPath'] = str(renderer.browser_path)
         result = ResumeBuilder(request['profile'], renderer=renderer).build_ats_plain(
-            output, photo=request['photo'] == 'reserved', photo_path=request.get('photo_path'))
+            output, photo=request['photo'] != 'none', photo_path=request.get('photo_path'))
     result = {kind: str(path) for kind, path in result.items()}
     trace['returned'] = result
     print(json.dumps(result))

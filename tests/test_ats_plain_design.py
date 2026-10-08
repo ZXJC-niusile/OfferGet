@@ -28,7 +28,7 @@ MARKDOWN_SHA256 = {
 
 
 def render(case):
-    vm = ResumeViewModel.from_profile(case["profile"], reserve_photo=case["photo"] == "reserved")
+    vm = ResumeViewModel.from_profile(case["profile"], reserve_photo=case["photo"] != "none")
     vm.photo_data_uri = case.get("photo_data_uri")
     return AtsPlainRenderer().render(vm)
 
@@ -94,9 +94,11 @@ def test_photo_choices_remain_opt_in_at_render_time(photo):
     images = [attrs for tag, attrs in tags if tag == "img"]
     assert len(images) == (1 if photo == "embedded" else 0)
     if photo == "embedded":
+        assert "onerror=" not in html
+        assert "photo-fallback" not in html
         assert images[0]["alt"] == "证件照"
         assert images[0]["src"].startswith("data:image/png;base64,")
-    assert ("预留证件照" in text_content(html)) == (photo != "none")
+    assert ("预留证件照" in text_content(html)) == (photo == "reserved")
 
 
 def test_escaping_and_source_supported_bold_are_preserved():

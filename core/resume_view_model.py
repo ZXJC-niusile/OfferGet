@@ -15,7 +15,6 @@ OfferGet native strongly-typed resume view model and decoupled renderers:
 
 from __future__ import annotations
 
-import base64
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,29 +33,7 @@ from core.security_gate import (
 )
 
 
-def _image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional[str]:
-    """Reads a local image file (jpg/png/webp/gif/svg) and returns a base64 data URI."""
-    if not image_path:
-        return None
-    p = Path(image_path).resolve()
-    if not p.is_file():
-        return None
-    suffix = p.suffix.lower()
-    mime_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-    }
-    mime_type = mime_types.get(suffix, "image/jpeg")
-    try:
-        data = p.read_bytes()
-        b64 = base64.b64encode(data).decode("ascii")
-        return f"data:{mime_type};base64,{b64}"
-    except Exception:
-        return None
+from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
 
 
 @dataclass
@@ -79,6 +56,7 @@ class ResumeViewModel:
     postgraduate_exam: Optional[Dict[str, Any]] = None
     photo_data_uri: Optional[str] = None
     reserve_photo: bool = True
+    photo_mode: Optional[str] = None
 
     # Raw metadata preserved for Markdown and non-HTML formatters
     raw_name: str = ""
@@ -123,6 +101,7 @@ class ResumeViewModel:
         profile: Union[Dict[str, Any], Any],
         photo_path: Optional[Union[str, Path]] = None,
         reserve_photo: bool = True,
+        photo_mode: Optional[str] = None,
     ) -> ResumeViewModel:
         """
         Factory method constructing a sanitized ResumeViewModel from raw or normalized profile.
@@ -130,7 +109,14 @@ class ResumeViewModel:
         formatting (**bold**) is safely converted to <strong>bold</strong>.
         """
         if isinstance(profile, ResumeViewModel):
-            return profile
+            if reserve_photo and photo_mode is None and photo_path is None:
+                return profile
+            from dataclasses import replace
+            selection = resolve_photo({}, photo_path=photo_path or profile.photo_path,
+                                      reserve_photo=reserve_photo,
+                                      photo_mode=photo_mode if photo_mode is not None else profile.photo_mode)
+            return replace(profile, photo_path=selection.path, photo_data_uri=selection.data_uri,
+                           reserve_photo=selection.mode != "no-photo", photo_mode=selection.mode)
         prof = normalize_candidate_profile(profile)
         raw_p = getattr(profile, "raw_profile", None) or (profile if isinstance(profile, dict) else None)
         fallback_edu = profile.get("education") if isinstance(profile, dict) else None
@@ -138,6 +124,7 @@ class ResumeViewModel:
             prof=prof,
             photo_path=photo_path,
             reserve_photo=reserve_photo,
+            photo_mode=photo_mode,
             raw_profile=raw_p,
             fallback_education=fallback_edu,
         )
@@ -150,6 +137,7 @@ class ResumeViewModel:
         reserve_photo: bool = True,
         raw_profile: Optional[Dict[str, Any]] = None,
         fallback_education: Optional[Dict[str, Any]] = None,
+        photo_mode: Optional[str] = None,
     ) -> ResumeViewModel:
         """
         Constructs a sanitized ResumeViewModel directly from an already normalized profile.
@@ -382,21 +370,8 @@ class ResumeViewModel:
                     "raw_total_score": total_val,
                 }
 
-        # Photo resolution
-        eff_photo_path = photo_path or cand.get("photo_path") or cand.get("photo")
-        data_uri = _image_to_base64_data_uri(eff_photo_path) if eff_photo_path else None
-        safe_data_uri = sanitize_url(data_uri, allow_data_image=True) if data_uri else None
-        photo_data_uri = safe_data_uri if safe_data_uri else None
-
-        # Determine effective reserve_photo preference
-        if not reserve_photo:
-            eff_reserve_photo = bool(photo_data_uri or eff_photo_path)
-        else:
-            cand_pref = cand.get("reserve_photo", None)
-            if cand_pref is False:
-                eff_reserve_photo = bool(photo_data_uri or eff_photo_path)
-            else:
-                eff_reserve_photo = True
+        selection = resolve_photo(cand, photo_path=photo_path,
+                                  reserve_photo=reserve_photo, photo_mode=photo_mode)
 
         return cls(
             name=name,
@@ -413,8 +388,9 @@ class ResumeViewModel:
             competencies=competencies,
             publications=publications,
             postgraduate_exam=postgraduate_exam,
-            photo_data_uri=photo_data_uri,
-            reserve_photo=eff_reserve_photo,
+            photo_data_uri=selection.data_uri,
+            reserve_photo=selection.mode != "no-photo",
+            photo_mode=selection.mode,
             raw_name=raw_name,
             raw_title=raw_title,
             raw_phone=raw_phone,
@@ -423,7 +399,7 @@ class ResumeViewModel:
             raw_school=raw_school,
             raw_degree=degree_raw,
             raw_edu_time=raw_edu_time,
-            photo_path=str(eff_photo_path) if eff_photo_path else None,
+            photo_path=selection.path,
             raw_profile=prof,
         )
 
@@ -504,10 +480,7 @@ class HtmlThemeRenderer:
             src_attr = escape_html_attribute(vm.photo_data_uri)
             photo_html = f"""
       <div class="photo-placeholder" style="width:72px; height:96px; border:none !important; outline:none !important; box-shadow:none !important; background:transparent; border-radius:0; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden;" title="证件照">
-        <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-        <div style="display:none; flex-direction:column; align-items:center; justify-content:center; width:100%; height:100%;">
-          <span style="font-size:8.5px; color:var(--color-muted, #64748B); line-height:1.2;">预留证件照<br>一寸 / 二寸</span>
-        </div>
+        <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" />
       </div>
             """
         elif vm.reserve_photo:
@@ -521,7 +494,7 @@ class HtmlThemeRenderer:
 
         return f"""
     <header style="{header_style}">
-      <div style="flex:1; padding-right:12px;">
+      <div style="flex:1; padding-right:{12 if photo_html else 0}px;">
         <div class="header-top" style="display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;">
           <h1 style="{name_style}">{vm.name}</h1>
           {title_html}
@@ -921,8 +894,7 @@ class AtsPlainRenderer:
             src_attr = escape_html_attribute(vm.photo_data_uri)
             photo_box = f"""
       <div class="photo" title="证件照">
-        <img src="{src_attr}" alt="证件照" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-        <div class="photo-fallback" style="display:none;">预留证件照<br>一寸 / 二寸</div>
+        <img src="{src_attr}" alt="证件照" />
       </div>"""
         elif vm.reserve_photo:
             photo_box = """
@@ -999,7 +971,6 @@ class AtsPlainRenderer:
     }}
     .photo img {{ max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }}
     .photo-reserved {{ border: 0.6pt dashed #737373; }}
-    .photo-fallback {{ align-items: center; justify-content: center; width: 100%; height: 100%; }}
     @media screen and (max-width: 600px) {{ .resume {{ padding: 24px 20px; }} }}
     @media print {{ .resume {{ max-width: none; margin: 0; padding: 0; }} }}
   </style>

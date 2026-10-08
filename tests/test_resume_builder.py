@@ -7,6 +7,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from PIL import Image
 from pathlib import Path
 
 from core.resume_builder import ResumeBuilder, audit_resume_quality
@@ -208,15 +209,9 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertNotIn("#image(", typ_content)
 
     def test_photo_path_base64_embedded(self):
-        """Test providing a valid local image embeds base64 data URI with onerror fallback."""
-        # Create a valid minimal 1x1 PNG image
-        dummy_png = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-            b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00"
-            b"\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
+        """Test providing a valid local image embeds a verified data URI without silent fallback."""
         sample_img = self.test_dir / "candidate_avatar.png"
-        sample_img.write_bytes(dummy_png)
+        Image.new("RGB", (12, 16), "#336699").save(sample_img)
 
         # Test building HTML theme with photo_path
         builder = ResumeBuilder(self.minimal_profile, photo_path=sample_img, renderer=self.fast_renderer)
@@ -226,14 +221,14 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertIn("photo-placeholder", html_content)
         self.assertIn("<img", html_content)
         self.assertIn("src=\"data:image/png;base64,", html_content)
-        self.assertIn("onerror=", html_content)
-        self.assertIn("预留证件照", html_content)  # Fallback exists
+        self.assertNotIn("onerror=", html_content)
+        self.assertNotIn("预留证件照", html_content)  # Real photos never silently downgrade
 
         # Test ATS plain with photo_path
         res_ats = builder.build_ats_plain(self.test_dir)
         ats_html = res_ats["html"].read_text(encoding="utf-8")
         self.assertIn("src=\"data:image/png;base64,", ats_html)
-        self.assertIn("onerror=", ats_html)
+        self.assertNotIn("onerror=", ats_html)
 
         # Test Academic LaTeX with photo_path
         res_latex = builder.build_academic_latex(self.test_dir)

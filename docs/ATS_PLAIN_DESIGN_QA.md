@@ -84,8 +84,36 @@ path filters.
 The local Chromium processes terminate with `socket() failed: Operation not
 permitted` in this execution environment. This prevents actual local PDF and
 visual verification, including the existing ATS Plain production test. No
-sandbox workaround is used. The draft must remain unapproved for visual
-completion until the normal CI workflow produces inspectable PDFs/screenshots
+sandbox workaround is used. Visual completion remains unverified until the normal CI workflow produces inspectable PDFs/screenshots
 and its exact-head artifacts are reviewed. A CI job that fails before running
 steps provides no validation evidence and should be reported as a separate
 workflow-start blocker, without guessing its cause.
+
+## Integration with the explicit photo contract
+
+The conflict resolution is based on exact main
+`3135de74dfab74dea01b38f02cc0d35da41c42a8` (238 verified tracked blobs).
+It preserves the shared photo resolver, view-model factories, CLI defaults, and
+builder behavior introduced by PR #23. Only the ATS HTML method is replaced;
+every other byte of the current-main view-model module is identical.
+
+The updated actual-photo markup has no `onerror` handler or hidden placeholder.
+No-photo continues to exclude image/path/reserved-slot output, and placeholders
+remain an explicit preview choice. Embedded-image QA passes an enabled photo
+selection instead of relying on the former `photo=False` behavior.
+
+The user waived GitHub Actions review for the merge decision. This does not
+convert source-only validation into a PDF/visual pass; the browser and Actions
+limitations above remain disclosed. No workflow retries or gate changes were
+made for this integration.
+
+Integration validation on the resolved candidate:
+
+- ATS design + shared photo contract + browser-independent view-model checks:
+  90 passed.
+- Eleven source-only before/after fixture pairs: all 335 HTML source anchors
+  present; Markdown bytes unchanged against the current-main baseline.
+- Full candidate suite: 1,070 passed, 2 skipped, 15 failed. Exact current-main
+  baseline: 1,041 passed, 2 skipped, the identical 15 browser failures.
+- Dedicated lint and Python compilation passed; CLI self-test still fails only
+  at the known real-browser rendering check. PDF/visual validation is not claimed.
