@@ -269,16 +269,14 @@ class ResumeViewModel:
         for pub in prof.get("publications", []):
             if not isinstance(pub, dict):
                 continue
-            publications.append({
-                "title": escape_html_text(str(pub.get("title", ""))),
-                "authors": escape_html_text(str(pub.get("authors", ""))),
-                "venue": escape_html_text(str(pub.get("venue", ""))),
-                "year": escape_html_text(str(pub.get("year", ""))),
-                "raw_title": str(pub.get("title", "")),
-                "raw_authors": str(pub.get("authors", "")),
-                "raw_venue": str(pub.get("venue", "")),
-                "raw_year": str(pub.get("year", "")),
-            })
+            fields = ("title", "authors", "venue", "conference", "year", "status",
+                      "author_role", "highlight", "summary", "individual_contribution")
+            publication = {}
+            for key in fields:
+                raw_value = "" if pub.get(key) is None else str(pub[key])
+                publication[key] = escape_html_text(raw_value)
+                publication[f"raw_{key}"] = raw_value
+            publications.append(publication)
 
         # Postgraduate Exam resolution
         raw_pg = (
@@ -452,7 +450,7 @@ class HtmlThemeRenderer:
 
     def render_header(self, vm: ResumeViewModel, theme_name: str = "modern-navy") -> str:
         """Renders header markup with optional photo placeholder."""
-        loc_str = f"<span>•</span><span>{vm.location}</span>" if vm.location else ""
+        loc_str = f'<span aria-hidden="true">•</span><span data-field="identity.location">{vm.location}</span>' if vm.location else ""
         if theme_name == "academic-postgraduate":
             title_prefix = "申请方向："
             title_color = "var(--color-primary, #8B1E1E)"
@@ -464,8 +462,9 @@ class HtmlThemeRenderer:
             header_style = "display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1.5px solid var(--color-primary, #0F172A); padding-bottom:5px;"
             name_style = "font-size:22px; font-weight:700; margin-bottom:2px;"
 
+        title_value = f'<span data-field="identity.title">{vm.title}</span>' if theme_name in self.SEMANTIC_THEMES else vm.title
         title_html = (
-            f'<span style="font-size:12px; font-weight:600; color:{title_color};">{title_prefix}{vm.title}</span>'
+            f'<span class="resume-title"{self._style(f"font-size:12px; font-weight:600; color:{title_color};", theme_name)}>{title_prefix}{title_value}</span>'
             if vm.title else ""
         )
 
@@ -493,16 +492,16 @@ class HtmlThemeRenderer:
             """
 
         return f"""
-    <header style="{header_style}">
-      <div style="flex:1; padding-right:{12 if photo_html else 0}px;">
-        <div class="header-top" style="display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;">
-          <h1 style="{name_style}">{vm.name}</h1>
+    <header class="resume-header"{self._style(header_style, theme_name)}>
+      <div class="resume-identity"{self._style(f"flex:1; padding-right:{12 if photo_html else 0}px;", theme_name)}>
+        <div class="header-top"{self._style("display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;", theme_name)}>
+          <h1 class="resume-name" data-field="identity.name"{self._style(name_style, theme_name)}>{vm.name}</h1>
           {title_html}
         </div>
-        <div class="contacts" style="display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;">
-          <span>{vm.phone}</span>
-          <span>•</span>
-          <span>{email_link}</span>
+        <div class="contacts resume-contacts"{self._style("display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;", theme_name)}>
+          <span data-field="identity.phone">{vm.phone}</span>
+          <span aria-hidden="true">•</span>
+          <span data-field="identity.email">{email_link}</span>
           {loc_str}
         </div>
       </div>
@@ -510,140 +509,137 @@ class HtmlThemeRenderer:
     </header>
     """
 
-    def render_education(self, vm: ResumeViewModel) -> str:
-        """Renders education background with clean multi-column grid."""
+    # Stylesheet-owned themes opt in after their templates have migrated. The
+    # existing inline defaults stay intact for every other theme.
+    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "silicon-clean"})
+
+    @classmethod
+    def _style(cls, css: str, theme_name: str = "") -> str:
+        return "" if theme_name in cls.SEMANTIC_THEMES else f' style="{css}"'
+
+    @classmethod
+    def _section(cls, section_id: str, heading: str, body: str, theme_name: str = "") -> str:
+        if theme_name in cls.SEMANTIC_THEMES:
+            body = f'<div class="resume-section-body">{body}</div>'
+        return f"""
+    <section id="{section_id}" aria-labelledby="{section_id}-heading">
+      <div class="section-header">
+        <h2 id="{section_id}-heading">{heading}</h2>
+        <div class="rule" aria-hidden="true" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
+      </div>
+      {body}
+    </section>
+    """
+
+    def _entry(self, entry_id: str, title: str, role: str, date: str,
+               body: str, theme_name: str = "", education: bool = False,
+               project: bool = False) -> str:
+        """Keep each date, identity and ordered body together in the source DOM."""
+        style = lambda css: self._style(css, theme_name)
+        heading_class = "project-header" if project else "org-bar"
+        identity_class = "entry-identity" if project else "org-left entry-identity"
+        title_class = "entry-title" if project else "org-title entry-title"
+        role_class = "entry-role" if project else "org-role entry-role"
+        date_class = "entry-date" if project else "org-right entry-date"
+        title_key = "name" if project else "school" if education else "org"
+        role_key = "degree" if education else "role"
+        # The logical field is the displayed department + role label for work.
+        date_html = f'<div class="{date_class}" data-field="{entry_id}.time"{style("font-size:11.0px; color:var(--color-muted, #64748B);")}>{date}</div>'
+        role_html = f'<span class="{role_class}" data-field="{entry_id}.{role_key}"{style("font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);")}>{role}</span>' if role or not education else ""
+        heading = f"""
+        <div class="{heading_class} entry-header"{style(f'display:flex; justify-content:space-between; align-items:baseline; margin-top:{5 if education else 7}px; margin-bottom:3px;')}>
+          <div class="{identity_class}"{style(f'display:flex; align-items:baseline; gap:{16 if education else 8}px;')}>
+            <span class="{title_class}" data-field="{entry_id}.{title_key}"{style('font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);')}>{title}</span>
+            {role_html}
+          </div>
+          {date_html if not (theme_name == "classic-tech" and theme_name in self.SEMANTIC_THEMES) else ""}
+        </div>"""
+        if theme_name not in self.SEMANTIC_THEMES:
+            return heading + "\n" + body
+        rail = date_html if theme_name == "classic-tech" else ""
+        return f'<div class="resume-entry" data-entry="{entry_id}">{rail}<div class="entry-content">{heading}{body}</div></div>'
+
+    def render_education(self, vm: ResumeViewModel, theme_name: str = "") -> str:
+        """Render the existing education facts without changing their row order."""
         grid = vm.education_grid_rows
         max_cols = max((len(r) for r in grid), default=1)
-        if max_cols >= 3:
-            col_template = "38% 28% 1fr"
-        elif max_cols == 2:
-            col_template = "45% 1fr"
-        else:
-            col_template = "1fr"
+        col_template = "38% 28% 1fr" if max_cols >= 3 else "45% 1fr" if max_cols == 2 else "1fr"
+        cells = []
+        for row_index, row in enumerate(grid):
+            for index in range(max_cols):
+                value = row[index] if index < len(row) else ""
+                value = re.sub(r"\s*[｜|]\s*", " ", value).strip()
+                cells.append(f'<div data-field="education.grid.{row_index}.{index}">{value}</div>')
+        grid_style = f'display:grid; grid-template-columns:{col_template}; row-gap:3.5px; font-size:11.2px; color:var(--color-muted, #4B5563); line-height:1.54; margin-top:3.5px;'
+        # Column count is content-derived; visual themes decide their own layout.
+        grid_html = f'<div class="edu-grid" data-columns="{max_cols}"{self._style(grid_style, theme_name)}>{"".join(cells)}</div>'
+        body = self._entry("education", vm.edu_school, vm.edu_degree, vm.edu_time,
+                           grid_html, theme_name, education=True)
+        return self._section("education", "教育背景", body, theme_name)
 
-        grid_cells_html = []
-        for r in grid:
-            for i in range(max_cols):
-                cell_text = r[i] if i < len(r) else ""
-                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                grid_cells_html.append(f'<div>{cell_clean}</div>')
-
-        edu_grid_html = f"""
-      <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:3.5px; font-size:11.2px; color:var(--color-muted, #4B5563); line-height:1.54; margin-top:3.5px;">
-        {"".join(grid_cells_html)}
-      </div>"""
-
-        role_span = (
-            f'<span class="org-role" style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{vm.edu_degree}</span>'
-            if vm.edu_degree else ""
-        )
-
-        return f"""
-    <section id="education">
-      <div class="section-header">
-        <h2>教育背景</h2>
-        <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-      </div>
-      <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:5px; margin-bottom:3px;">
-        <div class="org-left" style="display:flex; align-items:baseline; gap:16px;">
-          <span class="org-title" style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{vm.edu_school}</span>
-          {role_span}
-        </div>
-        <div class="org-right" style="font-size:11.0px; color:var(--color-muted, #64748B);">{vm.edu_time}</div>
-      </div>
-      {edu_grid_html}
-    </section>
-    """
-
-    def render_experience(self, vm: ResumeViewModel) -> str:
-        """Renders work / internship experience section."""
+    def render_experience(self, vm: ResumeViewModel, theme_name: str = "") -> str:
         if not vm.experiences:
             return ""
+        entries = []
+        for index, exp in enumerate(vm.experiences):
+            entry_id = f"experience.{index}"
+            bullets = "".join(f'<li data-field="{entry_id}.bullets.{i}">{b}</li>'
+                              for i, b in enumerate(exp.get("bullets", [])))
+            entries.append(self._entry(entry_id, exp.get("org", ""),
+                exp.get("role_label") or exp.get("role", ""), exp.get("time", ""),
+                f'<ul class="entry-bullets">{bullets}</ul>', theme_name))
+        return self._section("experience", "实习经历", "\n".join(entries), theme_name)
 
-        exp_parts = ["""
-    <section id="experience">
-      <div class="section-header">
-        <h2>实习经历</h2>
-        <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-      </div>
-    """]
-        for exp in vm.experiences:
-            org_str = exp.get("org", "")
-            role_label = exp.get("role_label") or exp.get("role", "")
-            time_str = exp.get("time", "")
-            bullets_li = "".join([f"<li>{b}</li>" for b in exp.get("bullets", [])])
-            exp_parts.append(f"""
-        <div class="org-bar" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:7px; margin-bottom:3px;">
-          <div class="org-left" style="display:flex; align-items:baseline; gap:8px;">
-            <span class="org-title" style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{org_str}</span>
-            <span class="org-role" style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{role_label}</span>
-          </div>
-          <div class="org-right" style="font-size:11.0px; color:var(--color-muted, #64748B);">{time_str}</div>
-        </div>
-        <ul>{bullets_li}</ul>
-        """)
-        exp_parts.append("</section>")
-        return "\n".join(exp_parts)
-
-    def render_projects(self, vm: ResumeViewModel) -> str:
-        """Renders campus and practical project experiences."""
+    def render_projects(self, vm: ResumeViewModel, theme_name: str = "") -> str:
         if not vm.projects:
             return ""
+        entries = []
+        for index, project in enumerate(vm.projects):
+            entry_id = f"projects.{index}"
+            bullets = "".join(f'<li data-field="{entry_id}.bullets.{i}">{b}</li>'
+                              for i, b in enumerate(project.get("bullets", [])))
+            entries.append(self._entry(entry_id, project.get("name", ""),
+                project.get("role", ""), project.get("time", ""),
+                f'<ul class="entry-bullets">{bullets}</ul>', theme_name, project=True))
+        return self._section("projects", "校园与实践经历", "\n".join(entries), theme_name)
 
-        proj_parts = ["""
-    <section id="projects">
-      <div class="section-header">
-        <h2>校园与实践经历</h2>
-        <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-      </div>
-    """]
-        for proj in vm.projects:
-            p_name = proj.get("name", "")
-            p_role = proj.get("role", "")
-            p_time = proj.get("time", "")
-            bullets_li = "".join([f"<li>{b}</li>" for b in proj.get("bullets", [])])
-            proj_parts.append(f"""
-        <div class="project-header" style="display:flex; justify-content:space-between; align-items:baseline; margin-top:7px; margin-bottom:3px;">
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font-weight:700; font-size:12.6px; color:var(--color-primary-dark, #0F172A);">{p_name}</span>
-            <span style="font-weight:600; font-size:11.8px; color:var(--color-accent, #0284C7);">{p_role}</span>
-          </div>
-          <div style="font-size:11.0px; color:var(--color-muted, #64748B);">{p_time}</div>
-        </div>
-        <ul>{bullets_li}</ul>
-        """)
-        proj_parts.append("</section>")
-        return "\n".join(proj_parts)
-
-    def render_skills(self, vm: ResumeViewModel) -> str:
-        """Renders professional competencies and skills."""
+    def render_skills(self, vm: ResumeViewModel, theme_name: str = "") -> str:
         if not vm.competencies:
             return ""
+        style = lambda css: self._style(css, theme_name)
+        rows = []
+        for index, (key, values) in enumerate(vm.competencies.items()):
+            key_escaped = escape_html_text(str(key))
+            value = ", ".join(str(x) for x in values) if isinstance(values, list) else str(values)
+            value = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escape_html_text(value))
+            label = f'<span data-field="skills.{index}.label">{key_escaped}</span>' if theme_name in self.SEMANTIC_THEMES else key_escaped
+            rows.append(f"""
+        <li class="skill-row" data-entry="skills.{index}"{style('display:flex; align-items:baseline; gap:6px; margin-bottom:4.5px; line-height:1.58; font-size:11.6px;')}>
+          <span class="skill-label"{style('font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);')}>{label}：</span>
+          <span class="skill-value" data-field="skills.{index}.value"{style('color:var(--color-text, #1E293B);')}>{value}</span>
+        </li>""")
+        body = f'<ul class="skills-list"{style("list-style:none; padding-left:0; margin-top:4px;")}>{"".join(rows)}</ul>'
+        return self._section("skills", "专业技能", body, theme_name)
 
-        skill_rows = []
-        for k, v in vm.competencies.items():
-            k_esc = escape_html_text(str(k))
-            val_raw = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-            val_esc = escape_html_text(val_raw)
-            val_formatted = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", val_esc)
-            skill_rows.append(f"""
-        <li style="display:flex; align-items:baseline; gap:6px; margin-bottom:4.5px; line-height:1.58; font-size:11.6px;">
-          <span style="font-weight:700; white-space:nowrap; flex-shrink:0; color:var(--color-primary-dark, #0F172A);">{k_esc}：</span>
-          <span style="color:var(--color-text, #1E293B);">{val_formatted}</span>
-        </li>
-        """)
-
-        return f"""
-    <section id="skills">
-      <div class="section-header">
-        <h2>专业技能</h2>
-        <div class="rule" style="flex:1; height:1px; background:var(--color-border, #E2E8F0);"></div>
-      </div>
-      <ul style="list-style:none; padding-left:0; margin-top:4px;">
-        {"".join(skill_rows)}
-      </ul>
-    </section>
-    """
+    def render_publications(self, vm: ResumeViewModel, theme_name: str = "") -> str:
+        """Expose only the publication facts already present in the view model."""
+        if not vm.publications:
+            return ""
+        entries = []
+        for index, publication in enumerate(vm.publications):
+            fields = []
+            for key in ("title", "authors", "venue", "conference", "year", "status",
+                        "author_role", "highlight", "summary", "individual_contribution"):
+                if publication.get(key):
+                    value = f'<span class="publication-{key}" data-field="publications.{index}.{key}">{publication[key]}</span>'
+                    label = {"status": "状态：", "author_role": "作者角色：",
+                             "individual_contribution": "个人贡献："}.get(key, "")
+                    fields.append(f'<span class="publication-fact">{label}{value}</span>')
+            if fields:
+                entries.append(f'<li class="publication-entry" data-entry="publications.{index}">{" · ".join(fields)}</li>')
+        if not entries:
+            return ""
+        return self._section("publications", "学术成果", f'<ul class="publication-list">{"".join(entries)}</ul>', theme_name)
 
     def render_postgraduate_exam(self, vm: ResumeViewModel, theme_name: str = "academic-postgraduate") -> str:
         """Renders postgraduate entrance exam and target institution section."""
@@ -661,13 +657,14 @@ class HtmlThemeRenderer:
         color_primary = "var(--color-primary, #8B1E1E)" if is_academic else "var(--color-primary, #0F172A)"
         color_rule = "var(--color-primary, #8B1E1E)" if is_academic else "var(--color-border, #E2E8F0)"
 
+        fact = lambda key, value: f'<span data-field="postgraduate_exam.{key}">{value}</span>' if theme_name in self.SEMANTIC_THEMES else value
         target_items = []
         if school:
-            target_items.append(f'<span><b>报考院校：</b>{school}</span>')
+            target_items.append(f'<span><b>报考院校：</b>{fact("target_school", school)}</span>')
         if major:
-            target_items.append(f'<span><b>报考专业：</b>{major}</span>')
+            target_items.append(f'<span><b>报考专业：</b>{fact("target_major", major)}</span>')
         if direction:
-            target_items.append(f'<span><b>研究方向：</b>{direction}</span>')
+            target_items.append(f'<span><b>研究方向：</b>{fact("direction", direction)}</span>')
 
         target_bar_html = ""
         if target_items:
@@ -681,13 +678,13 @@ class HtmlThemeRenderer:
             th_cells = [f'<th class="score-label" style="background:#F5EFEB; font-weight:700; width:16%; border:1px solid #D8CFC4; padding:3.5px 5px; color:{color_primary};">初试成绩</th>']
             td_cells = ['<td class="score-sublabel" style="background:var(--color-bg-subtle, #FDFBF7); font-weight:600; color:var(--color-muted, #555555); border:1px solid #D8CFC4; padding:3.5px 5px;">得分</td>']
 
-            for sub in subjects:
-                th_cells.append(f'<th style="border:1px solid #D8CFC4; padding:3.5px 5px; font-weight:600;">{sub["name"]}</th>')
-                td_cells.append(f'<td style="border:1px solid #D8CFC4; padding:3.5px 5px;">{sub["score"]}</td>')
+            for index, sub in enumerate(subjects):
+                th_cells.append(f'<th data-field="postgraduate_exam.subjects.{index}.name" style="border:1px solid #D8CFC4; padding:3.5px 5px; font-weight:600;">{sub["name"]}</th>')
+                td_cells.append(f'<td data-field="postgraduate_exam.subjects.{index}.score" style="border:1px solid #D8CFC4; padding:3.5px 5px;">{sub["score"]}</td>')
 
             if total_score:
                 th_cells.append(f'<th class="score-total-head" style="background:#F8ECE8; color:{color_primary}; font-weight:700; border:1px solid #D8CFC4; padding:3.5px 5px;">总分</th>')
-                td_cells.append(f'<td class="score-total-val" style="font-weight:700; color:{color_primary}; font-size:12px; background:#FCF6F4; border:1px solid #D8CFC4; padding:3.5px 5px;">{total_score}</td>')
+                td_cells.append(f'<td class="score-total-val" data-field="postgraduate_exam.total_score" style="font-weight:700; color:{color_primary}; font-size:12px; background:#FCF6F4; border:1px solid #D8CFC4; padding:3.5px 5px;">{total_score}</td>')
 
             table_html = f"""
       <table class="exam-score-table" style="width:100%; border-collapse:collapse; margin-top:4px; margin-bottom:6px; text-align:center; font-size:11.2px; border:1.2px solid {color_primary};">
@@ -703,36 +700,47 @@ class HtmlThemeRenderer:
         </tbody>
       </table>"""
 
+        body = target_bar_html + "\n" + table_html
+        if theme_name in self.SEMANTIC_THEMES:
+            body = f'<div class="resume-section-body">{body}</div>'
         return f"""
-    <section id="postgraduate-exam">
+    <section id="postgraduate-exam" aria-labelledby="postgraduate-exam-heading">
       <div class="section-header">
-        <h2>报考信息</h2>
+        <h2 id="postgraduate-exam-heading">报考信息</h2>
         <div class="rule" style="flex:1; height:1px; background:{color_rule};"></div>
       </div>
-      {target_bar_html}
-      {table_html}
+      {body}
     </section>
     """
 
     def render_sections(self, vm: ResumeViewModel, theme_name: str = "modern-navy") -> str:
-        """Assembles all standard content sections into a unified markup string."""
-        sections = []
-        pg = self.render_postgraduate_exam(vm, theme_name=theme_name)
-        if pg:
-            sections.append(pg)
-        edu = self.render_education(vm)
-        if edu:
-            sections.append(edu)
-        exp = self.render_experience(vm)
-        if exp:
-            sections.append(exp)
-        proj = self.render_projects(vm)
-        if proj:
-            sections.append(proj)
-        skills = self.render_skills(vm)
-        if skills:
-            sections.append(skills)
-        return "\n".join(sections)
+        """Declare reading order in the DOM, never through visual CSS reordering."""
+        sections = {
+            "postgraduate-exam": self.render_postgraduate_exam(vm, theme_name),
+            "education": self.render_education(vm, theme_name),
+            "experience": self.render_experience(vm, theme_name),
+            "projects": self.render_projects(vm, theme_name),
+            "skills": self.render_skills(vm, theme_name),
+            "publications": self.render_publications(vm, theme_name) if theme_name in self.SEMANTIC_THEMES else "",
+        }
+        if theme_name == "silicon-clean" and theme_name in self.SEMANTIC_THEMES:
+            opening = "\n".join(sections[key] for key in ("postgraduate-exam", "education") if sections[key])
+            left = sections["experience"]
+            right = "\n".join(sections[key] for key in ("projects", "publications") if sections[key])
+            columns = []
+            if left:
+                columns.append(f'<div class="resume-column" data-column="left">{left}</div>')
+            if right:
+                columns.append(f'<div class="resume-column" data-column="right">{right}</div>')
+            # Reserve a two-column body only when both editorial lanes have facts.
+            body_class = "resume-columns" if left and right else "resume-single-column"
+            body = f'<div class="{body_class}">{"".join(columns)}</div>' if columns else ""
+            return f'<div class="resume-sections" data-layout="balanced-columns">{opening}{body}{sections["skills"]}</div>'
+        content = "\n".join(section for section in sections.values() if section)
+        if theme_name in self.SEMANTIC_THEMES:
+            layout = "date-rail" if theme_name == "classic-tech" else "label-gutter"
+            return f'<div class="resume-sections" data-layout="{layout}">{content}</div>'
+        return content
 
     def render(
         self,
