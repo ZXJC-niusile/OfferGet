@@ -228,7 +228,11 @@ def _adapt_match_result(
 
 
 def get_canonical_default_template_path() -> Optional[Path]:
-    """Returns the resolved Path to the canonical default template if available on disk."""
+    """Return the legacy bundled resource path, retained as a default-renderer alias.
+
+    The resource is a migration notice. Default report HTML is owned by
+    OfferStrategyReporter, not read from this file.
+    """
     local_default = (PROJECT_ROOT / "templates" / "offer_strategy.html").resolve()
     if local_default.is_file():
         return local_default
@@ -244,7 +248,11 @@ def get_canonical_default_template_path() -> Optional[Path]:
 
 
 def read_default_template_content() -> str:
-    """Reads the canonical default report template content directly."""
+    """Read the legacy bundled resource notice, not the active report renderer.
+
+    This compatibility helper also supports non-filesystem package resources.
+    Use generate_report() to render a report.
+    """
     local_default = PROJECT_ROOT / "templates" / "offer_strategy.html"
     if local_default.is_file():
         return local_default.read_text(encoding="utf-8")
@@ -276,7 +284,8 @@ def resolve_report_template(template_path: Optional[Union[str, Path]] = None) ->
     """
     Compatibility API for resolving template paths to a physical filesystem Path.
     For user custom templates, prefer resolve_custom_template_path(path).
-    For package-internal default template content, prefer read_default_template_content().
+    With no path, return the legacy bundled notice, not executable report HTML.
+    For its content (including zip packages), use read_default_template_content().
     """
     if template_path:
         return resolve_custom_template_path(template_path)
@@ -297,9 +306,11 @@ def resolve_report_template(template_path: Optional[Union[str, Path]] = None) ->
 
 def is_default_template(template_path: Optional[Union[str, Path]]) -> bool:
     """
-    Checks whether the template path points strictly to the canonical default template.
-    Returns True if template_path is None, empty, or resolves to the canonical default template.
-    Returns False for custom templates (even if named 'offer_strategy.html') or invalid paths.
+    Check whether a path selects the active default Python renderer.
+
+    None, an empty string, and the legacy bundled resource path select it.
+    The bundled resource content is not rendered. Other existing files are
+    custom templates, even if named 'offer_strategy.html'; invalid paths return False.
     """
     if not template_path:
         return True
@@ -322,7 +333,7 @@ def _safe_fallback_render(
     decoded_jd: Dict[str, Any],
     match_result: Dict[str, Any],
 ) -> str:
-    """Fallback renderer for non-default custom template files, preserving secure string replacements."""
+    """Render explicitly selected external HTML files with escaped placeholders."""
     p = resolve_custom_template_path(template_path)
     if not p.is_file():
         raise FileNotFoundError(f"Custom template not found at: {template_path}")
@@ -404,17 +415,17 @@ def generate_report(
     template_path: Optional[Union[str, Path]] = None,
     output_path: Union[str, Path] = "report.html",
 ) -> str:
-    """
-    Renders high-fidelity Offer Strategy Report HTML by dispatching to
-    core.jd_analyst.reporter.OfferStrategyReporter, maintaining fallback support
-    for non-default custom templates, and verifying bilingual & security gates.
+    """Render an Offer Strategy report and return the output file path.
 
-    Guarantees:
-    1. Complete convergence to OfferStrategyReporter with zero fragile regex templating.
-    2. Strict validation that explicit template paths must exist (no silent fallback).
-    3. Custom templates outside canonical default path are cleanly handled via safe fallback render.
-    4. Strict output security audit via core.security_gate.validate_output_security.
-    5. Bilingual twin audit via core.validator.validate_bilingual_html.
+    None, an empty template path, or the legacy bundled offer_strategy.html
+    path selects OfferStrategyReporter. The bundled file is a compatibility
+    notice; its contents never control the default report. The default output
+    passes bilingual validation.
+
+    Any other explicit file is rendered using supported, HTML-escaped scalar
+    placeholders. Missing paths and unsupported placeholders raise errors.
+    All output passes the security audit before it is written atomically.
+    See docs/REPORT_TEMPLATES.md for the two supported rendering routes.
     """
     # 1. Adapt inputs into canonical models
     match_result = match_result if isinstance(match_result, dict) else {}

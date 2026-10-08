@@ -34,7 +34,11 @@ class ReportService:
         output_path: Union[str, Path],
         template_path: Optional[Union[str, Path]] = None,
     ) -> str:
-        """Generates the Offer Strategy HTML report using template replacement with XSS sanitization."""
+        """Generate the default Python-rendered report or an explicit custom HTML file.
+
+        The bundled legacy resource path also selects the default renderer.
+        Custom placeholder values are HTML-escaped; all output is security-checked.
+        """
         from core.report_generator import generate_report
 
         return generate_report(
