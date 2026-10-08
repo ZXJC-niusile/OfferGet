@@ -5,39 +5,29 @@
   <title>Resume - Engineering sb2nov Theme</title>
   <style>
     :root {
-      /* Classic Engineering Typography */
-      --font-serif: "Times New Roman", Times, "Songti SC", "SimSun", serif;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      --font-mono: "JetBrains Mono", Consolas, monospace;
-
-      /* High-Contrast Engineering Monochrome Palette */
-      --color-primary: #000000;
+      /* A traditional LaTeX-like engineering resume, including local CJK serif fallbacks. */
+      --font-serif: "Times New Roman", Times, "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "SimSun", serif;
+      --font-mono: Consolas, "Courier New", monospace;
+      --color-primary: #111111;
+      --color-primary-dark: #111111;
+      --color-accent: #333333;
       --color-text: #111111;
       --color-muted: #333333;
-      --color-rule: #000000;
+      --color-border: #555555;
+      --color-bg-subtle: #FFFFFF;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
 
-      /* Dynamic Layout Tokens for Auto-Fit Compaction Engine */
-      --page-padding-y: 8.5mm;
-      --page-padding-x: 11.0mm;
-      --body-font-size: 11.2px;
-      --body-line-height: 1.48;
+      /* Keep all six controls available to the existing AutoFit engine. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.45;
       --item-gap: 3.5px;
-      --section-gap: 8.8px;
+      --section-gap: 11px;
     }
-
-    @page {
-      size: A4 portrait;
-      margin: 0;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
+    @page { size: A4 portrait; margin: var(--page-padding-y) 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: var(--font-serif);
       font-size: var(--body-font-size);
@@ -48,162 +38,187 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-
     .page {
       width: 210mm;
       min-height: 297mm;
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
       background: #FFFFFF;
-      position: relative;
     }
+    a { color: inherit; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, .cli { font-family: var(--font-mono); font-size: 0.92em; overflow-wrap: anywhere; }
+    .en, .num, .metric { font-variant-numeric: tabular-nums; }
 
-    /* Centered Minimalist Engineering Header */
+    /* The renderer replaces the static header. Override its inline defaults here
+       to retain the centered, monochrome design on the actual production path. */
     header {
+      gap: 14px;
       text-align: center;
-      margin-bottom: var(--section-gap);
-      padding-bottom: 4px;
+      border: 0 !important;
+      padding: 0 0 3px !important;
+      margin-bottom: 0 !important;
     }
-
+    header > div:first-child { min-width: 0; padding-right: 0 !important; }
+    .header-top {
+      display: flex;
+      flex-wrap: wrap;
+      flex-direction: column;
+      align-items: center !important;
+      gap: 2px;
+    }
+    .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
     h1 {
-      font-size: 24px;
+      font-family: var(--font-serif);
+      font-size: 28px !important;
       font-weight: 700;
-      color: var(--color-primary);
-      letter-spacing: 0.5px;
-      margin-bottom: 2px;
+      line-height: 1.2;
+      letter-spacing: 0.4px;
+      color: var(--color-text);
     }
-
+    .header-top > span {
+      font-size: 1em !important;
+      font-weight: 400 !important;
+      color: var(--color-muted) !important;
+    }
     .contacts {
       display: flex;
-      justify-content: center;
       flex-wrap: wrap;
-      gap: 6px;
-      font-size: 10.8px;
-      color: var(--color-muted);
-      font-family: var(--font-sans);
+      justify-content: center;
+      align-items: baseline;
+      gap: 2px 8px !important;
+      font-size: 0.95em !important;
     }
+    .contacts span { display: inline-flex; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .contacts a { min-width: 0; overflow-wrap: anywhere; text-decoration: underline !important; }
+    .headline, .lead { margin-top: 3px; overflow-wrap: anywhere; }
 
-    .contacts a {
-      color: inherit;
-      text-decoration: underline;
-    }
-
-    /* Uppercase Section Headers with Crisp Divider Line */
+    /* Small-cap-style section labels and a crisp black rule, like a typeset CV. */
     .section-header {
+      display: block;
       margin-top: var(--section-gap);
       margin-bottom: 4px;
-      border-bottom: 0.75pt solid var(--color-rule);
-      padding-bottom: 1.5px;
+      padding-bottom: 1px;
+      border-bottom: 0.75px solid var(--color-primary);
     }
-
     .section-header h2 {
-      font-family: var(--font-sans);
-      font-size: 12.5px;
+      font-family: var(--font-serif);
+      font-size: 1.08em;
       font-weight: 700;
+      font-variant-caps: small-caps;
       color: var(--color-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.3px;
     }
+    .section-header .rule { display: none; }
 
-    .section-header .rule {
-      display: none;
-    }
-
-    /* Organization Bars with Left/Right Alignment */
-    .org-bar {
+    /* Plain two-line entries: bold organization, italic role, right-aligned date. */
+    .org-bar, .project-header {
       display: flex;
-      justify-content: space-between;
+      flex-wrap: wrap;
       align-items: baseline;
-      margin-top: var(--item-gap);
-      margin-bottom: 2px;
+      justify-content: space-between;
+      gap: 1px 14px;
+      padding: 0;
+      border: 0;
+      background: transparent;
     }
-
-    .org-title {
+    .org-left, .project-header > div:first-child {
+      display: flex;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      flex-direction: column;
+      min-width: 0;
+      align-items: flex-start !important;
+      gap: 0 !important;
+    }
+    .org-left > *, .project-header > div:first-child > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .org-title, .project-header > div:first-child > span:first-child {
+      font-size: 1.02em !important;
       font-weight: 700;
-      font-size: 12.0px;
-      color: var(--color-primary);
+      color: var(--color-text) !important;
     }
-
-    .org-role {
-      font-weight: 600;
-      font-size: 11.2px;
+    .org-role, .project-header > div:first-child > span + span {
+      font-size: 1em !important;
+      font-weight: 400 !important;
       font-style: italic;
-      color: var(--color-muted);
-      margin-left: 6px;
+      color: var(--color-text) !important;
     }
-
-    .org-right {
-      font-size: 10.8px;
+    .org-right, .project-header > div:last-child {
+      flex: 0 1 auto;
+      max-width: 100%;
+      margin-left: auto;
+      overflow-wrap: anywhere;
+      text-align: right;
+      font-size: 0.95em !important;
       font-style: italic;
-      color: var(--color-muted);
+      font-variant-numeric: tabular-nums;
     }
-
-    /* Tight Disciplined Bullet Lists */
-    ul {
-      list-style: none;
-      padding-left: 0;
-      margin-top: 1.5px;
-      margin-bottom: 3.5px;
-    }
-
-    li {
-      position: relative;
-      padding-left: 12px;
-      margin-bottom: var(--item-gap);
-      font-size: var(--body-font-size);
-      line-height: var(--body-line-height);
-    }
-
-    li::before {
-      content: "•";
-      position: absolute;
-      left: 2px;
-      color: var(--color-primary);
-      font-size: 10px;
-    }
-
-    /* Education Grid */
     .edu-grid {
-      display: grid;
-      row-gap: 2px;
-      font-size: 10.8px;
-      margin-top: 2px;
+      display: flex !important;
+      flex-wrap: wrap;
+      gap: 2px 18px;
+      font-size: 0.95em !important;
+    }
+    .edu-grid > div { flex: 1 1 16em; min-width: 0; overflow-wrap: anywhere; }
+    h3 { font-size: 1em; font-weight: 700; }
+    .project-tag { font-style: italic; color: var(--color-muted); }
+
+    ul { list-style: disc; padding-left: 17px; margin-top: 1px; }
+    li { padding-left: 1px; margin-bottom: var(--item-gap); overflow-wrap: anywhere; }
+    li::marker { font-size: 0.85em; color: var(--color-text); }
+    li.sub { margin-left: 14px; list-style-type: circle; }
+    #skills li { flex-wrap: wrap; padding-left: 0; font-size: 1em !important; }
+    #skills li > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
+    b, strong, .skill-category { font-weight: 700; color: var(--color-text); }
+
+    /* Retain optional exam data without introducing colored cells into this theme. */
+    .exam-target-bar { flex-wrap: wrap; gap: 3px 16px; font-size: 1em !important; }
+    .exam-target-bar > span { flex: 1 1 16em; min-width: 0; overflow-wrap: anywhere; }
+    .exam-score-table { table-layout: fixed; font-size: 0.95em !important; }
+    .exam-score-table tr, .exam-score-table th, .exam-score-table td {
+      background: transparent !important;
+      border-color: var(--color-border) !important;
+      overflow-wrap: anywhere;
     }
 
-    b, strong {
-      color: var(--color-primary);
-      font-weight: 700;
-    }
-
-    .skill-category {
-      font-weight: 700;
-      color: var(--color-primary);
-      margin-right: 4px;
-    }
-
+    /* A missing-fact warning remains visible even in an otherwise monochrome CV. */
     .todo {
-      background-color: var(--color-todo-bg);
+      background: var(--color-todo-bg);
       color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
+      padding: 0 3px;
       border: 1px dashed var(--color-todo-text);
       font-weight: 600;
+    }
+    @media print {
+      .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      header, .section-header, .org-bar, .project-header {
+        break-inside: avoid;
+        break-after: avoid;
+      }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
+      .exam-score-table { break-inside: avoid; }
     }
   </style>
 </head>
 <body>
   <div class="page">
     <header>
-      <h1>{{NAME}}</h1>
-      <div class="contacts">
-        <span>{{PHONE}}</span>
-        <span>|</span>
-        <span>{{EMAIL}}</span>
-        <span>|</span>
-        <span>{{LOCATION}}</span>
+      <div>
+        <div class="header-top"><h1>{{NAME}}</h1><span>{{TITLE}}</span></div>
+        <div class="contacts">
+          <span>{{PHONE}}</span><span>•</span><span>{{EMAIL}}</span><span>•</span><span>{{LOCATION}}</span>
+        </div>
       </div>
     </header>
-
     {{SECTIONS_CONTENT}}
   </div>
 </body>
