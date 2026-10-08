@@ -29,8 +29,10 @@ def test_synthetic_facts_photo_modes_and_dom_order_are_preserved(case):
     bare = re.sub(r"<style>.*?</style>", "", TEMPLATE, flags=re.DOTALL)
     assert case == original
     assert text_content(html) == text_content(rendered(case, bare))
-    assert re.findall(r'<section id="([^"]+)"', html) == [
-        "education", "experience", "projects", "skills"]
+    expected_sections = ["education", "experience", "projects", "skills"]
+    if case["profile"].get("postgraduate_exam"):
+        expected_sections.insert(0, "postgraduate-exam")
+    assert re.findall(r'<section id="([^"]+)"', html) == expected_sections
     assert case["profile"]["name"] in html
     assert case["profile"]["email"] in html
     assert "{{" not in html
@@ -59,7 +61,7 @@ def test_all_six_autofit_tokens_remain_effective(profile):
 
 def test_sidebar_is_a_genuine_two_column_flow_without_fixed_content_heights():
     assert "grid-template-columns: minmax(0, 28%) minmax(0, 1fr);" in TEMPLATE
-    assert "grid-template-rows: auto min-content auto auto;" in TEMPLATE
+    assert "grid-template-rows: auto auto min-content auto auto;" in TEMPLATE
     assert "align-content: start;" in TEMPLATE
     for section in ("education", "skills"):
         rule = re.search(r"\.resume-sidebar #" + section + r"\s*\{([^}]+)\}", TEMPLATE)
@@ -99,3 +101,22 @@ def test_optional_sections_do_not_introduce_placeholders_or_duplicate_facts(omit
     assert html.count(case["profile"]["name"]) == 1
     expected_id = "projects" if omitted == "campus_experience" else omitted
     assert f'<section id="{expected_id}">' not in html
+
+
+@pytest.mark.parametrize("long", [False, True])
+def test_optional_exam_keeps_facts_and_uses_a_full_width_row(long):
+    cases = [case for case in fixtures("academic-postgraduate") if case["name"].startswith(
+        "exam-long-" if long else "exam-normal-")]
+    for case in cases:
+        html = rendered(case)
+        exam = case["profile"]["postgraduate_exam"]
+        assert re.findall(r'<section id="([^"]+)"', html)[0] == "postgraduate-exam"
+        assert exam["target_school"] in html
+        assert exam["direction"] in html
+        for subject, score in exam["scores"].items():
+            assert subject in html
+            assert f">{score}</td>" in html
+    rule = re.search(r"\.resume-sidebar #postgraduate-exam\s*\{([^}]+)\}", TEMPLATE)
+    assert "grid-column: 1 / -1;" in rule.group(1)
+    assert "grid-row: 2;" in rule.group(1)
+    assert "table-layout: fixed;" in TEMPLATE

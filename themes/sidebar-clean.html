@@ -56,7 +56,7 @@
       background: #FFFFFF;
       display: grid;
       grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
-      grid-template-rows: auto min-content auto auto;
+      grid-template-rows: auto auto min-content auto auto;
       column-gap: 6mm;
       align-content: start;
     }
@@ -68,28 +68,70 @@
       grid-row: 1;
     }
 
-    .resume-sidebar #education {
-      grid-column: 1;
+    /* The optional exam section must never fall into an unassigned side cell. */
+    .resume-sidebar #postgraduate-exam {
+      grid-column: 1 / -1;
       grid-row: 2;
     }
 
-    .resume-sidebar #skills {
+    .resume-sidebar .exam-target-bar {
+      flex-wrap: wrap;
+      gap: 3px 12px;
+      font-size: 1em !important;
+    }
+
+    .resume-sidebar .exam-target-bar > span {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar .exam-score-table {
+      table-layout: fixed;
+      width: 100%;
+      border-collapse: collapse;
+      border: 0.6px solid var(--color-border) !important;
+      background: transparent !important;
+      break-inside: avoid;
+    }
+
+    .resume-sidebar .exam-score-table th,
+    .resume-sidebar .exam-score-table td {
+      overflow-wrap: anywhere;
+      font-size: 0.95em !important;
+      color: var(--color-text) !important;
+      background: transparent !important;
+      border: 0.6px solid var(--color-border) !important;
+      padding: 4px !important;
+    }
+
+    .resume-sidebar .exam-score-table tr {
+      background: transparent !important;
+      border: 0.6px solid var(--color-border) !important;
+    }
+
+    .resume-sidebar #education {
       grid-column: 1;
       grid-row: 3;
     }
 
+    .resume-sidebar #skills {
+      grid-column: 1;
+      grid-row: 4;
+    }
+
     .resume-sidebar #experience {
       grid-column: 2;
-      grid-row: 2 / 4;
+      grid-row: 3 / 5;
     }
 
     .resume-sidebar #projects {
       grid-column: 2;
-      grid-row: 4;
+      grid-row: 5;
     }
 
     .resume-sidebar .page:not(:has(#experience)) #projects {
-      grid-row: 2 / 4;
+      grid-row: 3 / 5;
     }
 
     .resume-sidebar section {

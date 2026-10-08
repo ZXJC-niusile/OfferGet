@@ -318,7 +318,7 @@ def fixtures(theme=DEFAULT_THEME):
             result.append({"name": f"skills-long-{mode}-{photo}", "profile": skills_long,
                            "photo": photo, "mode": mode, "max_pages": 2,
                            "require_autofit": False})
-    if theme == "academic-postgraduate":
+    if theme in {"academic-postgraduate", "sidebar-clean"}:
         for long_exam in (False, True):
             academic = json.loads(json.dumps(short))
             academic["intent"] = "计算机科学硕士 / MSc Computer Science"

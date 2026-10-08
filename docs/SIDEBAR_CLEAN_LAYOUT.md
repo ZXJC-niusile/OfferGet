@@ -16,13 +16,16 @@ continuation pages.
 
 ## Column and reading order
 
-The source remains header, education, experience, projects and skills, without
+The source remains header, optional exam section, education, experience, projects
+and skills, without
 cloning facts or visually hiding text. Explicit grid tracks keep skills directly
 below education and projects after experience; they avoid the original automatic
 row stretching and dense grid placement. If experience is absent, projects start
 at the top of the main column. Very long sidebar content may push later main-column
 content down. This is checked using the stress fixtures rather than fixed heights
-or absolute positioning that could overlap or lose content.
+or absolute positioning that could overlap or lose content. The optional exam
+section has its own full-width row above the columns, including a fixed-layout
+score table with wrapping subject labels.
 
 A two-column visual presentation needs an explicit PDF reading-order review. Do
 not claim generic ATS compatibility from a clean screenshot. Inspect the actual
@@ -38,9 +41,10 @@ python scripts/qa_modern_navy_layout.py --theme sidebar-clean \
   --output-dir output/sidebar-clean-comparison
 ```
 
-The shared 16-pair matrix includes realistic production resumes, short/long raw
+The shared 20-pair Sidebar matrix includes realistic production resumes, short/long raw
 resumes, extreme unbroken identifiers, long bilingual skill labels and values,
-compact AutoFit settings, multi-page dense content and all photo modes. Inputs
+compact AutoFit settings, multi-page dense content, four normal/long exam-table
+production cases and all photo modes. Inputs
 are fabricated QA data with `.invalid` contacts; no private resumes or paid API
 calls are used. Before/after HTML, screen PNG, every printed-page PNG, selectable
 PDF, renderer traces and `report.json` must be retained and inspected.
