@@ -3,6 +3,10 @@ OfferGet Defense Package.
 OfferGet native interview defense and adversarial questioning system.
 Provides defense rubrics, 9 weakness dimensions, 2-4 layer follow-up chains,
 100-point answer scoring, 5-step safe answer reframing, and project defense simulation.
+
+QuestionFollowUpChain (historically FollowUpChain here) contains questions from
+DefenseQuestionChain. ProjectInterrogationChain contains the simulator's rounds.
+These are separate schemas; see docs/DEFENSE_MODELS.md.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from .chain import (
     DefenseRole,
     FollowUpChain,
     QuestionChainType,
+    QuestionFollowUpChain,
 )
 from .evaluator import (
     NEGATION_MARKERS,
@@ -73,6 +78,7 @@ __all__ = [
     "NEGATION_MARKERS",
     "OVERCLAIMING_PATTERNS",
     "QuestionChainType",
+    "QuestionFollowUpChain",
     "RiskBasis",
     *_SIMULATOR_EXPORTS,
 ]
