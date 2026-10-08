@@ -25,7 +25,10 @@ at the top of the main column. Very long sidebar content may push later main-col
 content down. This is checked using the stress fixtures rather than fixed heights
 or absolute positioning that could overlap or lose content. The optional exam
 section has its own full-width row above the columns, including a fixed-layout
-score table with wrapping subject labels.
+score table with wrapping subject labels. Printed output uses ordinary grid rows
+without experience row-spans: Chromium can overlap later content when a spanning
+item fragments. This retains two columns but places printed skills alongside the
+projects row. Screen layout keeps skills directly below education.
 
 A two-column visual presentation needs an explicit PDF reading-order review. Do
 not claim generic ATS compatibility from a clean screenshot. Inspect the actual
@@ -53,4 +56,7 @@ Source tests check all fixture facts, unchanged semantic DOM order, optional
 sections, scoped renderer overrides and every AutoFit profile. Local Chromium
 cannot start because its socket operation is restricted, so local tests alone do
 not establish a valid PDF. Exact-head CI, production pixels, reading order and
-remaining limitations are recorded in the pull request before approval.
+remaining limitations are recorded in the pull request before approval. Sidebar QA
+also compares actual PDF text-line bounding boxes, catching substantial overlaps
+that a non-fragmented print-media DOM can miss. It ignores tiny font overhangs;
+manual page and reading-order inspection remains required.

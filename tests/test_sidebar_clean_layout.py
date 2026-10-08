@@ -9,7 +9,14 @@ import pytest
 from core.autofit import TUNING_LADDER, AutoFitEngine
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
-from scripts.qa_modern_navy_layout import fixtures, synthetic_photo, text_content
+from scripts.qa_modern_navy_layout import (
+    final_failures,
+    fixtures,
+    inspect_pdf,
+    pdf_line_overlaps,
+    synthetic_photo,
+    text_content,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "themes/sidebar-clean.html").read_text(encoding="utf-8")
@@ -120,3 +127,39 @@ def test_optional_exam_keeps_facts_and_uses_a_full_width_row(long):
     assert "grid-column: 1 / -1;" in rule.group(1)
     assert "grid-row: 2;" in rule.group(1)
     assert "table-layout: fixed;" in TEMPLATE
+
+
+def test_print_grid_avoids_row_spans_that_overlap_fragmented_experience():
+    printed = TEMPLATE.split("@media print", 1)[1]
+    assert ".resume-sidebar #experience {\n        grid-row: 3;" in printed
+    assert ".resume-sidebar #projects {\n        grid-row: 4;" in printed
+    assert "grid-row: 3 / 5;" not in printed
+
+
+def test_pdf_line_boxes_ignore_adjacent_columns_and_small_font_overhangs():
+    lines = [{"text": "Education", "bbox": (30, 50, 100, 64)},
+             {"text": "Experience", "bbox": (140, 50, 290, 64)},
+             {"text": "Next line", "bbox": (140, 63, 290, 77)}]
+    assert pdf_line_overlaps(lines) == []
+    lines.append({"text": "Overlapping project", "bbox": (160, 53, 270, 67)})
+    assert pdf_line_overlaps(lines)
+
+
+@pytest.mark.parametrize("overlap", [False, True])
+def test_fragmented_print_regression_checks_actual_pdf_text_lines(tmp_path, overlap):
+    fitz = pytest.importorskip("fitz")
+    path = tmp_path / "resume.pdf"
+    doc = fitz.open()
+    page = doc.new_page(width=595.28, height=841.89)
+    page.insert_text((40, 55), "Experience continuation", fontsize=12)
+    page.insert_text((44, 57 if overlap else 83), "Project heading", fontsize=12)
+    doc.save(path)
+    doc.close()
+    pdf = inspect_pdf(path, [], check_text_overlap=True)
+    assert bool(pdf["overlappingTextLines"]) == overlap
+    metrics = {"screen": {"overflow": [], "overlaps": [], "images": [], "bodyFontPx": 12},
+               "print": {"overflow": [], "overlaps": [], "printPaddingMm": 10},
+               "textUnchanged": True, "blockedRequests": [], "pdf": pdf}
+    failures = final_failures(metrics, {"name": "synthetic-pdf", "max_pages": 1})
+    assert bool(failures) == overlap
+    assert not overlap or "PDF text lines overlap" in failures[0]

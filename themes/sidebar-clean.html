@@ -378,6 +378,25 @@
     }
 
     @media print {
+      /* Chromium can overlap a following grid row after fragmenting a row-span.
+         Keep printed sections in ordinary rows, retaining two real columns. */
+      .resume-sidebar .page {
+        grid-template-rows: auto auto auto auto;
+      }
+
+      .resume-sidebar #experience {
+        grid-row: 3;
+      }
+
+      .resume-sidebar #skills,
+      .resume-sidebar #projects {
+        grid-row: 4;
+      }
+
+      .resume-sidebar .page:not(:has(#experience)) #projects {
+        grid-row: 3;
+      }
+
       .resume-sidebar .page {
         min-height: calc(297mm - 2 * var(--page-padding-y));
         padding-top: 0;
