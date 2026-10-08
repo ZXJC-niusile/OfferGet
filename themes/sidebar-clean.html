@@ -5,32 +5,30 @@
   <title>Resume - Sidebar Clean Theme</title>
   <style>
     :root {
-      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+      --font-sans: Arial, "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SF Mono", Consolas, "Liberation Mono", monospace;
+      --color-text: #20252B;
+      --color-primary: #294A50;
+      --color-primary-dark: #20252B;
+      --color-accent: #394B5C;
+      --color-muted: #4D5660;
+      --color-border: #A8B0B8;
+      --color-bg-subtle: #F5F6F7;
+      --color-todo-bg: #FFF3CD;
+      --color-todo-text: #744B00;
 
-      /* Modern Tech Cobalt & Slate Palette */
-      --color-primary: #1E3A8A;         /* Dark Navy / Deep Blue */
-      --color-accent: #2563EB;          /* Vibrant Tech Cobalt */
-      --color-text: #0F172A;            /* Charcoal Black */
-      --color-muted: #64748B;           /* Cool Gray */
-      --color-sidebar-bg: #F8FAFC;     /* Light Slate Sidebar Tint */
-      --color-border: #E2E8F0;          /* Crisp Border */
-      --color-tag-bg: #EFF6FF;          /* Blue Pill Tag Tint */
-      --color-todo-bg: #FEF3C7;
-      --color-todo-text: #92400E;
-
-      /* Dynamic Layout Tokens for Auto-Fit Compaction Engine */
-      --page-padding-y: 8.0mm;
-      --page-padding-x: 9.5mm;
-      --body-font-size: 11.2px;
-      --body-line-height: 1.54;
-      --item-gap: 4.0px;
-      --section-gap: 9.0px;
+      /* The production AutoFit engine owns these six layout controls. */
+      --page-padding-y: 10mm;
+      --page-padding-x: 11mm;
+      --body-font-size: 12px;
+      --body-line-height: 1.52;
+      --item-gap: 4px;
+      --section-gap: 10px;
     }
 
     @page {
       size: A4 portrait;
-      margin: 0;
+      margin: var(--page-padding-y) 0;
     }
 
     * {
@@ -39,7 +37,7 @@
       padding: 0;
     }
 
-    body {
+    body.resume-sidebar {
       font-family: var(--font-sans);
       font-size: var(--body-font-size);
       line-height: var(--body-line-height);
@@ -50,226 +48,395 @@
       print-color-adjust: exact;
     }
 
-    .page {
+    .resume-sidebar .page {
       width: 210mm;
       min-height: 297mm;
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
       background: #FFFFFF;
       display: grid;
-      grid-template-columns: 58mm 1fr;
-      grid-auto-flow: dense;
-      column-gap: 6.5mm;
-      row-gap: 2mm;
+      grid-template-columns: minmax(0, 28%) minmax(0, 1fr);
+      grid-template-rows: auto auto min-content auto auto;
+      column-gap: 6mm;
+      align-content: start;
     }
 
-    /* Top Full-Width Header */
-    header {
+    /* Preserve factual DOM order while keeping two genuinely distinct columns.
+       The fixed min-content education row keeps skills directly below it. */
+    .resume-sidebar header {
       grid-column: 1 / -1;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2.5px solid var(--color-primary);
-      padding-bottom: 6px;
-      margin-bottom: 6px;
+      grid-row: 1;
     }
 
-    .header-top {
-      display: flex;
-      align-items: baseline;
-      gap: 16px;
+    /* The optional exam section must never fall into an unassigned side cell. */
+    .resume-sidebar #postgraduate-exam {
+      grid-column: 1 / -1;
+      grid-row: 2;
     }
 
-    h1 {
-      font-size: 22px;
-      font-weight: 700;
+    .resume-sidebar .exam-target-bar {
+      flex-wrap: wrap;
+      gap: 3px 12px;
+      font-size: 1em !important;
+    }
+
+    .resume-sidebar .exam-target-bar > span {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar .exam-score-table {
+      table-layout: fixed;
+      width: 100%;
+      border-collapse: collapse;
+      border: 0.6px solid var(--color-border) !important;
+      background: transparent !important;
+      break-inside: avoid;
+    }
+
+    .resume-sidebar .exam-score-table th,
+    .resume-sidebar .exam-score-table td {
+      overflow-wrap: anywhere;
+      font-size: 0.95em !important;
+      color: var(--color-text) !important;
+      background: transparent !important;
+      border: 0.6px solid var(--color-border) !important;
+      padding: 4px !important;
+    }
+
+    .resume-sidebar .exam-score-table tr {
+      background: transparent !important;
+      border: 0.6px solid var(--color-border) !important;
+    }
+
+    .resume-sidebar #education {
+      grid-column: 1;
+      grid-row: 3;
+    }
+
+    .resume-sidebar #skills {
+      grid-column: 1;
+      grid-row: 4;
+    }
+
+    .resume-sidebar #experience {
+      grid-column: 2;
+      grid-row: 3 / 5;
+    }
+
+    .resume-sidebar #projects {
+      grid-column: 2;
+      grid-row: 5;
+    }
+
+    .resume-sidebar .page:not(:has(#experience)) #projects {
+      grid-row: 3 / 5;
+    }
+
+    .resume-sidebar section {
+      min-width: 0;
+      align-self: start;
+    }
+
+    /* Scoped overrides cover the actual shared renderer's inline markup. */
+    .resume-sidebar header {
+      align-items: flex-start !important;
+      margin-bottom: var(--section-gap) !important;
+      padding-bottom: 8px !important;
+      border-bottom: 1.4px solid var(--color-primary) !important;
+    }
+
+    .resume-sidebar header > div:first-child {
+      min-width: 0;
+    }
+
+    .resume-sidebar .header-top {
+      display: block !important;
+    }
+
+    .resume-sidebar .header-top > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar h1 {
+      font-family: var(--font-sans);
+      font-size: 25px !important;
+      line-height: 1.2;
+      letter-spacing: 0;
       color: var(--color-primary);
-      letter-spacing: -0.2px;
+      margin-bottom: 3px !important;
     }
 
-    .contacts {
-      display: flex;
-      gap: 10px;
-      font-size: 11px;
-      color: var(--color-muted);
-      margin-top: 3px;
+    .resume-sidebar .header-top > span {
+      display: block;
+      font-size: 1em !important;
+      font-weight: 500 !important;
+      color: var(--color-text) !important;
     }
 
-    .contacts a {
-      color: var(--color-accent);
+    .resume-sidebar .contacts {
+      flex-wrap: wrap;
+      gap: 2px 8px !important;
+      align-items: baseline;
+      font-size: 0.95em !important;
+      line-height: 1.45;
+      margin-top: 4px !important;
+    }
+
+    .resume-sidebar .contacts span,
+    .resume-sidebar .contacts a {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar a {
+      color: inherit;
       text-decoration: none;
     }
 
-    /* Column Placement */
-    #education, #skills {
-      grid-column: 1;
-      background: var(--color-sidebar-bg);
-      border: 1px solid var(--color-border);
-      border-radius: 4px;
-      padding: 8px 10px;
-      margin-bottom: 8px;
-      align-self: start;
-    }
-
-    #experience, #projects {
-      grid-column: 2;
-      align-self: start;
-      margin-bottom: 8px;
-    }
-
-    /* Section Headers */
-    .section-header {
+    .resume-sidebar .section-header {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
+      align-items: baseline;
+      gap: 9px;
+      margin-top: var(--section-gap);
+      margin-bottom: 4px;
+      break-after: avoid;
     }
 
-    .section-header h2 {
-      font-size: 12.8px;
+    .resume-sidebar .section-header h2 {
+      flex: 0 1 auto;
+      margin: 0 !important;
+      font-size: 1.08em;
+      line-height: 1.4;
       font-weight: 700;
+      letter-spacing: 0.025em;
       color: var(--color-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
 
-    .section-header .rule {
-      flex: 1;
-      height: 1px;
-      background: var(--color-border);
+    .resume-sidebar .section-header .rule {
+      flex: 1 1 20px !important;
+      height: 0 !important;
+      border: 0;
+      border-bottom: 0.6px solid var(--color-border);
+      background: none !important;
     }
 
-    /* Left Sidebar Compact Card Formatting */
-    #education .org-bar {
-      flex-direction: column !important;
-      align-items: flex-start !important;
-      gap: 1px;
-      margin-top: 4px;
+    /* Main-column dates keep a small right rail; roles get a clear second line. */
+    .resume-sidebar .org-bar,
+    .resume-sidebar .project-header {
+      display: grid !important;
+      grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+      align-items: baseline !important;
+      gap: 2px 8px;
+      margin-top: 5px !important;
+      margin-bottom: 2px !important;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+
+    .resume-sidebar .org-left,
+    .resume-sidebar .project-header > div:first-child {
+      display: block !important;
+      min-width: 0;
+    }
+
+    .resume-sidebar .org-left > *,
+    .resume-sidebar .project-header > div:first-child > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar .org-title,
+    .resume-sidebar .project-header > div:first-child > span:first-child {
+      font-size: 1.04em !important;
+      font-weight: 700 !important;
+      color: var(--color-text) !important;
+    }
+
+    .resume-sidebar .org-role,
+    .resume-sidebar .project-header > div:first-child > span + span {
+      display: block;
+      font-size: 1em !important;
+      font-weight: 400 !important;
+      color: var(--color-muted) !important;
+    }
+
+    .resume-sidebar .org-right,
+    .resume-sidebar .project-header > div:last-child {
+      flex: 0 1 auto;
+      max-width: 100%;
+      margin-left: auto;
+      font-family: var(--font-sans);
+      font-size: 0.95em !important;
+      font-variant-numeric: tabular-nums;
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+      color: var(--color-muted) !important;
+    }
+
+    .resume-sidebar .edu-grid {
+      display: block !important;
+      font-size: 0.97em !important;
+      line-height: var(--body-line-height) !important;
+      color: var(--color-text) !important;
+      padding: 0;
+    }
+
+    .resume-sidebar .edu-grid > div {
+      min-width: 0;
+      overflow-wrap: anywhere;
       margin-bottom: 2px;
     }
 
-    #education .org-title {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--color-text);
+    .resume-sidebar #education .org-bar {
+      display: block !important;
     }
 
-    #education .org-role {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--color-accent);
+    .resume-sidebar #education .org-title,
+    .resume-sidebar #education .org-role {
+      display: block;
     }
 
-    #education .org-right {
-      font-size: 10.2px;
-      color: var(--color-muted);
-    }
-
-    #education .edu-grid {
-      grid-template-columns: 1fr !important;
-      row-gap: 2px;
-      font-size: 10.8px;
+    .resume-sidebar #education .org-right {
+      margin-left: 0;
       margin-top: 3px;
     }
 
-    #skills ul li {
-      font-size: 10.8px;
-      line-height: 1.45;
-      margin-bottom: 5px;
-      padding-left: 0;
-    }
-
-    #skills ul li::before {
-      display: none;
-    }
-
-    .skill-category {
-      font-weight: 700;
-      color: var(--color-primary);
-      display: block;
-      margin-bottom: 1.5px;
-    }
-
-    /* Right Main Column Formatting */
-    #experience .org-bar, #projects .org-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      border-bottom: 1px dashed var(--color-border);
-      padding-bottom: 2px;
-      margin-top: var(--item-gap);
-      margin-bottom: 3.5px;
-    }
-
-    .org-title {
-      font-weight: 700;
-      font-size: 12.5px;
-      color: var(--color-primary);
-    }
-
-    .org-role {
-      font-weight: 600;
-      font-size: 11.5px;
-      color: var(--color-accent);
-      margin-left: 6px;
-    }
-
-    .org-right {
-      font-size: 10.8px;
-      color: var(--color-muted);
-      font-family: var(--font-mono);
-    }
-
-    ul {
-      list-style: none;
-      padding-left: 0;
+    .resume-sidebar ul {
+      list-style: disc;
+      padding-left: 1.25em;
       margin-top: 2px;
-      margin-bottom: 4px;
     }
 
-    #experience li, #projects li {
-      position: relative;
-      padding-left: 14px;
+    .resume-sidebar li {
+      padding-left: 0.12em;
       margin-bottom: var(--item-gap);
-      font-size: var(--body-font-size);
-      line-height: var(--body-line-height);
+      text-align: start;
+      overflow-wrap: anywhere;
     }
 
-    #experience li::before, #projects li::before {
-      content: "▸";
-      position: absolute;
-      left: 1px;
-      color: var(--color-accent);
-      font-size: 10px;
+    .resume-sidebar li::marker {
+      color: var(--color-muted);
+      font-size: 0.85em;
     }
 
-    b, strong {
+    /* Sidebar skills use labeled paragraphs, including long bilingual labels. */
+    .resume-sidebar #skills ul {
+      list-style: none;
+      padding-left: 0 !important;
+    }
+
+    .resume-sidebar #skills li {
+      display: block !important;
+      padding-left: 0;
+      margin-bottom: calc(var(--item-gap) + 3px) !important;
+      font-size: var(--body-font-size) !important;
+      line-height: var(--body-line-height) !important;
+    }
+
+    .resume-sidebar #skills li > span {
+      display: block;
+      min-width: 0;
+      white-space: normal !important;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar b,
+    .resume-sidebar strong {
       color: var(--color-text);
       font-weight: 700;
     }
 
-    .num, .metric {
-      font-weight: 600;
-      color: var(--color-primary);
+    .resume-sidebar .num,
+    .resume-sidebar .metric {
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
+      color: inherit;
     }
 
-    .todo {
-      background-color: var(--color-todo-bg);
+    .resume-sidebar code,
+    .resume-sidebar .cli {
+      font-family: var(--font-mono);
+      font-size: 0.95em;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-sidebar .todo {
+      background: var(--color-todo-bg);
       color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
-      border: 1px dashed var(--color-todo-text);
+      border-bottom: 1px dashed currentColor;
       font-weight: 600;
+    }
+
+    @media print {
+      /* Chromium can overlap a following grid row after fragmenting a row-span.
+         Keep printed sections in ordinary rows, retaining two real columns. */
+      .resume-sidebar .page {
+        grid-template-rows: auto auto auto auto;
+      }
+
+      .resume-sidebar #experience {
+        grid-row: 3;
+      }
+
+      .resume-sidebar #skills,
+      .resume-sidebar #projects {
+        grid-row: 4;
+      }
+
+      .resume-sidebar .page:not(:has(#experience)) #projects {
+        grid-row: 3;
+      }
+
+      .resume-sidebar .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      .resume-sidebar header,
+      .resume-sidebar .section-header,
+      .resume-sidebar .org-bar,
+      .resume-sidebar .project-header {
+        break-inside: avoid;
+        break-after: avoid;
+      }
+
+      /* Keep an ordinary entry together; oversized lists can still fragment. */
+      .resume-sidebar ul {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+
+      .resume-sidebar #skills ul {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
+
+      .resume-sidebar li {
+        break-inside: avoid;
+        orphans: 2;
+        widows: 2;
+      }
     }
   </style>
 </head>
-<body>
+<body class="resume-sidebar">
   <div class="page">
     <header>
-      <div style="flex:1;">
+      <div>
         <div class="header-top">
           <h1>{{NAME}}</h1>
-          <span style="font-size:12.5px; font-weight:600; color:var(--color-accent);">求职意向：{{TITLE}}</span>
+          <span>{{TITLE}}</span>
         </div>
         <div class="contacts">
           <span>{{PHONE}}</span>
@@ -280,7 +447,6 @@
         </div>
       </div>
     </header>
-
     {{SECTIONS_CONTENT}}
   </div>
 </body>
