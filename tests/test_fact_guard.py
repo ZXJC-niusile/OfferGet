@@ -182,9 +182,13 @@ class TestFactVerificationGuard(unittest.TestCase):
         }
 
         res = self.guard.verify_facts(tailored_resume_dict)
-        self.assertTrue(res["passed"])
-        self.assertEqual(res["verdict"], "FACT_CHECK_PASSED")
+        # Metrics match, but the translated employer has not been established
+        # as an alias of the source organization.
+        self.assertFalse(res["passed"])
+        self.assertEqual(res["verdict"], "FACT_REVIEW_REQUIRED")
+        self.assertLess(res["score"], 100)
         self.assertEqual(len(res["verified_bullets"]), 2)
+        self.assertEqual(len(res["coverage"]["unverified_fields"]), 1)
 
     def test_11_detect_ungrounded_technology(self):
         # Candidate only has SQLite in profile, bullet introduces Redis
