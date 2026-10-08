@@ -73,6 +73,39 @@ def _parse_render_result(res: Any, default_pdf: Path) -> Tuple[bool, int, str, P
     return ok, pages, msg, Path(final_path)
 
 
+def _verified_pdf_page_count(pdf_path: Path) -> int:
+    """Read the final artifact, never infer a page count from render success."""
+    if not pdf_path.is_file() or pdf_path.stat().st_size == 0:
+        raise ValueError(f"Rendered PDF is missing or empty: {pdf_path}")
+    with pdf_path.open("rb") as source:
+        if source.read(5) != b"%PDF-":
+            raise ValueError(f"Rendered artifact is not a PDF: {pdf_path}")
+
+    errors = []
+    try:
+        from pypdf import PdfReader
+        pages = len(PdfReader(str(pdf_path)).pages)
+        if pages > 0:
+            return pages
+        errors.append("PDF contains zero pages")
+    except ImportError:
+        pass
+    except Exception as exc:
+        errors.append(str(exc))
+    try:
+        import fitz
+        with fitz.open(str(pdf_path)) as document:
+            if document.is_pdf and document.page_count > 0:
+                return document.page_count
+            errors.append("PDF contains zero pages")
+    except ImportError:
+        pass
+    except Exception as exc:
+        errors.append(str(exc))
+    details = "; ".join(errors) or "Install pypdf or PyMuPDF to verify PDF pages"
+    raise ValueError(f"Cannot verify rendered PDF page count: {details}")
+
+
 class ResumeBuilder:
     """Unified engine for building all 6 resume variants from candidate profile data."""
 
@@ -712,11 +745,11 @@ def audit_resume_quality(
             "critical_count": 1,
             "warning_count": 0,
             "info_count": 0,
-            "page_count": 0,
+            "page_count": None,
             "checks": {
                 "placeholders": {"passed": False, "count": 0, "issues": ["File not found"]},
                 "dangerous_tags": {"passed": False, "violations": []},
-                "page_overflow": {"passed": False, "page_count": 0, "details": "File not found"},
+                "page_overflow": {"passed": False, "status": "unverified", "page_count": None, "details": "File not found"},
                 "formatting": {"passed": False},
             },
             "findings": [{"category": "io", "severity": "critical", "message": f"HTML file not found: {path}", "target": str(path)}],
@@ -737,7 +770,7 @@ def audit_resume_quality(
     checks: Dict[str, Any] = {
         "placeholders": {"passed": True, "count": 0, "issues": []},
         "dangerous_tags": {"passed": True, "violations": []},
-        "page_overflow": {"passed": True, "page_count": 1, "details": "Fits within single A4 page."},
+        "page_overflow": {"passed": False, "status": "unverified", "page_count": None, "details": "PDF page count has not been verified."},
         "formatting": {"passed": True, "warnings": []},
     }
 
@@ -799,47 +832,55 @@ def audit_resume_quality(
         checks["dangerous_tags"]["passed"] = False
         checks["dangerous_tags"]["violations"] = dangerous_violations
 
-    # 4. Check for height overflow (A4 budget)
-    page_count = 1
-    actual_renderer = renderer or BrowserRenderer()
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_pdf:
-        test_pdf = Path(tmp_pdf.name)
-
+    # 4. Check the actual PDF. Failed/unavailable rendering is not a layout pass.
+    page_count = None
+    render_details: Dict[str, Any] = {}
     try:
-        ok, pages, _ = actual_renderer.render_pdf(path, test_pdf)
-        if ok and pages is not None:
-            page_count = pages
-            if pages > 1:
-                msg = f"Resume overflows single A4 page budget: rendered {pages} pages."
-                checks["page_overflow"]["passed"] = False
-                checks["page_overflow"]["page_count"] = pages
-                checks["page_overflow"]["details"] = msg
-                extra_findings.append({
-                    "category": "overflow",
-                    "severity": "critical" if pages > 2 else "warning",
-                    "message": msg,
-                    "target": str(path),
-                    "details": {"pages": pages},
-                })
-            else:
-                checks["page_overflow"]["page_count"] = 1
-    except Exception:
-        if len(text_content) > 3500:
-            msg = f"Content text density ({len(text_content)} chars) exceeds standard single-page A4 capacity."
-            checks["page_overflow"]["passed"] = False
-            checks["page_overflow"]["details"] = msg
+        actual_renderer = renderer or BrowserRenderer()
+        with tempfile.TemporaryDirectory(prefix="offerget_quality_") as temp_dir:
+            test_pdf = Path(temp_dir) / "audit.pdf"
+            render_res = actual_renderer.render_pdf(path, test_pdf)
+            render_details = {
+                "message": str(render_res.msg if hasattr(render_res, "msg") else render_res[2]),
+                "error": str(getattr(render_res, "error", "")),
+                "diagnostics": getattr(render_res, "diagnostics", {}),
+            }
+            ok, reported_pages, render_msg, actual_pdf = _parse_render_result(render_res, test_pdf)
+            render_details["reported_page_count"] = reported_pages
+            if not ok:
+                raise ValueError(render_msg or render_details["error"] or "PDF rendering failed")
+            if not isinstance(reported_pages, int) or isinstance(reported_pages, bool) or reported_pages < 1:
+                raise ValueError(f"Renderer returned an invalid page count: {reported_pages!r}")
+            page_count = _verified_pdf_page_count(actual_pdf)
+
+        fits = page_count == 1
+        msg = ("Verified PDF fits within the single A4 page budget." if fits else
+               f"Resume overflows single A4 page budget: rendered {page_count} pages.")
+        checks["page_overflow"].update({
+            "passed": fits,
+            "status": "passed" if fits else "failed",
+            "page_count": page_count,
+            "details": msg,
+            "render": render_details,
+        })
+        if not fits:
             extra_findings.append({
                 "category": "overflow",
-                "severity": "warning",
+                "severity": "critical" if page_count > 2 else "warning",
                 "message": msg,
                 "target": str(path),
+                "details": {"pages": page_count},
             })
-    finally:
-        if test_pdf.exists():
-            try:
-                test_pdf.unlink()
-            except Exception:
-                pass
+    except Exception as exc:
+        msg = f"PDF page budget could not be verified: {exc}"
+        checks["page_overflow"].update({"details": msg, "render": render_details})
+        extra_findings.append({
+            "category": "render",
+            "severity": "critical",
+            "message": msg,
+            "target": str(path),
+            "details": render_details,
+        })
 
     # 5. Formatting warnings
     formatting_warnings = [f["message"] for f in base_summary["findings"] if f.get("category") in ("html", "inflation")]
@@ -855,7 +896,7 @@ def audit_resume_quality(
 
     score = 100 - (crit_count * 30) - (warn_count * 8) - (info_count * 2)
     score = max(0, min(100, score))
-    passed = (crit_count == 0 and score >= 70)
+    passed = (crit_count == 0 and score >= 70 and checks["page_overflow"]["passed"])
 
     return {
         "passed": passed,
