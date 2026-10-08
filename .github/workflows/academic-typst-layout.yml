@@ -37,6 +37,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: academic-typst-${{ github.sha }}
-          path: artifacts/academic-typst
+          # Quote-named synthetic input photos exercise the compiler, but
+          # GitHub artifacts reject those filenames. Keep all rendered evidence.
+          path: |
+            artifacts/academic-typst/**/*.pdf
+            artifacts/academic-typst/**/page-*.png
+            artifacts/academic-typst/**/*.typ
+            artifacts/academic-typst/**/*.html
+            artifacts/academic-typst/**/*.json
+            artifacts/academic-typst/**/*.log
           if-no-files-found: error
           retention-days: 14
