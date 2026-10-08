@@ -1,6 +1,7 @@
 """Photo/no-photo source contracts. These do not claim browser or PDF visual QA."""
 import copy
 import json
+import re
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
@@ -71,7 +72,12 @@ def test_same_source_produces_photo_and_no_photo_without_changing_facts(profile,
     assert '<img src="data:image/png;base64,' in with_photo
     assert "onerror=" not in with_photo and "预留证件照" not in with_photo
     assert "<img " not in without and "photo-placeholder" not in without and "预留证件照" not in without
-    assert "padding-right:0px" in without
+    if theme in HtmlThemeRenderer.SEMANTIC_THEMES:
+        identity = re.search(r'<div class="resume-identity"([^>]*)>', without)
+        assert identity and "style=" not in identity.group(1)
+        assert ".resume-identity { flex: 1; min-width: 0; }" in without
+    else:
+        assert "padding-right:0px" in without
     assert text_content(with_photo) == text_content(without)
     assert "17 verified test cases" in without and "Synthetic Test Candidate" in without
     assert profile == original

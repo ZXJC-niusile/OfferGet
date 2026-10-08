@@ -85,3 +85,62 @@ and [MIT CAPD master's sample](https://cdn.uconnectlabs.com/wp-content/uploads/s
 No facts are rewritten, no shared renderer changes, and no ATS acceptance claim
 is made. Existing AutoFit compaction can still choose its smaller typography
 profiles when needed; the theme does not silently change that global ladder.
+
+## Structural pilot and photo-mode migration
+
+The structural pilots are explicitly allowlisted: Modern Navy (`label-gutter`,
+18/82 section labels), Classic Tech (`date-rail`), and Silicon Clean
+(`balanced-columns`). Silicon has full-width identity/exam/education, equal body
+columns (experience left, projects/publications right), and full-width skills at
+the end. The QA harness does not let an arbitrary template opt itself into a
+relaxed comparison by adding a marker.
+
+All original sixteen common cases remain. The matrix is additive: 26 cases per
+pilot, 24 for other ordinary themes, and 30 for Academic Postgraduate and Sidebar Clean. Every
+original no-photo shape has a real embedded-portrait counterpart through the
+same raw, compact, solver, or production-builder path. Placeholder cases remain
+separate. Two additional source-photo cases put a local image in the input while
+requesting authoritative no-photo, through raw and production paths. The three
+pilots also exercise every displayed projection, including exam and publication
+fields, with/without the portrait. The 120×160 portrait is a code-drawn
+head-and-shoulders illustration with a registration border, never a real person;
+the photo-contract unit suite uses the exact same PNG helper.
+
+The pilot oracle is assembled from the raw synthetic profile by a separate,
+bounded source-schema implementation. It imports neither the renderer nor its
+normalizer/view model. Unknown fixture keys fail until the oracle is explicitly
+extended. Each artifact records its expected source ledger, exact field values,
+occurrence counts, expected field/entry/bullet order, and permitted presentation
+labels. Generated data-field hooks are observations, never the expected facts.
+The gate checks exact field IDs/values/counts, source section and column ownership,
+entry wrappers, ordered fields/bullets, and complete text-character coverage.
+Counting also detects repeated values; mere substring presence is insufficient.
+
+The five unmigrated themes keep ordered, exact non-photo body equality. The only
+photo normalization accepts the exact generated `预留证件照一寸 / 二寸` preview
+label; arbitrary text inside the photo wrapper, including hidden user facts,
+remains significant. Pilot fact preservation is mandatory even when layouts
+intentionally reorder sections or move dates before entry identities.
+
+Actual PDFs retain the original selectable-anchor, A4, repeated-gutter, page
+budget, loaded-image, network isolation and font-floor gates. Added checks
+compare complete source coverage and occurrence counts, preserve field/bullet
+order, detect text-line collisions, and verify embedded-image count. Silicon PDF
+reading is column-major across continuation pages. Its horizontal bounds come
+from print DOM geometry; full-width opening/ending boundaries are located from
+required section headings in the actual PDF. Unassigned/ambiguous glyphs or
+missing boundaries fail. Photo/no-photo checks reject image nodes, data URIs,
+reserved slots, lingering header padding or unused identity width; a placeholder
+cannot stand in for the supplied portrait.
+
+### Evidence levels and current limits
+
+`tests/test_structural_resume_qa.py` contains adversarial source/algorithm tests.
+These cover deletion, duplication, changed numeric facts, reordered bullets,
+wrong-column facts, hidden photo-wrapper facts, missing PDF boundaries, and PDF
+collision gating. They are source/algorithm evidence, not screenshots or proof
+of successful Chromium pagination. No mocked or synthetic screenshot is an
+acceptable substitute for the real harness output. If browser startup is denied
+or CI cannot run, keep the visual stage explicitly unverified and do not bypass
+the restriction. Actual portrait/no-photo screenshots, every printed page, and
+manual review of the exact integrated candidate remain required before release.

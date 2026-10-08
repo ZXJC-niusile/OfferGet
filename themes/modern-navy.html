@@ -5,19 +5,18 @@
   <title>Resume - Modern Navy Theme</title>
   <style>
     :root {
-      /* One familiar, locally available family throughout the resume. */
       --font-sans: Arial, "Helvetica Neue", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
-      --font-mono: "SF Mono", Menlo, Consolas, monospace;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       --color-primary: #18344D;
       --color-primary-dark: #202830;
-      --color-accent: #394956;
+      --color-accent: #18344D;
       --color-text: #202830;
       --color-muted: #4A5660;
       --color-border: #A8B3BD;
+      --color-bg-subtle: #F8FAFC;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
-
-      /* Keep all six tokens editable by the existing AutoFit engine. */
+      /* The six established AutoFit tokens remain unique and editable. */
       --page-padding-y: 12.7mm;
       --page-padding-x: 14mm;
       --body-font-size: 13.333px;
@@ -25,26 +24,17 @@
       --item-gap: 4px;
       --section-gap: 13px;
     }
-
-    @page {
-      size: A4 portrait;
-      /* Repeat the vertical gutter on every printed page. */
-      margin: var(--page-padding-y) 0;
-    }
-
+    @page { size: A4 portrait; margin: var(--page-padding-y) 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: var(--font-sans);
       font-size: var(--body-font-size);
       line-height: var(--body-line-height);
       color: var(--color-text);
       background: #FFFFFF;
-      -webkit-font-smoothing: antialiased;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-
     .page {
       width: 210mm;
       min-height: 297mm;
@@ -52,163 +42,67 @@
       margin: 0 auto;
       background: #FFFFFF;
     }
-
-    a { color: inherit; text-decoration: none; }
+    a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
     a:hover { text-decoration: underline; }
     code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
-    .en, .num, .metric { font-variant-numeric: tabular-nums; }
-
-    /* The shared renderer has inline presentation defaults. Narrow overrides
-       below change only this theme, leaving its content and other themes intact. */
-    header { padding-bottom: 9px !important; }
-    header > div:first-child { min-width: 0; }
-
-    .header-top {
-      display: flex;
-      flex-wrap: wrap;
-      flex-direction: column;
-      align-items: flex-start !important;
-      gap: 3px;
-    }
-    .header-top > * {
-      min-width: 0;
-      max-width: 100%;
-      overflow-wrap: anywhere;
-    }
-    h1 { font-size: 25px !important; font-weight: 700; color: var(--color-primary); line-height: 1.2; }
-    .header-top > span { font-weight: 400 !important; font-size: 1em !important; }
-
-    .contacts {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 3px 8px !important;
-      font-size: 0.92em !important;
-      color: var(--color-muted);
-    }
-    .contacts span {
-      display: inline-flex;
-      min-width: 0;
-      max-width: 100%;
-      overflow-wrap: anywhere;
-      align-items: baseline;
-    }
-    .contacts a { min-width: 0; overflow-wrap: anywhere; }
-    .headline, .lead { font-weight: 400; margin-top: 4px; overflow-wrap: anywhere; }
-
-    /* Familiar resume section labels, with a single understated horizontal rule. */
-    .section-header {
-      display: block;
-      margin-top: var(--section-gap);
-      margin-bottom: 5px;
-      padding-bottom: 2px;
-      border-bottom: 1px solid var(--color-border);
-    }
-    h2 { font-size: 1.05em; font-weight: 700; color: var(--color-primary); letter-spacing: 0.15px; }
+    .resume-header { display: flex; align-items: flex-start; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-primary); }
+    .resume-identity { flex: 1; min-width: 0; }
+    .header-top { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+    .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .resume-name { font-size: 28px; font-weight: 700; line-height: 1.2; color: var(--color-primary); }
+    .resume-title { font-size: 1em; font-weight: 400; color: var(--color-text); }
+    .resume-contacts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: 5px; font-size: 0.9em; color: var(--color-muted); }
+    .resume-contacts span, .resume-contacts a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .resume-sections section { margin-top: var(--section-gap); min-width: 0; }
+    .section-header { margin-bottom: 5px; }
+    h2 { font-size: 1.05em; font-weight: 700; line-height: 1.4; color: var(--color-primary); overflow-wrap: anywhere; }
     .rule { display: none; }
-
-    /* Employer/school and date form a plain heading row; the role sits below. */
-    .org-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 2px 12px;
-      justify-content: space-between;
-      align-items: baseline;
-      background: transparent;
-      border: 0;
-      padding: 0;
-    }
-    .org-left {
-      display: flex;
-      flex: 1 1 24em;
-      flex-wrap: wrap;
-      flex-direction: column;
-      min-width: 0;
-      align-items: flex-start !important;
-      gap: 0 !important;
-    }
-    .org-left > *,
-    .project-header > div:first-child > * {
-      min-width: 0;
-      max-width: 100%;
-      overflow-wrap: anywhere;
-    }
-    .org-title,
-    .project-header > div:first-child > span:first-child {
-      font-size: 1em !important;
-      font-weight: 700;
-    }
-    .org-role,
-    .project-header > div:first-child > span + span {
-      font-size: 0.96em !important;
-      font-weight: 400 !important;
-      color: var(--color-text) !important;
-    }
-    .org-right,
-    .project-header > div:last-child {
-      flex: 0 0 auto;
-      max-width: 100%;
-      margin-left: auto;
-      white-space: nowrap;
-      font-size: 0.9em !important;
-      font-variant-numeric: tabular-nums;
-      color: var(--color-muted);
-    }
-    .project-header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 2px 12px;
-      justify-content: space-between;
-      align-items: baseline;
-    }
-    .project-header > div:first-child {
-      display: flex;
-      flex: 1 1 24em;
-      flex-wrap: wrap;
-      flex-direction: column;
-      min-width: 0;
-      align-items: flex-start !important;
-      gap: 0 !important;
-    }
-    .edu-grid { column-gap: 10px; font-size: 0.92em !important; }
-    .edu-grid > div,
-    #skills li > span { min-width: 0; overflow-wrap: anywhere; }
-    h3 { font-size: 1em; font-weight: 700; }
-    .project-tag { font-size: 0.96em; color: var(--color-muted); }
-
-    /* Standard hanging bullets; wrapped lines share one clean text edge. */
+    .resume-section-body, .resume-entry, .entry-content { min-width: 0; }
+    .resume-entry + .resume-entry { margin-top: 9px; }
+    .entry-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; margin-bottom: 3px; }
+    .entry-identity { display: flex; flex-direction: column; flex: 1 1 18em; min-width: 0; }
+    .entry-identity > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .entry-title { font-size: 1em; font-weight: 700; }
+    .entry-role { font-size: 0.96em; color: var(--color-text); }
+    .entry-date { min-width: 0; max-width: 100%; margin-left: auto; font-size: 0.9em; color: var(--color-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .edu-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px 10px; margin-top: 4px; font-size: 0.92em; color: var(--color-muted); }
+    .edu-grid[data-columns="2"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .edu-grid[data-columns="3"] { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); }
+    .edu-grid > div { min-width: 0; overflow-wrap: anywhere; }
     ul { list-style: disc; padding-left: 17px; }
-    li {
-      padding-left: 1px;
-      margin-bottom: var(--item-gap);
-      text-align: start;
-      overflow-wrap: anywhere;
-    }
+    li { padding-left: 1px; margin-bottom: var(--item-gap); text-align: start; overflow-wrap: anywhere; }
     li::marker { color: var(--color-text); font-size: 0.85em; }
-    li.sub { margin-left: 14px; list-style-type: circle; }
-    #skills li { padding-left: 0; font-size: 1em !important; flex-wrap: wrap; }
-    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
-    b, strong { color: var(--color-text); font-weight: 700; }
-
-    /* Unresolved facts must remain visibly marked; this is not a resume badge. */
-    .todo {
-      background-color: var(--color-todo-bg);
-      color: var(--color-todo-text);
-      padding: 0 3px;
-      border: 1px dashed var(--color-todo-text);
-      font-weight: 600;
-    }
-
+    .skills-list { list-style: none; padding-left: 0; }
+    .skill-row { padding-left: 0; }
+    .skill-label { font-weight: 700; }
+    .skill-value, .skill-label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .publication-title { font-weight: 700; }
+    .exam-target-bar { flex-wrap: wrap; gap: 3px 10px; }
+    .exam-target-bar > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .exam-score-table { table-layout: fixed; }
+    .exam-score-table th, .exam-score-table td { overflow-wrap: anywhere; }
+    b, strong { font-weight: 700; color: var(--color-text); }
+    .todo { background: var(--color-todo-bg); color: var(--color-todo-text); padding: 0 3px; border: 1px dashed var(--color-todo-text); }
+    /* Left labels own 18% of the section; facts retain their source order. */
+    .resume-sections > section { display: grid; grid-template-columns: minmax(0, 18fr) minmax(0, 82fr); column-gap: 16px; align-items: start; }
+    .resume-sections > section > .section-header { margin: 0; padding-top: 1px; }
+    .resume-sections > section > .resume-section-body { border-top: 1px solid var(--color-border); padding-top: 5px; }
+    .resume-name { letter-spacing: 0.3px; }
+    /* The shared solver injects important legacy rules after the template.
+       These scoped exceptions keep dates wrapping and one owner for section gaps. */
+    .resume-sections .entry-date { white-space: normal !important; }
+    .resume-sections .section-header, .resume-sections h2 { margin-top: 0 !important; }
     @media print {
       .page {
-        /* Page margins own vertical padding, including continuation pages. */
         min-height: calc(297mm - 2 * var(--page-padding-y));
         padding-top: 0;
         padding-bottom: 0;
       }
-      header, .section-header, .org-bar, .project-header {
-        break-inside: avoid;
-        break-after: avoid;
+      .resume-header, .section-header, .entry-header { break-inside: avoid; break-after: avoid; }
+      .resume-sections section, .resume-entry, .resume-column { break-inside: auto; }
+      .resume-sections .entry-bullets, .resume-sections .publication-list, .resume-sections .skills-list {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
       }
       li { break-inside: avoid; orphans: 2; widows: 2; }
     }
@@ -216,24 +110,7 @@
 </head>
 <body>
   <div class="page">
-    <!-- Header -->
-    <header>
-      <div class="header-top">
-        <h1>{{NAME}}</h1>
-        <div class="contacts">
-          <span>{{PHONE}}</span>
-          <span>•</span>
-          <span>{{EMAIL}}</span>
-          <span>•</span>
-          <span><a href="{{GITHUB_URL}}" target="_blank">{{GITHUB_HANDLE}}</a></span>
-        </div>
-      </div>
-      <div class="headline">
-        <b>{{HEADLINE_BADGES}}</b>
-      </div>
-    </header>
-
-    <!-- Content Sections injected here -->
+    <header></header>
     {{SECTIONS_CONTENT}}
   </div>
 </body>

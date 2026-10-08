@@ -8,27 +8,24 @@
       --font-sans: Arial, "Helvetica Neue", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
       --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
       --color-primary: #202020;
-      --color-primary-dark: #202020;
-      --color-accent: #383838;
-      --color-text: #262626;
-      --color-muted: #505050;
-      --color-border: #9A9A9A;
-      --color-bg-subtle: #FFFFFF;
+      --color-primary-dark: #202830;
+      --color-accent: #202020;
+      --color-text: #202830;
+      --color-muted: #4A5660;
+      --color-border: #A8B3BD;
+      --color-bg-subtle: #F8FAFC;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
-
-      /* All six tokens remain available to the existing AutoFit profiles. */
+      /* The six established AutoFit tokens remain unique and editable. */
       --page-padding-y: 12.7mm;
       --page-padding-x: 14mm;
       --body-font-size: 13.333px;
       --body-line-height: 1.5;
       --item-gap: 4px;
-      --section-gap: 14px;
+      --section-gap: 13px;
     }
-
     @page { size: A4 portrait; margin: var(--page-padding-y) 0; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
       font-family: var(--font-sans);
       font-size: var(--body-font-size);
@@ -38,194 +35,88 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
-
     .page {
       width: 210mm;
       min-height: 297mm;
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
+      background: #FFFFFF;
     }
-
-    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
-    .en, .num, .metric { font-variant-numeric: tabular-nums; }
     a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
     a:hover { text-decoration: underline; }
-
-    /* A centered name/contact composition gives this neutral sans theme its
-       own identity. Override only the shared renderer's presentation defaults. */
-    header {
-      align-items: center !important;
-      border-bottom: 1px solid var(--color-primary) !important;
-      padding-bottom: 8px !important;
-      margin-bottom: 4px !important;
-      gap: 12px;
-    }
-    header > div:first-child { min-width: 0; padding-right: 0 !important; text-align: center; }
-
-    .header-top {
-      display: flex;
-      flex-direction: column;
-      flex-wrap: wrap;
-      align-items: center !important;
-      justify-content: center !important;
-      gap: 2px;
-    }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+    .resume-header { display: flex; align-items: flex-start; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-primary); }
+    .resume-identity { flex: 1; min-width: 0; }
+    .header-top { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
     .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-    h1 {
-      font-size: 25px !important;
-      line-height: 1.18;
-      font-weight: 700;
-      color: var(--color-primary);
-      letter-spacing: 0.3px;
-    }
-    .header-top > span {
-      font-size: 0.95em !important;
-      font-weight: 400 !important;
-      color: var(--color-muted) !important;
-      line-height: 1.4;
-    }
-    .contacts {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: baseline;
-      gap: 2px 8px !important;
-      margin-top: 4px !important;
-      font-size: 0.9em !important;
-      line-height: 1.45;
-      color: var(--color-muted);
-    }
-    .contacts span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-    .contacts a { min-width: 0; overflow-wrap: anywhere; }
-    .headline { font-size: 0.95em; color: var(--color-muted); text-align: center; }
-
-    /* Conventional centered section labels, separated by white space. */
-    .section-header {
-      display: block;
-      margin-top: var(--section-gap);
-      margin-bottom: 5px;
-      text-align: center;
-    }
-    h2 {
-      font-size: 1.05em;
-      line-height: 1.4;
-      font-weight: 700;
-      color: var(--color-primary);
-      text-transform: uppercase;
-      letter-spacing: 0.7px;
-      overflow-wrap: anywhere;
-    }
+    .resume-name { font-size: 28px; font-weight: 700; line-height: 1.2; color: var(--color-primary); }
+    .resume-title { font-size: 1em; font-weight: 400; color: var(--color-text); }
+    .resume-contacts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: 5px; font-size: 0.9em; color: var(--color-muted); }
+    .resume-contacts span, .resume-contacts a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .resume-sections section { margin-top: var(--section-gap); min-width: 0; }
+    .section-header { margin-bottom: 5px; }
+    h2 { font-size: 1.05em; font-weight: 700; line-height: 1.4; color: var(--color-primary); overflow-wrap: anywhere; }
     .rule { display: none; }
-
-    .org-bar, .project-header {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 2px 14px;
-      background: transparent;
-      border: 0;
-      padding: 0;
-    }
-    .org-left, .project-header > div:first-child {
-      display: block !important;
-      flex: 1 1 24em;
-      min-width: 0;
-    }
-    .org-left > *, .project-header > div:first-child > * {
-      display: block;
-      min-width: 0;
-      max-width: 100%;
-      overflow-wrap: anywhere;
-    }
-    .org-title, .project-header > div:first-child > span:first-child {
-      font-size: 1em !important;
-      font-weight: 700;
-      color: var(--color-primary);
-    }
-    .org-role, .project-header > div:first-child > span + span {
-      font-size: 0.96em !important;
-      font-weight: 400 !important;
-      color: var(--color-text) !important;
-    }
-    .org-right, .project-header > div:last-child {
-      flex: 0 1 auto;
-      min-width: 0;
-      max-width: 100%;
-      margin-left: auto;
-      font-size: 0.9em !important;
-      font-variant-numeric: tabular-nums;
-      color: var(--color-muted);
-      text-align: right;
-      overflow-wrap: anywhere;
-    }
-    .edu-grid { column-gap: 10px; font-size: 0.92em !important; }
+    .resume-section-body, .resume-entry, .entry-content { min-width: 0; }
+    .resume-entry + .resume-entry { margin-top: 9px; }
+    .entry-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; margin-bottom: 3px; }
+    .entry-identity { display: flex; flex-direction: column; flex: 1 1 18em; min-width: 0; }
+    .entry-identity > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .entry-title { font-size: 1em; font-weight: 700; }
+    .entry-role { font-size: 0.96em; color: var(--color-text); }
+    .entry-date { min-width: 0; max-width: 100%; margin-left: auto; font-size: 0.9em; color: var(--color-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .edu-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px 10px; margin-top: 4px; font-size: 0.92em; color: var(--color-muted); }
+    .edu-grid[data-columns="2"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .edu-grid[data-columns="3"] { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); }
     .edu-grid > div { min-width: 0; overflow-wrap: anywhere; }
-    .lead { color: var(--color-text); margin-bottom: 3px; }
-    h3 { font-size: 1em; font-weight: 700; }
-    .project-tag { font-size: 0.95em; color: var(--color-muted); }
-
-    /* Standard round bullets with a shared hanging text edge. */
     ul { list-style: disc; padding-left: 17px; }
-    li {
-      padding-left: 1px;
-      margin-bottom: var(--item-gap);
-      text-align: start;
-      overflow-wrap: anywhere;
-    }
-    li::marker { color: var(--color-text); font-size: 0.9em; }
-    li.sub { margin-left: 14px; list-style-type: circle; }
-
-    /* Ordinary label/value lines; long labels may wrap without stealing width
-       from the value or forcing the browser to shrink the entire PDF. */
-    #skills li {
-      display: block !important;
-      padding-left: 0;
-      font-size: 1em !important;
-      line-height: var(--body-line-height) !important;
-      margin-bottom: var(--item-gap) !important;
-    }
-    #skills li > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
-
-    b, strong { color: var(--color-primary); font-weight: 700; }
-    .todo {
-      background: var(--color-todo-bg);
-      color: var(--color-todo-text);
-      padding: 0 3px;
-      border: 1px dashed var(--color-todo-text);
-      font-weight: 700;
-    }
-
+    li { padding-left: 1px; margin-bottom: var(--item-gap); text-align: start; overflow-wrap: anywhere; }
+    li::marker { color: var(--color-text); font-size: 0.85em; }
+    .skills-list { list-style: none; padding-left: 0; }
+    .skill-row { padding-left: 0; }
+    .skill-label { font-weight: 700; }
+    .skill-value, .skill-label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .publication-title { font-weight: 700; }
+    .exam-target-bar { flex-wrap: wrap; gap: 3px 10px; }
+    .exam-target-bar > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .exam-score-table { table-layout: fixed; }
+    .exam-score-table th, .exam-score-table td { overflow-wrap: anywhere; }
+    b, strong { font-weight: 700; color: var(--color-text); }
+    .todo { background: var(--color-todo-bg); color: var(--color-todo-text); padding: 0 3px; border: 1px dashed var(--color-todo-text); }
+    /* Two independent, balanced reading columns, explicitly assembled in DOM.
+       Never use dense packing, spanning, fixed heights or implicit reordering. */
+    .resume-header { border-bottom: 2px solid var(--color-primary); }
+    .resume-name { font-size: 30px; letter-spacing: 0.2px; }
+    .resume-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 24px; align-items: start; }
+    .resume-column { min-width: 0; }
+    .section-header { border-bottom: 1px solid var(--color-border); padding-bottom: 3px; }
+    .entry-header { display: block; }
+    .entry-date { margin: 3px 0 0; }
+    .edu-grid[data-columns] { grid-template-columns: minmax(0, 1fr); }
+    .resume-column .skill-label, .resume-column .skill-value { display: block; }
+    /* The shared solver injects important legacy rules after the template.
+       These scoped exceptions keep dates wrapping and one owner for section gaps. */
+    .resume-sections .entry-date { white-space: normal !important; }
+    .resume-sections .section-header, .resume-sections h2 { margin-top: 0 !important; }
     @media print {
       .page {
         min-height: calc(297mm - 2 * var(--page-padding-y));
         padding-top: 0;
         padding-bottom: 0;
       }
-      header, .section-header, .org-bar, .project-header { break-inside: avoid; break-after: avoid; }
+      .resume-header, .section-header, .entry-header { break-inside: avoid; break-after: avoid; }
+      .resume-sections section, .resume-entry, .resume-column { break-inside: auto; }
+      .resume-sections .entry-bullets, .resume-sections .publication-list, .resume-sections .skills-list {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
       li { break-inside: avoid; orphans: 2; widows: 2; }
     }
   </style>
 </head>
 <body>
   <div class="page">
-    <header>
-      <div class="header-top">
-        <h1>{{NAME}}</h1>
-        <div class="contacts">
-          <span>{{PHONE}}</span>
-          <span>•</span>
-          <span>{{EMAIL}}</span>
-          <span>•</span>
-          <span><a href="{{GITHUB_URL}}">{{GITHUB_HANDLE}}</a></span>
-        </div>
-      </div>
-      <div class="headline">
-        <b>{{HEADLINE_BADGES}}</b>
-      </div>
-    </header>
-
+    <header></header>
     {{SECTIONS_CONTENT}}
   </div>
 </body>

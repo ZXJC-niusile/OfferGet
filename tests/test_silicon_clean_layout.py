@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from core.autofit import AutoFitEngine, TUNING_LADDER
+from core.autofit import TUNING_LADDER, AutoFitEngine
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import fixtures, text_content
@@ -61,25 +61,20 @@ def rule(selector):
 
 def test_centered_neutral_header_and_stacked_roles_are_distinct():
     assert "--color-primary: #202020;" in TEMPLATE
-    assert "flex-direction: column;" in rule(".header-top")
-    assert "align-items: center !important;" in rule(".header-top")
-    assert "justify-content: center;" in rule(".contacts")
-    assert "text-align: center;" in rule(".section-header")
-    assert "display: block !important;" in rule(".org-left, .project-header > div:first-child")
-    assert "display: block;" in rule(".org-left > *, .project-header > div:first-child > *")
-    assert "font-weight: 400 !important;" in rule(".org-role, .project-header > div:first-child > span + span")
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);" in rule(".resume-columns")
+    assert "align-items: start;" in rule(".resume-columns")
+    assert ".entry-header { display: block; }" in TEMPLATE
+    assert "font-size: 30px;" in rule(".resume-name") or "font-size: 30px;" in TEMPLATE
+    assert TEMPLATE.count("!important") == 4  # Only scoped shared-solver compatibility rules
 
 
 def test_generated_markup_has_wrap_safe_contacts_dates_and_skills():
-    for selector in ("header > div:first-child", ".header-top > *", ".contacts span", ".contacts a",
-                     ".org-left, .project-header > div:first-child", ".edu-grid > div",
-                     ".org-right, .project-header > div:last-child", "#skills li > span"):
+    for selector in (".resume-identity", ".header-top > *", ".entry-identity", ".entry-date", ".edu-grid > div", ".resume-column"):
         assert "min-width: 0;" in rule(selector), selector
-    for selector in (".header-top", ".contacts", ".org-bar, .project-header"):
-        assert "flex-wrap: wrap;" in rule(selector), selector
-    assert "display: block !important;" in rule("#skills li")
-    assert "white-space: normal !important;" in rule("#skills li > span:first-child")
-    assert "overflow-wrap: anywhere;" in rule(".org-right, .project-header > div:last-child")
+    assert "flex-wrap: wrap;" in rule(".resume-contacts")
+    assert "overflow-wrap: anywhere;" in rule(".entry-date")
+    assert "white-space: nowrap" not in TEMPLATE
+    assert "column-gap: 24px;" in rule(".resume-columns")
 
 
 def test_readable_default_type_and_plain_hanging_bullets():
@@ -88,6 +83,5 @@ def test_readable_default_type_and_plain_hanging_bullets():
     assert "font-size: 1.05em;" in rule("h2")
     assert "list-style: disc;" in rule("ul")
     assert "text-align: start;" in rule("li")
-    for decorative_or_clipping_rule in ("li::before", "border-left:", "text-align: justify",
-                                         "text-overflow: ellipsis", "overflow: hidden", "@import", "url("):
-        assert decorative_or_clipping_rule not in TEMPLATE
+    for forbidden in ("li::before", "border-left:", "text-align: justify", "text-overflow: ellipsis", "overflow: hidden", "@import", "url(", "grid-auto-flow", "grid-row"):
+        assert forbidden not in TEMPLATE
