@@ -24,6 +24,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+import warnings
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -134,6 +135,10 @@ class ResumeBuilder:
         self.photo_path = Path(photo_path).resolve() if photo_path else None
         self.deanon_map: Dict[str, str] = {}
         self._vm_cache: Dict[tuple, ResumeViewModel] = {}
+        self._strict_profile_fingerprints = set()
+        self._anonymized_raw_profiles: Dict[str, Dict[str, Any]] = {}
+        self._strict_photo_warning_emitted = False
+        self._privacy_output_warnings = set()
 
         if hasattr(profile_or_path, "normalized_profile") and not anonymize:
             self.profile = copy.deepcopy(profile_or_path.normalized_profile)
@@ -200,7 +205,16 @@ class ResumeBuilder:
             raw_p = profile if isinstance(profile, dict) else getattr(self, "raw_profile", None)
 
         profile_fp = _compute_profile_fingerprint(norm_profile)
-        cache_key = (profile_fp, eff_photo_path, reserve_photo, self.photo_mode)
+        raw_p = self._anonymized_raw_profiles.get(profile_fp, raw_p)
+        # Strict privacy excludes biometric identity even when an explicit photo
+        # path/mode was supplied. Resolve this before any source file is opened.
+        mode = self.photo_mode
+        if profile_fp in self._strict_profile_fingerprints:
+            self._warn_strict_photo_omission(norm_profile, eff_photo_path)
+            eff_photo_path = None
+            reserve_photo = False
+            mode = "no-photo"
+        cache_key = (profile_fp, eff_photo_path, reserve_photo, mode)
         if cache_key in self._vm_cache:
             return self._vm_cache[cache_key]
 
@@ -209,10 +223,43 @@ class ResumeBuilder:
             photo_path=eff_photo_path,
             reserve_photo=reserve_photo,
             raw_profile=raw_p,
-            photo_mode=self.photo_mode,
+            photo_mode=mode,
         )
         self._vm_cache[cache_key] = vm
         return vm
+
+    def _privacy_diff_ledger(self, enabled: bool, output_dir: Any, anonymize: Optional[str]) -> bool:
+        """Never place source identities beside an anonymized export."""
+        if not (anonymize or self.anonymize):
+            return enabled
+        out_dir = Path(output_dir).resolve()
+        if any((out_dir / f"resume_diff_ledger.{suffix}").exists() for suffix in ("md", "json")):
+            raise ValueError("Anonymized export requires an output directory without existing "
+                             "resume_diff_ledger sidecars; choose a separate clean output directory")
+        from core.anonymizer import PrivacyCoverageWarning
+        if out_dir.is_dir() and any(out_dir.iterdir()) and out_dir not in self._privacy_output_warnings:
+            warnings.warn("Existing output-directory files are not anonymized. Share only newly returned "
+                          "artifacts, or use a clean directory before sharing the entire directory.",
+                          PrivacyCoverageWarning, stacklevel=3)
+            self._privacy_output_warnings.add(out_dir)
+        if enabled:
+            warnings.warn("Anonymized export omits the diff ledger because it may contain original identities; "
+                          "keep identity-bearing audit artifacts separate from shared exports.",
+                          PrivacyCoverageWarning, stacklevel=3)
+        return False
+
+    def _warn_strict_photo_omission(self, profile: Dict[str, Any], photo_path: Any) -> None:
+        candidate = profile.get("candidate", {})
+        requested = (photo_path or self.photo_mode == "photo" or candidate.get("photo_mode") == "photo"
+                     or candidate.get("photo_path") or candidate.get("photo"))
+        if requested and not self._strict_photo_warning_emitted:
+            from core.anonymizer import PrivacyCoverageWarning
+            warnings.warn(
+                "Strict anonymization omits requested/profile photos; photo settings are ignored "
+                "and no photo file is opened. Omitted images are not reversibly anonymized.",
+                PrivacyCoverageWarning, stacklevel=3,
+            )
+            self._strict_photo_warning_emitted = True
 
     def _resolve_profile(self, anonymize: Optional[str] = None) -> Dict[str, Any]:
         """Resolves profile data, applying privacy anonymization if requested."""
@@ -224,9 +271,15 @@ class ResumeBuilder:
             if level not in ("standard", "strict"):
                 raise ValueError(f"Unknown sensitivity level: '{level}'. Supported levels: 'standard', 'strict'.")
             from core.anonymizer import anonymize_profile
-            anon_data, deanon_map = anonymize_profile(normalized, level=level)
+            # Discover identities before normalization can discard schema aliases.
+            anon_data, deanon_map = anonymize_profile(self.raw_profile, level=level)
             self.deanon_map = deanon_map
-            return normalize_candidate_profile(anon_data)
+            resolved = normalize_candidate_profile(anon_data)
+            fingerprint = _compute_profile_fingerprint(resolved)
+            self._anonymized_raw_profiles[fingerprint] = copy.deepcopy(anon_data)
+            if level == "strict":
+                self._strict_profile_fingerprints.add(fingerprint)
+            return resolved
         return normalized
 
     def _render_sections_html(self, theme_name: str, profile: Optional[Dict[str, Any]] = None) -> str:
@@ -262,6 +315,7 @@ class ResumeBuilder:
     ) -> Dict[str, Path]:
         """Builds HTML + CSS based resume theme, optionally applying single-page AutoFit."""
         prof = self._resolve_profile(anonymize)
+        diff_ledger = self._privacy_diff_ledger(diff_ledger, output_dir, anonymize)
         eff_photo_path = photo_path or self.photo_path
 
         out_dir = Path(output_dir).resolve()
@@ -407,6 +461,7 @@ class ResumeBuilder:
         anonymize: Optional[str] = None,
     ) -> Dict[str, Path]:
         """Builds ATS-friendly Markdown and single-column HTML with reserved photo slot."""
+        self._privacy_diff_ledger(False, output_dir, anonymize)
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -447,6 +502,7 @@ class ResumeBuilder:
         """Builds academic LaTeX resume, standalone HTML twin, and PDF."""
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
+        self._privacy_diff_ledger(False, output_dir, anonymize)
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -495,6 +551,7 @@ class ResumeBuilder:
         """Builds modern academic Typst resume and compiles to PDF."""
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
+        self._privacy_diff_ledger(False, output_dir, anonymize)
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -551,6 +608,7 @@ class ResumeBuilder:
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds a specific theme by name."""
+        diff_ledger = self._privacy_diff_ledger(diff_ledger, output_dir, anonymize)
         theme_normalized = theme.lower().replace("_", "-")
         eff_photo_path = photo_path or self.photo_path
         if theme_normalized in self.HTML_THEMES:
@@ -636,6 +694,7 @@ class ResumeBuilder:
     ) -> Dict[str, Path]:
         """Builds ATS-friendly single-column Word (.docx) resume."""
         from core.ats_docx_renderer import AtsDocxRenderer
+        self._privacy_diff_ledger(False, output_dir, anonymize)
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
         prof = self._resolve_profile(anonymize)
@@ -643,9 +702,14 @@ class ResumeBuilder:
         path = photo_path or self.photo_path
         mode = (self.photo_mode or candidate.get("photo_mode")
                 or ("photo" if path or candidate.get("photo_path") or candidate.get("photo") else "no-photo"))
+        strict = _compute_profile_fingerprint(prof) in self._strict_profile_fingerprints
+        if strict:
+            self._warn_strict_photo_omission(prof, path)
         vm = ResumeViewModel.from_normalized_profile(
-            prof, photo_path=path, photo_mode=mode, reserve_photo=photo is not False,
-            raw_profile=self.raw_profile)
+            prof, photo_path=None if strict else path,
+            photo_mode="no-photo" if strict else mode,
+            reserve_photo=False if strict else photo is not False,
+            raw_profile=self._anonymized_raw_profiles.get(_compute_profile_fingerprint(prof), self.raw_profile))
         docx_path = out_dir / "resume_ats.docx"
         actual_docx = AtsDocxRenderer().render(vm, docx_path)
         return {"docx": Path(actual_docx)}
