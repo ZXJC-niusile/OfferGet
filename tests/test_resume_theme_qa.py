@@ -109,3 +109,34 @@ def test_git_paths_are_matched_portably_on_windows(monkeypatch):
                         lambda theme: PureWindowsPath("themes") / f"{theme}.html")
     assert changed_themes(["themes/classic-tech.html"]) == ["classic-tech"]
     assert changed_themes(["themes/modern-corporate.html"]) == ["modern-corporate"]
+
+
+@pytest.mark.parametrize("require_autofit", [False, True])
+def test_stress_builder_can_report_real_multi_page_branch_without_single_page_autofit(
+        tmp_path, monkeypatch, require_autofit):
+    import json
+    from types import SimpleNamespace
+    from scripts.qa_modern_navy_layout import render_production
+    output = tmp_path / "production"
+
+    def child(*args, **kwargs):
+        output.mkdir()
+        html, pdf = output / "resume.html", output / "resume.pdf"
+        html.write_text("<html><body>synthetic multi-page baseline</body></html>")
+        pdf.write_bytes(b"%PDF-unit-test")
+        return SimpleNamespace(returncode=0, stderr="", stdout=json.dumps({
+            "html": str(html), "pdf": str(pdf), "trace": {
+                "measurements": [[4400, 3300]], "renders": [{"ok": True, "pages": 4}],
+                "autofit": [],
+            },
+        }))
+
+    monkeypatch.setattr("scripts.qa_modern_navy_layout.subprocess.run", child)
+    case = {"mode": "builder", "require_autofit": require_autofit}
+    if require_autofit:
+        with pytest.raises(ValueError, match="required AutoFit"):
+            render_production(ROOT, case, output)
+    else:
+        _, result = render_production(ROOT, case, output)
+        assert result["trace"]["renders"][0]["pages"] == 4
+        assert result["trace"]["autofit"] == []

@@ -316,7 +316,8 @@ def fixtures(theme=DEFAULT_THEME):
     for mode in ("raw", "builder"):
         for photo in ("none", "reserved"):
             result.append({"name": f"skills-long-{mode}-{photo}", "profile": skills_long,
-                           "photo": photo, "mode": mode, "max_pages": 2})
+                           "photo": photo, "mode": mode, "max_pages": 2,
+                           "require_autofit": False})
     if theme == "academic-postgraduate":
         for long_exam in (False, True):
             academic = json.loads(json.dumps(short))
@@ -389,8 +390,13 @@ def render_production(root, case, output):
         if output.resolve() not in path.parents or not path.is_file() or not path.stat().st_size:
             raise ValueError(f"Invalid production {kind} output: {path}")
     trace = returned["trace"]
-    if not trace["measurements"] or not trace["renders"] or not trace["autofit"]:
-        raise ValueError("Production fixture did not exercise measurement, PDF rendering and AutoFit")
+    if not trace["measurements"] or not trace["renders"]:
+        raise ValueError("Production fixture did not exercise measurement and PDF rendering")
+    # The builder deliberately skips single-page AutoFit after a multi-page
+    # solve. Stress baselines can take that real branch; the original short and
+    # professional cases still explicitly require the AutoFit coverage.
+    if case.get("require_autofit", True) and not trace["autofit"]:
+        raise ValueError("Production fixture did not exercise required AutoFit")
     return Path(returned["html"]).read_text(encoding="utf-8"), returned
 
 
