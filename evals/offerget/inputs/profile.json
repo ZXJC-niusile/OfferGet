@@ -1,0 +1,19 @@
+{
+  "candidate": {"name": "Alex Example", "email": "alex@example.invalid"},
+  "skills": ["Python", "SQL", "pytest"],
+  "experience": [{
+    "company": "Example Labs", "role": "Backend developer",
+    "period": "2023.01 - 2025.06", "visibility": ["always"],
+    "highlights": [
+      {"claim_id": "CACHE-01", "visibility": ["always"],
+       "claim_zh": "参与 Python 请求缓存测试，接口 P99 延迟从 240ms 降至 180ms。",
+       "verified_metrics": {"p99_before": "240ms", "p99_after": "180ms"}},
+      {"claim_id": "PRIVATE-01", "visibility": ["reference-only"],
+       "claim_zh": "PRIVATE_EVIDENCE_731: confidential internal benchmark log."},
+      {"claim_id": "REQUEST-01", "visibility": ["on-request"],
+       "claim_zh": "REQUEST_ONLY_842: legacy billing migration support."},
+      {"claim_id": "VARIANT-01", "visibility": ["variant-specific", "academic"],
+       "claim_zh": "ACADEMIC_ONLY_953: research reading group notes."}
+    ]
+  }]
+}
