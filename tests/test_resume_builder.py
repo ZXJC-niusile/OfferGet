@@ -585,7 +585,7 @@ class TestResumeBuilder(unittest.TestCase):
         from core.browser_renderer import RenderResult
 
         shadow_pdf = self.test_dir / "resume_classic_tech_shadow_12345.pdf"
-        shadow_pdf.write_text("SHADOW PDF CONTENT", encoding="utf-8")
+        shadow_pdf.write_bytes(FastBrowserRenderer.MINIMAL_PDF_BYTES)
 
         class ShadowRenderer(BrowserRenderer):
             def __init__(self):
