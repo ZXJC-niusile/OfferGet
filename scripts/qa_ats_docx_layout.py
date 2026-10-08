@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from core.ats_docx_renderer import AtsDocxRenderer
 from core.resume_view_model import ResumeViewModel
 from scripts.qa_modern_navy_layout import fixtures, synthetic_photo
+import base64
 
 
 def squash(value):
@@ -94,8 +95,12 @@ def main():
     for case in cases():
         folder = output / case["name"]
         folder.mkdir(exist_ok=True)
-        vm = ResumeViewModel.from_profile(case["profile"], reserve_photo=case["photo"] == "reserved")
-        vm.photo_data_uri = case.get("photo_data_uri")
+        mode = {"embedded": "photo", "reserved": "placeholder", "none": "no-photo"}[case["photo"]]
+        photo_path = None
+        if mode == "photo":
+            photo_path = folder / "synthetic-portrait.png"
+            photo_path.write_bytes(base64.b64decode(case["photo_data_uri"].split(",", 1)[1], validate=True))
+        vm = ResumeViewModel.from_profile(case["profile"], photo_path=photo_path, photo_mode=mode)
         docx = AtsDocxRenderer().render(vm, folder / "resume.docx")
         profile_path = folder / "lo-profile"
         result = subprocess.run([soffice, "-env:UserInstallation=" + profile_path.as_uri(),
@@ -106,7 +111,8 @@ def main():
         text = squash("".join(page.get_text() for page in pdf))
         source = expected_text(case["profile"])
         missing = [anchor for anchor in source if anchor not in text]
-        doc_text = squash("".join(p.text for p in Document(docx).paragraphs))
+        doc_text = squash("".join(node.text or "" for node in Document(docx)._element.body.iter(
+            "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")))
         missing_docx = [anchor for anchor in source if anchor not in doc_text]
         overflow = []
         for index, page in enumerate(pdf):
@@ -115,13 +121,16 @@ def main():
                 if word[0] < 52 or word[2] > page.rect.width - 52 or word[1] < 48 or word[3] > page.rect.height - 48:
                     overflow.append({"page": index + 1, "word": word[4], "bbox": word[:4]})
             page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(folder / f"page-{index + 1}.png")
+        expected_images = 1 if mode == "photo" else 0
+        actual_images = sum(len(page.get_image_info()) for page in pdf)
         entry = {"case": case["name"], "pages": len(pdf), "source_anchors": len(source),
+                 "expected_images": expected_images, "actual_images": actual_images,
                  "missing_pdf": missing, "missing_docx": missing_docx, "overflow": overflow,
                  "max_pages": 2 if case["name"] == "dense-none" else 1}
         report.append(entry)
     (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    if any(r["missing_pdf"] or r["missing_docx"] or r["overflow"] or r["pages"] > r["max_pages"] for r in report):
+    if any(r["missing_pdf"] or r["missing_docx"] or r["overflow"] or r["pages"] > r["max_pages"] or r["actual_images"] != r["expected_images"] for r in report):
         raise SystemExit("DOCX visual/content checks failed; see report.json")
 
 

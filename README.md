@@ -237,7 +237,7 @@ New-Item -ItemType Junction -Path "$HOME\.agents\skills\offerget" -Target "C:\ab
 并写到不同输出目录，即可得到内容一致的两个版本。
 `--no-photo` 继续可用；`--photo-mode placeholder` 仅用于明确要求的占位预览。
 照片缺失或文件无效会直接报错，不会悄悄替换成空框。
-目前 `ats-docx` 仅支持无照片版；真实照片的原生 LaTeX 导出请用 PNG/JPEG。
+`ats-docx` 支持右上角照片版与无照片版，正文保持可编辑；真实照片的原生 LaTeX 导出请用 PNG/JPEG。
 详见[照片模式、输入字段与兼容性说明](docs/RESUME_PHOTO_MODES.md)。
 
 ## 🎨 简历排版画廊与主题生态 (12 种渲染主题)

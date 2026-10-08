@@ -590,12 +590,11 @@ class ResumeBuilder:
                 anonymize=anonymize,
             )
         elif theme_normalized in ("ats-docx", "docx"):
-            if photo and (self.photo_mode or self.profile.get("candidate", {}).get("photo_mode")) in ("photo", "placeholder"):
-                raise ValueError("ats-docx supports no-photo only; choose an HTML or academic theme for a photo variant")
             res = self.build_ats_docx(
                 output_dir,
                 anonymize=anonymize,
                 photo=photo,
+                photo_path=eff_photo_path,
             )
         else:
             raise ValueError(f"Unknown resume theme '{theme}'. Choices: {self.THEMES}")
@@ -633,15 +632,20 @@ class ResumeBuilder:
         output_dir: Union[str, Path],
         anonymize: Optional[str] = None,
         photo: Optional[bool] = None,
+        photo_path: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Path]:
         """Builds ATS-friendly single-column Word (.docx) resume."""
         from core.ats_docx_renderer import AtsDocxRenderer
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
         prof = self._resolve_profile(anonymize)
-        if photo is not False and (self.photo_mode or self.profile.get("candidate", {}).get("photo_mode")) in ("photo", "placeholder"):
-            raise ValueError("ats-docx supports no-photo only; choose an HTML or academic theme for a photo variant")
-        vm = self._get_view_model(profile=prof, reserve_photo=False)
+        candidate = prof.get("candidate", {})
+        path = photo_path or self.photo_path
+        mode = (self.photo_mode or candidate.get("photo_mode")
+                or ("photo" if path or candidate.get("photo_path") or candidate.get("photo") else "no-photo"))
+        vm = ResumeViewModel.from_normalized_profile(
+            prof, photo_path=path, photo_mode=mode, reserve_photo=photo is not False,
+            raw_profile=self.raw_profile)
         docx_path = out_dir / "resume_ats.docx"
         actual_docx = AtsDocxRenderer().render(vm, docx_path)
         return {"docx": Path(actual_docx)}

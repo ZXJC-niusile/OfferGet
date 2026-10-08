@@ -50,13 +50,19 @@ Minimal profiles accept the same fields at the top level. The mode values are
 Eight HTML themes, ATS HTML, LaTeX, Typst, and their HTML previews honor the same
 selection. ATS Markdown cannot embed a portrait; in photo mode it records the
 selected local photo path, and in no-photo mode it contains neither path nor
-photo note. `ats-docx` currently supports **no-photo only**. An explicit photo or
-placeholder request fails instead of silently discarding the selection; a DOCX
-photo layout remains separate work.
+photo note. `ats-docx` now supports both versions: a compact upper-right portrait
+beside editable identity text, or a full-width no-photo identity without a reserved
+slot. The photo masthead uses one borderless, two-cell table with identity first
+in reading order; the body remains ordinary editable single-column paragraphs.
+The ATS checker still warns that a table is present, and this is not a guarantee
+of acceptance by every ATS. Placeholder mode is an explicitly labeled preview.
 
 A shared local helper checks the actual bytes with Pillow before embedding.
 PNG, JPEG, WebP, and single-frame GIF are supported for HTML; extension and image
-format must match. SVG, arbitrary files, truncated images, animation, files over
+format must match. For DOCX the verified image is embedded as a portable PNG with
+EXIF orientation normalized, no cropping, and its original aspect ratio contained
+within 54 x 72 points. No external image relationship is created.
+SVG, arbitrary files, truncated images, animation, files over
 10 MiB, and images over 25 megapixels are rejected. LaTeX photo input is PNG or
 JPEG only, so those are the portable choices for a multi-format build. Install
 `.[render]` for photo-validation dependencies. No remote image fetch, face

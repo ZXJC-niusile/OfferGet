@@ -113,8 +113,6 @@ def cmd_resume_build(args_list=None):
     photo_mode = ("no-photo" if parsed.no_photo else
                   getattr(parsed, "photo_mode", None) or ("photo" if parsed.photo_path else "no-photo"))
     try:
-        if parsed.theme == "ats-docx" and photo_mode != "no-photo":
-            raise ValueError("ats-docx supports no-photo only; select an HTML or academic theme for a photo variant")
         builder = ResumeBuilder(
             profile_path,
             photo_path=parsed.photo_path,

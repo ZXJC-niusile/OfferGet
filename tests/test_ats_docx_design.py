@@ -89,7 +89,7 @@ def test_docx_uses_a4_linear_flow_and_safe_pagination(tmp_path):
 
 
 def test_photo_preferences_do_not_introduce_ats_text_boxes(tmp_path):
-    vm = ResumeViewModel.from_profile(synthetic_profile(), reserve_photo=True)
+    vm = ResumeViewModel.from_profile(synthetic_profile(), photo_mode="no-photo")
     vm.photo_data_uri = "data:image/png;base64,synthetic"
     doc = render(tmp_path, vm)
     assert not doc.inline_shapes and not doc.tables
