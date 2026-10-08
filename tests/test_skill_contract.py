@@ -1,0 +1,58 @@
+"""Static packaging/recipe checks, not model activation or quality evaluations."""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_skill_metadata_and_entrypoint_budget():
+    text = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    frontmatter = text.split("---", 2)[1]
+    assert re.search(r"^name: offerget$", frontmatter, re.MULTILINE)
+    assert re.search(r"^description: .+", frontmatter, re.MULTILINE)
+    assert len(text.encode("utf-8")) < 7000
+    assert len(text.splitlines()) < 120
+
+
+@pytest.mark.parametrize("path", ["SKILL.md", "references/task-workflows.md", "references/skill-design.md"])
+def test_skill_local_reference_links_resolve(path):
+    document = ROOT / path
+    for link in re.findall(r"\]\(([^)]+)\)", document.read_text(encoding="utf-8")):
+        if "://" not in link and not link.startswith("#"):
+            assert (document.parent / link.split("#", 1)[0]).is_file(), link
+
+
+def test_readme_has_no_machine_specific_file_links():
+    assert "file:///" not in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("command", [
+    ["resume", "build"], ["profile", "parse"], ["review"],
+    ["proposal", "show"], ["proposal", "accept"], ["diff", "audit"],
+])
+def test_documented_recipe_command_help(command):
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "cli.py"), *command, "--help"],
+        cwd=ROOT, capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "usage:" in result.stdout.lower()
+
+
+def test_visibility_boundary_remains_in_router_and_export_recipe():
+    router = (ROOT / "SKILL.md").read_text(encoding="utf-8")
+    workflow = (ROOT / "references/task-workflows.md").read_text(encoding="utf-8")
+    for text in (router, workflow):
+        assert "reference-only" in text
+        assert "on-request" in text
+        assert "variant-specific" in text
+        assert "does not enforce" in text
+    assert "Disclosure preflight before every export" in workflow
+    assert "separate disclosure-safe profile" in workflow
+    assert "wildcard tags keep all items" in workflow
+    assert "repeat the disclosure preflight" in workflow
