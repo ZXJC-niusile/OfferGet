@@ -87,6 +87,33 @@ class AcademicExporter:
             return ResumeViewModel.from_profile(profile_or_vm, photo_path=photo_path, reserve_photo=reserve_photo)
         return ResumeViewModel.from_profile({}, photo_path=photo_path, reserve_photo=reserve_photo)
 
+    @staticmethod
+    def _raw_field(item: Dict[str, Any], key: str) -> str:
+        """Non-HTML renderers consume source fields, with legacy decode fallback."""
+        from html import unescape
+        if "raw_" + key in item:
+            return str(item["raw_" + key] or "")
+        return unescape(str(item.get(key, "") or ""))
+
+    @staticmethod
+    def _raw_bullets(item: Dict[str, Any]) -> list[str]:
+        from html import unescape
+        if "raw_bullets" in item:
+            return [str(value) for value in item["raw_bullets"]]
+        return [unescape(re.sub(r"</?strong>", "**", str(value)))
+                for value in item.get("bullets", [])]
+
+    @staticmethod
+    def _latex_text(value: str) -> str:
+        """Escape data, adding safe break opportunities only to long tokens."""
+        chunks = re.split(r"(\S{40,})", str(value))
+        return "".join(
+            r"\allowbreak{}".join(escape_latex(chunk[i:i + 12])
+                                  for i in range(0, len(chunk), 12))
+            if index % 2 else escape_latex(chunk)
+            for index, chunk in enumerate(chunks)
+        )
+
     def generate_latex(
         self,
         profile: Union[Any, Dict[str, Any]],
@@ -95,268 +122,136 @@ class AcademicExporter:
         lang: str = "zh",
         section_titles: Optional[Dict[str, str]] = None,
     ) -> str:
-        """
-        Generates standard academic Chinese/English LaTeX source (.tex).
-        Accepts ResumeViewModel, ProfileContext, or candidate profile dictionary.
-        """
+        """Generate a conventional A4 academic resume with literal source facts."""
+        from html import unescape
         vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
         is_en = str(lang).lower().startswith("en")
         titles = section_titles or {}
-
-        name = escape_latex(vm.raw_name or ("Candidate" if is_en else "候选人"))
-        title = escape_latex(vm.raw_title or "")
-        email = escape_latex(vm.raw_email or "")
-        phone = escape_latex(vm.raw_phone or "")
-        degree_raw = re.sub(r"\s*[｜|·]\s*", "  ", str(vm.raw_degree or "")).strip()
-        degree = escape_latex(degree_raw)
-        school = escape_latex(vm.raw_school or "")
-        location = escape_latex(vm.raw_location or "")
-        edu_time = escape_latex(vm.raw_edu_time or "")
-        eff_photo_path = photo_path or vm.photo_path
-        photo_needed = reserve_photo or vm.reserve_photo or (eff_photo_path is not None)
-
+        esc = self._latex_text
+        raw = self._raw_field
+        photo = photo_path or vm.photo_path
+        photo_needed = reserve_photo or vm.reserve_photo or bool(photo)
         lines = [
             r"\documentclass[a4paper,11pt]{article}",
             r"\usepackage{xeCJK}",
-            r"\usepackage[margin=1.5cm]{geometry}",
-            r"\usepackage{hyperref}",
-            r"\usepackage{tabularx}",
-            r"\usepackage{enumitem}",
-            r"\usepackage{titlesec}",
-            r"\usepackage{xcolor}",
-            r"\usepackage{graphicx}",
+            r"\usepackage[margin=18mm]{geometry}",
+            r"\usepackage{tabularx,enumitem,titlesec,xcolor,graphicx,needspace}",
+            r"\usepackage[hidelinks]{hyperref}",
+            r"\IfFontExistsTF{TeX Gyre Termes}{\setmainfont{TeX Gyre Termes}}{\setmainfont{Latin Modern Roman}}",
+            r"\IfFontExistsTF{Noto Serif CJK SC}{\setCJKmainfont{Noto Serif CJK SC}}{\IfFontExistsTF{Source Han Serif SC}{\setCJKmainfont{Source Han Serif SC}}{\IfFontExistsTF{SimSun}{\setCJKmainfont{SimSun}}{\setCJKmainfont{FandolSong-Regular}[BoldFont=FandolSong-Bold]}}}",
             r"\pagestyle{empty}",
-            r"\setCJKmainfont{SimSun}",
-            r"\titlespacing{\section}{0pt}{10pt}{4pt}",
-            r"\titleformat{\section}{\large\bfseries\color{blue!70!black}}{}{0em}{}[\titlerule]",
+            r"\setlength{\parindent}{0pt}",
+            r"\setlength{\parskip}{1pt}",
+            r"\clubpenalty=10000\widowpenalty=10000",
+            r"\setlength{\emergencystretch}{3em}",
+            r"\raggedright",
+            r"\setlist[itemize]{leftmargin=1.2em,label=\textbullet,itemsep=1pt,topsep=2pt,parsep=0pt,partopsep=0pt}",
+            r"\titlespacing*{\section}{0pt}{6pt}{3pt}",
+            r"\titleformat{\section}{\fontsize{11.5}{14}\selectfont\bfseries}{}{0em}{}",
+            r"\newcommand{\resumeentry}[3]{\Needspace{3\baselineskip}\begin{tabularx}{\linewidth}{@{}Xr@{}}\textbf{#1}&{\small #2}\end{tabularx}\par\nopagebreak[4]\if\relax\detokenize{#3}\relax\else{\color{black!75}#3}\par\nopagebreak[4]\fi}",
             r"\begin{document}",
-            r"\noindent",
+            r"\fontsize{10.5}{13.5}\selectfont",
         ]
-
-        # Header block
-        contact_parts = []
-        if phone:
-            contact_parts.append(phone if is_en else f"电话：{phone}")
-        if email:
-            contact_parts.append(f"\\href{{mailto:{email}}}{{{email}}}" if is_en else f"邮箱：\\href{{mailto:{email}}}{{{email}}}")
-        if location:
-            contact_parts.append(location)
-        contact_tex = " \\quad | \\quad ".join(contact_parts)
-
-        target_label = "Target Role: " if is_en else "求职意向："
-        photo_placeholder = "Photo\\\\(3:4)" if is_en else "预留证件照\\\\一寸/二寸"
-
+        name = esc(vm.raw_name or unescape(vm.name) or ("Candidate" if is_en else "候选人"))
+        title = esc(vm.raw_title or unescape(vm.title))
+        contacts = [vm.raw_phone or unescape(vm.phone), vm.raw_email or unescape(vm.email),
+                    vm.raw_location or unescape(vm.location)]
+        contact = r" \enspace | \enspace ".join(esc(value) for value in contacts if value)
         if photo_needed:
-            if eff_photo_path and Path(eff_photo_path).is_file():
-                posix_path = Path(eff_photo_path).resolve().as_posix()
-                photo_box_tex = f"  \\includegraphics[width=55pt,height=75pt,keepaspectratio=true]{{{posix_path}}}"
-            else:
-                photo_box_tex = f"  \\fbox{{\\parbox[c][75pt][c]{{55pt}}{{\\centering \\small {photo_placeholder}}}}}"
-
-            lines.extend([
-                r"\begin{minipage}[c]{0.78\textwidth}",
-                f"  {{\\LARGE \\textbf{{{name}}}}} \\\\[4pt]",
-            ])
-            if title:
-                lines.append(f"  \\textbf{{\\color{{blue!70!black}}{target_label}{title}}} \\\\[3pt]")
-            if contact_tex:
-                lines.append(f"  {contact_tex}")
-            lines.extend([
-                r"\end{minipage}%",
-                r"\hfill",
-                r"\begin{minipage}[c]{0.20\textwidth}",
-                r"  \flushright",
-                photo_box_tex,
-                r"\end{minipage}",
-                r"\vspace{6pt}",
-            ])
+            lines += [r"\noindent\begin{minipage}[c]{\dimexpr\textwidth-72pt\relax}"]
         else:
-            title_part = f"{title} \\quad | \\quad " if title else ""
-            second_line = f"  {title_part}{contact_tex}" if (title_part or contact_tex) else ""
-            lines.extend([
-                r"\begin{center}",
-                f"  {{\\LARGE \\textbf{{{name}}}}} \\\\[4pt]",
-            ])
-            if second_line:
-                lines.append(second_line)
-            lines.extend([
-                r"\end{center}",
-                r"\vspace{-4pt}",
-            ])
-
-        # Postgraduate Exam
-        if vm.postgraduate_exam:
-            pg = vm.postgraduate_exam
-            pg_school = escape_latex(pg.get("raw_target_school", pg.get("target_school", "")))
-            pg_major = escape_latex(pg.get("raw_target_major", pg.get("target_major", "")))
-            pg_dir = escape_latex(pg.get("raw_direction", pg.get("direction", "")))
-            target_items = []
-            if pg_school:
-                target_items.append(f"\\textbf{{报考院校：}}{pg_school}")
-            if pg_major:
-                target_items.append(f"\\textbf{{报考专业：}}{pg_major}")
-            if pg_dir:
-                target_items.append(f"\\textbf{{研究方向：}}{pg_dir}")
-
-            lines.extend([
-                r"\section*{报考信息}",
-            ])
-            if target_items:
-                target_str = " \\quad \\quad ".join(target_items)
-                lines.append(f"\\noindent {target_str} \\\\[3pt]")
-
-            subjects = pg.get("subjects", [])
-            total_score = escape_latex(pg.get("raw_total_score", pg.get("total_score", "")))
-            if subjects or total_score:
-                num_cols = 1 + len(subjects) + (1 if total_score else 0)
-                col_spec = "|" + "X|" * num_cols
-                lines.append(f"\\noindent \\begin{{tabularx}}{{\\textwidth}}{{{col_spec}}}")
-                lines.append(r"\hline")
-                head_row = [r"\textbf{初试成绩}"] + [escape_latex(s.get("raw_name", s.get("name", ""))) for s in subjects]
-                if total_score:
-                    head_row.append(r"\textbf{总分}")
-                lines.append(" & ".join(head_row) + r" \\")
-                lines.append(r"\hline")
-                score_row = ["得分"] + [escape_latex(s.get("raw_score", s.get("score", ""))) for s in subjects]
-                if total_score:
-                    score_row.append(f"\\textbf{{{total_score}}}")
-                lines.append(" & ".join(score_row) + r" \\")
-                lines.append(r"\hline")
-                lines.append(r"\end{tabularx}")
-                lines.append(r"\vspace{3pt}")
-
-        # 1. Education
-        grid = vm.education_grid_rows
-        max_cols = max((len(r) for r in grid), default=1)
-
-        degree_part = f" \\quad \\quad {degree}" if degree else ""
-        time_part = f" \\hfill {edu_time}" if edu_time else ""
-        edu_sec = titles.get("education", "EDUCATION" if is_en else "教育背景")
-
-        lines.extend([
-            f"\\section*{{{edu_sec}}}",
-            f"\\noindent \\textbf{{{school}}}{degree_part}{time_part} \\\\[3pt]",
-        ])
-
-        if grid:
-            if max_cols >= 3:
-                tabular_spec = "@{}p{0.38\\textwidth}p{0.28\\textwidth}p{0.30\\textwidth}@{}"
-            elif max_cols == 2:
-                tabular_spec = "@{}p{0.48\\textwidth}p{0.48\\textwidth}@{}"
+            lines += [r"{\centering"]
+        lines.append(r"{\fontsize{22}{27}\selectfont\bfseries " + name + r"}\par")
+        if title:
+            lines.append(title + r"\par")
+        if contact:
+            lines.append(r"{\small " + contact + r"}\par")
+        if photo_needed:
+            lines += [r"\end{minipage}\hfill\begin{minipage}[c]{60pt}\raggedleft"]
+            if photo and Path(photo).is_file():
+                # \detokenize keeps spaces and underscores in ordinary filenames literal.
+                path = Path(photo).resolve().as_posix()
+                if any(char in path for char in "{}%\n\r"):
+                    raise ValueError("LaTeX photo filenames cannot contain braces, percent signs or line breaks")
+                lines.append(r"\includegraphics[width=54pt,height=72pt,keepaspectratio]{\detokenize{" + path + "}}")
             else:
-                tabular_spec = "@{}p{0.96\\textwidth}@{}"
+                label = r"Photo\\(3:4)" if is_en else r"预留证件照\\一寸 / 二寸"
+                lines.append(r"\fbox{\parbox[c][68pt][c]{50pt}{\centering\small " + label + "}}")
+            lines += [r"\end{minipage}\par"]
+        else:
+            lines += [r"\par}"]
 
-            lines.append(f"\\noindent \\begin{{tabular}}{{{tabular_spec}}}")
-            for r in grid:
-                row_cells = []
-                for i in range(max_cols):
-                    cell_clean = re.sub(r"\s*[｜|]\s*", " ", r[i]).strip() if i < len(r) else ""
-                    cell = escape_latex(cell_clean)
-                    row_cells.append(cell)
-                lines.append(" & ".join(row_cells) + r" \\")
-            lines.append(r"\end{tabular}")
-            lines.append(r"\vspace{2pt}")
+        def section(key: str, en: str, zh: str) -> None:
+            lines.append(r"\section*{" + esc(titles.get(key, en if is_en else zh)) + "}")
 
-        cand_meta = vm.raw_profile.get("candidate", {}) if isinstance(getattr(vm, "raw_profile", None), dict) else {}
-        courses_raw = cand_meta.get("courses") or cand_meta.get("core_courses") or ""
-        if courses_raw:
-            c_label = "Key Coursework" if is_en else "核心课程"
-            c_colon = ": " if is_en else "："
-            lines.append(f"\\noindent \\textbf{{{c_label}{c_colon}}}{escape_latex(str(courses_raw).strip())} \\\\[2pt]")
+        def entry(label: str, time: str, role: str = "") -> None:
+            # Bold markup remains explicit for simple source inspection and tools.
+            lines.append(r"\resumeentry{" + esc(label) + "}{" + esc(time) + "}{" + esc(role) + "}")
 
-        # 2. Work / Internship Experience
-        def format_latex_bullet(text: str) -> str:
-            clean = re.sub(r"<strong>(.*?)</strong>", r"**\1**", str(text), flags=re.IGNORECASE)
-            parts = re.split(r"\*\*(.+?)\*\*", clean)
-            res = []
-            for idx, part in enumerate(parts):
-                if idx % 2 == 1:
-                    res.append(r"\textbf{" + escape_latex(part) + "}")
-                else:
-                    res.append(escape_latex(part))
-            return "".join(res)
+        def bullet(text: str) -> str:
+            return "".join(r"\textbf{" + esc(part) + "}" if i % 2 else esc(part)
+                           for i, part in enumerate(re.split(r"\*\*(.+?)\*\*", text)))
 
-        experiences = vm.experiences
-        if experiences:
-            exp_sec = titles.get("experience", "WORK EXPERIENCE" if is_en else "实习经历")
-            lines.extend([
-                f"\\section*{{{exp_sec}}}",
-            ])
-            for exp in experiences:
-                lines.append(r"\begin{itemize}[leftmargin=*,itemsep=2pt]")
-                org = escape_latex(exp.get("org", ""))
-                dept_str = exp.get("dept", "")
-                role_str = exp.get("role", "")
-                role_combined = f"{dept_str} · {role_str}" if dept_str else role_str
-                role = escape_latex(role_combined)
-                time_str = escape_latex(exp.get("time", ""))
-                lines.append(f"  \\item \\textbf{{{org}}} \\hfill \\textbf{{{role}}} ({time_str})")
-                bullets = exp.get("bullets", [])
+        if vm.edu_school or vm.raw_school or vm.education_grid_rows:
+            section("education", "EDUCATION", "教育背景")
+            school = vm.raw_school or unescape(vm.edu_school)
+            degree = vm.raw_degree or unescape(vm.edu_degree)
+            time = vm.raw_edu_time or unescape(vm.edu_time)
+            # A simple explicit heading preserves the public source-format contract.
+            lines += [r"\Needspace{3\baselineskip}",
+                      r"\begin{tabularx}{\linewidth}{@{}Xr@{}}\textbf{" + esc(school) + "}&" + esc(time) + r"\end{tabularx}\par\nopagebreak[4]"]
+            if degree:
+                lines.append(esc(degree) + r"\par")
+            if vm.education_grid_rows:
+                lines.append(r"\begin{tabular}{@{}p{\linewidth}@{}}")
+                for row in vm.education_grid_rows:
+                    lines.append(r" \enspace \enspace ".join(esc(unescape(str(cell))) for cell in row if cell) + r" \\")
+                lines.append(r"\end{tabular}\par")
+            metadata = (vm.raw_profile or {}).get("candidate", {})
+            courses = metadata.get("courses") or metadata.get("core_courses")
+            if courses:
+                lines.append(esc(("Key Coursework: " if is_en else "核心课程：") + str(courses)) + r"\par")
+
+        if vm.postgraduate_exam:
+            section("postgraduate_exam", "POSTGRADUATE EXAM", "报考信息")
+            pg = vm.postgraduate_exam
+            target = [raw(pg, key) for key in ("target_school", "target_major", "direction")]
+            lines.append(r" \enspace | \enspace ".join(esc(value) for value in target if value) + r"\par")
+            scores = [raw(subject, "name") + ": " + raw(subject, "score") for subject in pg.get("subjects", [])]
+            if raw(pg, "total_score"):
+                scores.append(("Total: " if is_en else "总分：") + raw(pg, "total_score"))
+            lines.append(r" \enspace | \enspace ".join(esc(value) for value in scores) + r"\par")
+
+        for key, records, en, zh in (
+            ("experience", vm.experiences, "WORK EXPERIENCE", "实习经历"),
+            ("projects", vm.projects, "PROJECTS", "科研与架构项目经历" if vm.publications else "校园与实践经历"),
+        ):
+            if not records:
+                continue
+            section(key, en, zh)
+            for item in records:
+                label = raw(item, "org" if key == "experience" else "name")
+                role = raw(item, "role_label") or raw(item, "role")
+                entry(label, raw(item, "time"), role)
+                bullets = self._raw_bullets(item)
                 if bullets:
-                    lines.append(r"  \begin{itemize}[leftmargin=*,itemsep=1pt]")
-                    for b in bullets:
-                        lines.append(f"    \\item {format_latex_bullet(b)}")
-                    lines.append(r"  \end{itemize}")
-                lines.append(r"\end{itemize}")
+                    lines.append(r"\begin{itemize}")
+                    lines.extend(r"\item " + bullet(text) for text in bullets)
+                    lines.append(r"\end{itemize}")
 
-        # 3. Projects & Practical Experience
-        projects = vm.projects
-        pubs = vm.publications
-        if projects:
-            default_proj_title = "LEADERSHIP & CAMPUS ACTIVITIES" if is_en else ("科研与架构项目经历" if pubs else "校园与实践经历")
-            p_title = titles.get("projects", default_proj_title)
-            lines.extend([
-                f"\\section*{{{p_title}}}",
-            ])
-            for proj in projects:
-                lines.append(r"\begin{itemize}[leftmargin=*,itemsep=2pt]")
-                p_name = escape_latex(proj.get("name", "项目"))
-                p_role = escape_latex(proj.get("role", ""))
-                p_time = escape_latex(proj.get("time", ""))
-                time_disp = f" ({p_time})" if p_time else ""
-                role_disp = f" \\hfill \\textbf{{{p_role}}}" if p_role else ""
-                lines.append(f"  \\item \\textbf{{{p_name}}}{role_disp}{time_disp}")
-                bullets = proj.get("bullets", [])
-                if bullets:
-                    lines.append(r"  \begin{itemize}[leftmargin=*,itemsep=1pt]")
-                    for b in bullets:
-                        lines.append(f"    \\item {format_latex_bullet(b)}")
-                    lines.append(r"  \end{itemize}")
-                lines.append(r"\end{itemize}")
-
-        # 4. Publications (if any)
-        if pubs:
-            pub_sec = titles.get("publications", "PUBLICATIONS" if is_en else "学术发表与代表作")
-            lines.extend([
-                f"\\section*{{{pub_sec}}}",
-                r"\begin{enumerate}[leftmargin=*,itemsep=2pt]"
-            ])
-            for p in pubs:
-                p_p_title = escape_latex(p.get("title", ""))
-                p_venue = escape_latex(p.get("venue", ""))
-                lines.append(f"  \\item \\textbf{{{p_p_title}}} -- \\textit{{{p_venue}}}")
-            lines.append(r"\end{enumerate}")
-
-        # 5. Competencies / Skills
-        competencies = vm.competencies
-        if competencies:
-            if isinstance(competencies, list):
-                competencies = {"专业技能": competencies}
-            default_skills_title = "CORE SKILLS & TOOLS" if is_en else ("核心技术栈" if pubs else "专业技能")
-            s_title = titles.get("skills", default_skills_title)
-            lines.extend([
-                f"\\section*{{{s_title}}}",
-                r"\begin{itemize}[leftmargin=*,itemsep=2pt]"
-            ])
-            colon_sym = ": " if is_en else "："
-            for k, vals in competencies.items():
-                if isinstance(vals, list):
-                    val_str = escape_latex(", ".join(str(v) for v in vals))
-                else:
-                    val_str = escape_latex(str(vals))
-                lines.append(f"  \\item \\textbf{{{escape_latex(str(k))}}}{colon_sym}{val_str}")
+        if vm.publications:
+            section("publications", "PUBLICATIONS", "学术发表与代表作")
+            lines.append(r"\begin{itemize}")
+            for publication in vm.publications:
+                parts = [raw(publication, key) for key in ("title", "authors", "venue", "year")]
+                lines.append(r"\item " + " · ".join(esc(part) for part in parts if part))
             lines.append(r"\end{itemize}")
-
+        if vm.competencies:
+            section("skills", "SKILLS", "专业技能")
+            competencies = vm.competencies if isinstance(vm.competencies, dict) else {"专业技能": vm.competencies}
+            for category, values in competencies.items():
+                value = ", ".join(str(v) for v in values) if isinstance(values, list) else str(values)
+                lines.append(r"\textbf{" + esc(category) + "}: " + esc(value) + r"\par")
         lines.append(r"\end{document}")
         return "\n".join(lines)
 
@@ -607,356 +502,139 @@ class AcademicExporter:
         section_titles: Optional[Dict[str, str]] = None,
         layout_config: Optional[Any] = None,
     ) -> str:
-        """
-        Generates single-page A4 HTML styled cleanly like LaTeX, with photo placeholder.
-        Allows instant browser preview and headless PDF rendering without local LaTeX tools.
-        Accepts ResumeViewModel, ProfileContext, or candidate profile dictionary.
-        """
+        """Semantic HTML fallback with the same source facts and academic hierarchy."""
+        from html import unescape
         vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
-        is_en = str(lang).lower().startswith("en")
+        en = str(lang).lower().startswith("en")
         titles = section_titles or {}
-
-        name = escape_html_text(vm.raw_name or ("Candidate" if is_en else "候选人"))
-        title = escape_html_text(vm.raw_title or "")
-        email_raw = str(vm.raw_email or "")
-        email = escape_html_text(email_raw)
-        phone = escape_html_text(vm.raw_phone or "")
-        school = escape_html_text(vm.raw_school or "")
-        location = escape_html_text(vm.raw_location or "")
-        edu_time = escape_html_text(vm.raw_edu_time or "")
-
-        grid = vm.education_grid_rows
-        max_cols = max((len(r) for r in grid), default=1)
-        if max_cols >= 3:
-            col_template = "42% 34% 1fr"
-        elif max_cols == 2:
-            col_template = "45% 1fr"
-        else:
-            col_template = "1fr"
-
-        grid_cells_html = []
-        for r in grid:
-            for i in range(max_cols):
-                cell_text = r[i] if i < len(r) else ""
-                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                style_align = ' style="text-align: right;"' if (max_cols >= 3 and i == max_cols - 1 and cell_clean) else ""
-                grid_cells_html.append(f'<div{style_align}>{escape_html_text(cell_clean)}</div>')
-
-        degree = vm.raw_degree or ""
-        degree_clean = escape_html_text(re.sub(r"\s*[｜|·]\s*", "  ", str(degree)).strip())
-        exp_list = vm.experiences
-        proj_list = vm.projects
-        pubs = vm.publications
-        comps = vm.competencies
-        eff_photo_path = photo_path or vm.photo_path
-        photo_needed = reserve_photo or vm.reserve_photo or (eff_photo_path is not None)
-
-        photo_html = ""
-        if photo_needed:
-            photo_data_uri = _image_to_base64_data_uri(eff_photo_path)
-            safe_data_uri = sanitize_url(photo_data_uri, allow_data_image=True) if photo_data_uri else ""
-            if safe_data_uri:
-                src_attr = escape_html_attribute(safe_data_uri)
-                img_w, img_h = None, None
-                if eff_photo_path and Path(eff_photo_path).is_file():
-                    try:
-                        from PIL import Image
-                        with Image.open(eff_photo_path) as im:
-                            img_w, img_h = im.size
-                    except Exception:
-                        pass
-
-                if photo_width and photo_height:
-                    p_w, p_h = int(photo_width), int(photo_height)
-                elif photo_width and img_w and img_h:
-                    p_w = int(photo_width)
-                    p_h = max(1, int(p_w * img_h / img_w))
-                elif photo_height and img_w and img_h:
-                    p_h = int(photo_height)
-                    p_w = max(1, int(p_h * img_w / img_h))
-                elif photo_size:
-                    base_sz = int(photo_size)
-                    if img_w and img_h:
-                        if img_w >= img_h:
-                            p_w = base_sz
-                            p_h = max(1, int(base_sz * img_h / img_w))
-                        else:
-                            p_h = base_sz
-                            p_w = max(1, int(base_sz * img_w / img_h))
-                    else:
-                        p_w, p_h = base_sz, base_sz
-                else:
-                    if img_w and img_h:
-                        ratio = img_w / img_h
-                        if 0.95 <= ratio <= 1.05:
-                            p_w, p_h = 100, 100
-                        elif ratio < 0.95:
-                            p_h = 105
-                            p_w = max(50, int(p_h * ratio))
-                        else:
-                            p_w = 100
-                            p_h = max(50, int(p_w / ratio))
-                    else:
-                        p_w, p_h = 96, 96
-
-                placeholder_text = "Photo<br>(3:4)" if is_en else "预留证件照<br>一寸 / 二寸"
-                photo_title = "Photo" if is_en else "证件照"
-                photo_html = f"""
-    <div style="width: {p_w}px; height: {p_h}px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="{photo_title}">
-      <img src="{src_attr}" alt="{photo_title}" style="max-width:100%; max-height:100%; width:100%; height:100%; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
-      <div style="display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
-        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">{placeholder_text}</span>
-      </div>
-    </div>
-                """
+        esc = escape_html_text
+        raw = self._raw_field
+        name = esc(vm.raw_name or unescape(vm.name) or ("Candidate" if en else "候选人"))
+        title = esc(vm.raw_title or unescape(vm.title))
+        photo = photo_path or vm.photo_path
+        need_photo = reserve_photo or vm.reserve_photo or bool(photo)
+        image = ""
+        if need_photo:
+            data = _image_to_base64_data_uri(photo) or vm.photo_data_uri
+            data = sanitize_url(data, allow_data_image=True) if data else ""
+            width = max(24, min(180, int(photo_width or photo_size or 72)))
+            height = max(24, min(240, int(photo_height or photo_size or 96)))
+            if data:
+                image = f'<img class="photo" src="{escape_html_attribute(data)}" alt="Photo" style="width:{width}px;height:{height}px">'
             else:
-                placeholder_text = "Photo<br>(3:4)" if is_en else "预留证件照<br>一寸 / 二寸"
-                photo_title = "Photo" if is_en else "预留证件照位置"
-                photo_html = f"""
-    <div style="width: 72px; height: 96px; border: 1.5px dashed #1e3a8a; background: #fafafa; border-radius: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="{photo_title}">
-      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
-        <span style="font-size: 8.5pt; color: #555; line-height: 1.2;">{placeholder_text}</span>
-      </div>
-    </div>
-                """
+                label = "Photo<br>(3:4)" if en else "预留证件照<br>一寸 / 二寸"
+                image = f'<div class="photo-placeholder">{label}</div>'
+        contact = " | ".join(esc(value) for value in (
+            vm.raw_phone or unescape(vm.phone), vm.raw_email or unescape(vm.email),
+            vm.raw_location or unescape(vm.location)) if value)
+        parts = [f'''<!DOCTYPE html>
+<html lang="{'en' if en else 'zh-CN'}"><head><meta charset="UTF-8">
+<title>Resume - {name}</title>
+<style>
+@page {{ size: A4; margin: 18mm; }}
+* {{ box-sizing: border-box; }}
+html, body {{ margin: 0; padding: 0; }}
+body {{ font-family: "Times New Roman", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
+  font-size: 10.5pt; line-height: 1.30; color: #202020; background: white; }}
+.page {{ width: 100%; }}
+.header {{ display: flex; align-items: center; gap: 18pt; margin-bottom: 8pt; }}
+.identity {{ flex: 1; min-width: 0; overflow-wrap: anywhere; }}
+.header.no-photo {{ display: block; text-align: center; }}
+h1 {{ font-size: 22pt; line-height: 1.2; margin: 0 0 3pt; }}
+.title {{ margin: 0 0 3pt; }}
+.contact {{ font-size: 9.5pt; }}
+.photo, .photo-placeholder {{ flex: none; object-fit: contain; }}
+.photo-placeholder {{ width: 72px; height: 96px; border: 1px solid #888;
+  display: flex; align-items: center; justify-content: center; text-align: center; font-size: 8pt; color: #555; }}
+h2 {{ font-size: 11.5pt; margin: 6pt 0 3pt; line-height: 1.25; break-after: avoid; }}
+.item-header {{ display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10pt; margin-top: 4pt; break-after: avoid; }}
+.item-header strong {{ min-width: 0; overflow-wrap: anywhere; }}
+.date {{ font-size: 9.5pt; text-align: right; max-width: 48mm; overflow-wrap: anywhere; }}
+.role {{ color: #444; margin-top: 1pt; break-after: avoid; }}
+p {{ margin: 1pt 0; overflow-wrap: anywhere; }}
+ul {{ margin: 2pt 0 5pt; padding-left: 1.2em; }}
+li {{ margin: 0 0 1.5pt; overflow-wrap: anywhere; orphans: 2; widows: 2; }}
+strong {{ font-weight: 700; }}
+@media screen {{ body {{ max-width: 210mm; padding: 18mm; margin: auto; }} }}
+</style></head><body><main class="page">
+<header class="header{' no-photo' if not image else ''}"><div class="identity"><h1>{name}</h1>
+{('<div class="title">' + title + '</div>') if title else ''}<div class="contact">{contact}</div></div>{image}</header>''']
 
-        mailto_url = sanitize_url(f"mailto:{email_raw}")
-        if mailto_url and email:
-            email_link = f'<a href="{escape_html_attribute(mailto_url)}" style="color:inherit; text-decoration:none;">{email}</a>'
-        else:
-            email_link = f'<span>{email}</span>' if email else ''
+        def section(key: str, english: str, chinese: str) -> None:
+            parts.append("<h2>" + esc(titles.get(key, english if en else chinese)) + "</h2>")
 
-        contact_parts = []
-        if phone:
-            contact_parts.append(phone if is_en else f"电话：{phone}")
-        if email_link:
-            contact_parts.append(email_link if is_en else f"邮箱：{email_link}")
-        if location:
-            contact_parts.append(location)
-        contact_html = " &nbsp;|&nbsp; ".join(contact_parts)
+        def entry(label: str, date: str, role: str = "") -> None:
+            parts.append('<div class="item-header"><strong>' + esc(label) + '</strong><span class="date">' + esc(date) + '</span></div>')
+            if role:
+                parts.append('<p class="role">' + esc(role) + '</p>')
 
-        doc_lang = "en" if is_en else "zh-CN"
-        target_label = "Target Role: " if is_en else "求职意向："
+        def bullet(value: str) -> str:
+            return "".join("<strong>" + esc(part) + "</strong>" if index % 2 else esc(part)
+                           for index, part in enumerate(re.split(r"\*\*(.+?)\*\*", value)))
 
-        html = f"""<!DOCTYPE html>
-<html lang="{doc_lang}">
-<head>
-  <meta charset="UTF-8">
-  <title>Resume - {name}</title>
-  <style>
-    @page {{
-      size: A4 portrait;
-      margin: 8.5mm 11mm;
-    }}
-    * {{
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }}
-    body {{
-      font-family: "Times New Roman", "Songti SC", "SimSun", serif;
-      font-size: 9.8pt;
-      line-height: 1.40;
-      color: #111111;
-      background: #FFFFFF;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }}
-    .header {{
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 5pt;
-      border-bottom: 1.2pt solid #1e3a8a;
-      padding-bottom: 4pt;
-    }}
-    h1 {{
-      font-size: 18pt;
-      font-weight: bold;
-      margin: 0 0 2pt 0;
-    }}
-    .contact {{
-      font-size: 9.8pt;
-      color: #333333;
-    }}
-    h2 {{
-      font-size: 11pt;
-      font-weight: bold;
-      color: #1e3a8a;
-      border-bottom: 0.8pt solid #1e3a8a;
-      padding-bottom: 1.5pt;
-      margin-top: 5pt;
-      margin-bottom: 2.5pt;
-      text-transform: uppercase;
-    }}
-    .item-header {{
-      display: flex;
-      justify-content: space-between;
-      font-size: 10pt;
-      font-weight: bold;
-      margin-top: 2.5pt;
-    }}
-    ul {{
-      margin: 1.5pt 0 3pt 0;
-      padding-left: 16pt;
-    }}
-    li {{
-      font-size: 9.6pt;
-      margin-bottom: 1.5pt;
-      text-align: justify;
-    }}
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <h1>{name}</h1>
-      {'<div style="font-size: 11pt; font-weight: bold; color: #1e3a8a; margin-bottom: 3pt;">' + target_label + title + '</div>' if title else ''}
-      <div class="contact">
-        {contact_html}
-      </div>
-    </div>
-    {photo_html}
-  </div>
-"""
-
+        if vm.edu_school or vm.raw_school or vm.education_grid_rows:
+            section("education", "EDUCATION", "教育背景")
+            entry(vm.raw_school or unescape(vm.edu_school), vm.raw_edu_time or unescape(vm.edu_time),
+                  vm.raw_degree or unescape(vm.edu_degree))
+            for row in vm.education_grid_rows:
+                parts.append("<p>" + " | ".join(esc(unescape(str(cell))) for cell in row if cell) + "</p>")
+            metadata = (vm.raw_profile or {}).get("candidate", {})
+            courses = metadata.get("courses") or metadata.get("core_courses")
+            if courses:
+                parts.append("<p>" + esc(("Key Coursework: " if en else "核心课程：") + str(courses)) + "</p>")
         if vm.postgraduate_exam:
+            section("postgraduate_exam", "POSTGRADUATE EXAM", "报考信息")
             pg = vm.postgraduate_exam
-            pg_school = escape_html_text(pg.get("target_school", ""))
-            pg_major = escape_html_text(pg.get("target_major", ""))
-            pg_dir = escape_html_text(pg.get("direction", ""))
-            target_items = []
-            if pg_school:
-                target_items.append(f"<span><b>报考院校：</b>{pg_school}</span>")
-            if pg_major:
-                target_items.append(f"<span><b>报考专业：</b>{pg_major}</span>")
-            if pg_dir:
-                target_items.append(f"<span><b>研究方向：</b>{pg_dir}</span>")
-
-            target_bar = f"<div class='item-header' style='display:flex; justify-content:space-between; margin-bottom:3pt;'>{' '.join(target_items)}</div>\n" if target_items else ""
-
-            subjects = pg.get("subjects", [])
-            total_score = escape_html_text(pg.get("total_score", ""))
-            table_html = ""
-            if subjects or total_score:
-                th_cells = ['<th style="background:#F5EFEB; font-weight:bold; border:1px solid #D8CFC4; padding:3pt 5pt; width:16%;">初试成绩</th>']
-                td_cells = ['<td style="background:#FDFBF7; font-weight:bold; color:#555; border:1px solid #D8CFC4; padding:3pt 5pt;">得分</td>']
-                for s in subjects:
-                    th_cells.append(f'<th style="border:1px solid #D8CFC4; padding:3pt 5pt;">{s["name"]}</th>')
-                    td_cells.append(f'<td style="border:1px solid #D8CFC4; padding:3pt 5pt;">{s["score"]}</td>')
-                if total_score:
-                    th_cells.append('<th style="background:#F8ECE8; color:#1e3a8a; font-weight:bold; border:1px solid #D8CFC4; padding:3pt 5pt;">总分</th>')
-                    td_cells.append(f'<td style="font-weight:bold; color:#1e3a8a; background:#FCF6F4; border:1px solid #D8CFC4; padding:3pt 5pt;">{total_score}</td>')
-
-                table_html = f"""<table style="width:100%; border-collapse:collapse; margin-top:3pt; margin-bottom:5pt; text-align:center; font-size:10pt; border:1px solid #1e3a8a;">
-  <thead><tr style="background:#FDFBF7; border-bottom:1.5px solid #1e3a8a;">{''.join(th_cells)}</tr></thead>
-  <tbody><tr>{''.join(td_cells)}</tr></tbody>
-</table>
-"""
-
-            html += f"""  <h2>报考信息</h2>
-  {target_bar}
-  {table_html}
-"""
-
-        cand_meta = vm.raw_profile.get("candidate", {}) if isinstance(getattr(vm, "raw_profile", None), dict) else {}
-        courses_raw = cand_meta.get("courses") or cand_meta.get("core_courses") or ""
-        courses_html = ""
-        c_label = "Key Coursework" if is_en else "核心课程"
-        c_colon = ": " if is_en else "："
-        if courses_raw:
-            courses_html = f'<div style="grid-column: 1 / -1; margin-top: 1.5pt; color: #333333;"><b style="color: #111111;">{c_label}{c_colon}</b>{escape_html_text(str(courses_raw).strip())}</div>'
-
-        edu_sec = titles.get("education", "EDUCATION" if is_en else "教育背景")
-        if grid:
-            html += f"""
-  <h2>{edu_sec}</h2>
-  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2pt; font-size:9.8pt; line-height:1.42; margin-top:2.5pt; margin-bottom:4pt;">
-    <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{school}</div>
-    <div style="font-size: 10.2pt; font-weight: bold; color: #111111;">{degree_clean}</div>
-    <div style="font-size: 10.2pt; font-weight: bold; color: #111111; text-align: right;">{edu_time}</div>
-    {"".join(grid_cells_html)}
-    {courses_html}
-  </div>
-"""
-        else:
-            courses_line = f'<div style="font-size:9.6pt; color:#333333; margin-top:2pt;"><b style="color:#111111;">{c_label}{c_colon}</b>{escape_html_text(str(courses_raw).strip())}</div>' if courses_raw else ''
-            html += f"""
-  <h2>{edu_sec}</h2>
-  <div class="item-header">
-    <span>{school} &nbsp;&nbsp;&nbsp;&nbsp; {degree_clean}</span>
-    <span>{edu_time}</span>
-  </div>
-  {courses_line}
-"""
-
-        def format_html_bullet(text: str) -> str:
-            clean = re.sub(r"<strong>(.*?)</strong>", r"**\1**", str(text), flags=re.IGNORECASE)
-            parts = re.split(r"\*\*(.+?)\*\*", clean)
-            res = []
-            for idx, part in enumerate(parts):
-                if idx % 2 == 1:
-                    res.append(f"<strong>{escape_html_text(part)}</strong>")
-                else:
-                    res.append(escape_html_text(part))
-            return "".join(res)
-
-        if exp_list:
-            exp_sec = titles.get("experience", "WORK EXPERIENCE" if is_en else "实习经历")
-            html += f"  <h2>{exp_sec}</h2>\n"
-            for exp in exp_list:
-                dept_str = str(exp.get("raw_dept", exp.get("dept", "")))
-                role_str = str(exp.get("raw_role", exp.get("role", "")))
-                role_label_raw = f"{dept_str} · {role_str}" if dept_str else role_str
-                role_label = escape_html_text(role_label_raw)
-                exp_org_esc = escape_html_text(str(exp.get("raw_org", exp.get("org", ""))))
-                exp_time_esc = escape_html_text(str(exp.get("raw_time", exp.get("time", ""))))
-                bullets = "".join([
-                    f"<li>{format_html_bullet(b)}</li>"
-                    for b in exp.get("raw_bullets", exp.get("bullets", []))
-                ])
-                html += f"""  <div class='item-header'><span>{exp_org_esc} · {role_label}</span><span>{exp_time_esc}</span></div>
-  <ul>{bullets}</ul>
-"""
-
-        if proj_list:
-            default_proj = "LEADERSHIP & CAMPUS ACTIVITIES" if is_en else ("科研与架构项目经历" if pubs else "校园与实践经历")
-            p_title = titles.get("projects", default_proj)
-            html += f"  <h2>{p_title}</h2>\n"
-            for p in proj_list:
-                p_name_esc = escape_html_text(str(p.get("raw_name", p.get("name", ""))))
-                p_role_esc = escape_html_text(str(p.get("raw_role", p.get("role", ""))))
-                p_time_esc = escape_html_text(str(p.get("raw_time", p.get("time", ""))))
-                role_disp = f" · {p_role_esc}" if p_role_esc else ""
-                bullets = "".join([
-                    f"<li>{format_html_bullet(b)}</li>"
-                    for b in p.get("raw_bullets", p.get("bullets", []))
-                ])
-                html += f"""  <div class='item-header'><span>{p_name_esc}{role_disp}</span><span>{p_time_esc}</span></div>
-  <ul>{bullets}</ul>
-"""
-
-        if comps:
-            if isinstance(comps, list):
-                comps = {"专业技能": comps}
-            default_skills = "CORE SKILLS & TOOLS" if is_en else ("核心技术栈" if pubs else "专业技能")
-            s_title = titles.get("skills", default_skills)
-            html += f"  <h2>{s_title}</h2>\n  <ul>"
-            colon_sym = ": " if is_en else "："
-            for k, v in comps.items():
-                k_esc = escape_html_text(str(k))
-                val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                val_esc = escape_html_text(val)
-                html += f"<li><b>{k_esc}{colon_sym}</b>{val_esc}</li>"
-            html += "</ul>\n"
-
-        html += "</body>\n</html>"
-        try:
-            from core.layout_solver import inject_micro_typography
-            html = inject_micro_typography(html, config=layout_config)
-        except Exception:
-            pass
-        return html
+            target = [raw(pg, key) for key in ("target_school", "target_major", "direction")]
+            parts.append("<p>" + " | ".join(esc(value) for value in target if value) + "</p>")
+            scores = [raw(subject, "name") + ": " + raw(subject, "score") for subject in pg.get("subjects", [])]
+            if raw(pg, "total_score"):
+                scores.append(("Total: " if en else "总分：") + raw(pg, "total_score"))
+            parts.append("<p>" + " | ".join(esc(value) for value in scores) + "</p>")
+        for key, records, english, chinese in (
+            ("experience", vm.experiences, "WORK EXPERIENCE", "实习经历"),
+            ("projects", vm.projects, "PROJECTS", "科研与架构项目经历" if vm.publications else "校园与实践经历"),
+        ):
+            if records:
+                section(key, english, chinese)
+                for item in records:
+                    entry(raw(item, "org" if key == "experience" else "name"), raw(item, "time"),
+                          raw(item, "role_label") or raw(item, "role"))
+                    parts.append("<ul>" + "".join("<li>" + bullet(text) + "</li>" for text in self._raw_bullets(item)) + "</ul>")
+        if vm.publications:
+            section("publications", "PUBLICATIONS", "学术发表与代表作")
+            parts.append("<ul>")
+            for publication in vm.publications:
+                fields = [raw(publication, key) for key in ("title", "authors", "venue", "year")]
+                parts.append("<li>" + " · ".join(esc(value) for value in fields if value) + "</li>")
+            parts.append("</ul>")
+        if vm.competencies:
+            section("skills", "SKILLS", "专业技能")
+            competencies = vm.competencies if isinstance(vm.competencies, dict) else {"专业技能": vm.competencies}
+            for category, values in competencies.items():
+                value = ", ".join(str(v) for v in values) if isinstance(values, list) else str(values)
+                parts.append("<p><strong>" + esc(category) + ": </strong>" + esc(value) + "</p>")
+        parts.append("</main></body></html>")
+        html = "\n".join(parts)
+        from core.layout_solver import LayoutConfig, inject_micro_typography
+        config = layout_config or LayoutConfig(
+            target_body_font_pt=10.5, min_line_height=1.30, target_line_height=1.30,
+            min_section_margin_pt=6, target_section_margin_pt=6,
+            min_item_gap_pt=1.5, target_item_gap_pt=1.5,
+            target_page_padding_y_mm=18, max_page_padding_y_mm=18,
+            target_letter_spacing_em=0, page_mode="auto",
+        )
+        html = inject_micro_typography(html, config=config)
+        # Keep the academic page geometry and free-flowing long lists after the
+        # shared micro-typography rules (which otherwise zero horizontal margins).
+        vertical_margin = config.target_page_padding_y_mm
+        overrides = f"""<style id="academic-print-flow">
+@page {{ margin: {vertical_margin}mm 18mm; }}
+@media print {{ .page {{ min-height: 0 !important; }}
+ul {{ break-inside: auto !important; page-break-inside: auto !important; }} }}
+</style>"""
+        return html.replace("</head>", overrides + "</head>")
 
     def compile_typst(self, typ_path: str | Path, pdf_path: str | Path) -> bool:
         """Compiles Typst file to PDF using Python package or CLI."""
@@ -1010,25 +688,15 @@ class AcademicExporter:
         with tempfile.TemporaryDirectory(prefix="latex_out_") as tmp_dir:
             try:
                 res = subprocess.run(
-                    [xelatex_cli, "-interaction=nonstopmode", f"-output-directory={tmp_dir}", str(tex_file)],
+                    [xelatex_cli, "-no-shell-escape", "-halt-on-error", "-interaction=nonstopmode", f"-output-directory={tmp_dir}", str(tex_file)],
                     cwd=str(tex_file.parent),
                     capture_output=True,
                     timeout=60,
                 )
                 compiled_pdf = Path(tmp_dir) / f"{tex_file.stem}.pdf"
-                if not compiled_pdf.exists():
-                    fallback_pdf = tex_file.with_suffix(".pdf")
-                    if fallback_pdf.exists() and fallback_pdf.resolve() != pdf_file.resolve():
-                        compiled_pdf = fallback_pdf
-
-                if compiled_pdf.exists() and compiled_pdf.stat().st_size > 0:
+                if res.returncode == 0 and compiled_pdf.exists() and compiled_pdf.stat().st_size > 0:
                     save_res = safe_save_file(dest_path=pdf_file, content=compiled_pdf, allow_shadow=True)
                     self.last_compile_result = save_res
-                    if compiled_pdf != Path(tmp_dir) / f"{tex_file.stem}.pdf":
-                        try:
-                            compiled_pdf.unlink(missing_ok=True)
-                        except Exception:
-                            pass
                     return save_res.success
                 self.last_compile_result = None
                 return False
