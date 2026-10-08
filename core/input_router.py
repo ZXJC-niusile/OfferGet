@@ -48,10 +48,11 @@ class RouteDecision:
         return self.mode != InputMode.INVALID.value
 
     def can_execute(self, stage: str) -> bool:
-        return stage in self.executable_stages
+        return stage in self.executable_stages and stage not in self.blocked_stages
 
     def is_blocked(self, stage: str) -> bool:
-        return stage in self.blocked_stages
+        # Unadvertised stages are unsupported, not implicitly executable.
+        return not self.can_execute(stage)
 
     def raise_if_blocked(self, stage: str) -> None:
         if self.is_blocked(stage):
@@ -85,10 +86,9 @@ class InputRouter:
 
     @classmethod
     def _is_multi_jd(cls, jd: Any) -> bool:
-        if isinstance(jd, (list, tuple)):
-            valid_items = [item for item in jd if cls._is_present(item)]
-            return len(valid_items) > 1
-        return False
+        # A sequence is a batch request even if it has only one nonempty item.
+        # Single-JD services cannot safely turn its Python representation into JD text.
+        return isinstance(jd, (list, tuple)) and bool(jd)
 
     @classmethod
     def route(
@@ -134,6 +134,24 @@ class InputRouter:
             if fail_fast:
                 decision.raise_if_invalid()
             return decision
+
+        # Recognize JD collections without promising an unimplemented batch executor.
+        if is_multi:
+            return RouteDecision(
+                mode=InputMode.MULTI_JD_AND_PROFILE.value if has_profile else InputMode.JD_ONLY.value,
+                executable_stages=["profile_audit", "resume_build"] if has_profile else [],
+                blocked_stages=[
+                    "jd_decode", "multi_jd_decode", "full_match", "batch_match",
+                    "ats_matching_score", "gap_analysis", "cross_jd_gap_matrix",
+                    "comparative_analysis", "career_review", "tailored_resume",
+                    "interview_prediction", "report_generation",
+                ],
+                missing_inputs=[] if has_profile else ["profile"],
+                next_steps=[
+                    "暂不支持多岗位批量处理，请每次提供一份 JD 文本、文件路径或字典。",
+                    "Batch JD processing is unsupported; pass one JD text, path, or dictionary at a time.",
+                ],
+            )
 
         if has_jd and not has_profile:
             return RouteDecision(
@@ -187,27 +205,6 @@ class InputRouter:
                 ],
             )
 
-        # Both are present
-        if is_multi:
-            return RouteDecision(
-                mode=InputMode.MULTI_JD_AND_PROFILE.value,
-                executable_stages=[
-                    "multi_jd_decode",
-                    "profile_audit",
-                    "batch_match",
-                    "cross_jd_gap_matrix",
-                    "comparative_analysis",
-                    "resume_build",
-                    "tailored_resume",
-                    "report_generation",
-                ],
-                blocked_stages=[],
-                missing_inputs=[],
-                next_steps=[
-                    "多岗位与候选人数据均已就绪，可执行多岗位批量对比、横向适配度排序与批量简历定制。",
-                ],
-            )
-
         return RouteDecision(
             mode=InputMode.JD_AND_PROFILE.value,
             executable_stages=[
@@ -256,8 +253,10 @@ def parse_input(
     # If it's a Path or str
     if isinstance(input_val, (str, Path)):
         if expected_type in ("text",):
-            _, text = load_json_or_text(input_val)
-            return text
+            parsed, text = load_json_or_text(input_val)
+            # Keep JSON collection identity so routing cannot mistake a batch
+            # file/string for one JD after serialization.
+            return parsed if isinstance(parsed, list) else text
         parsed, text = load_json_or_text(input_val)
         if parsed is not None:
             return parsed
