@@ -6,36 +6,37 @@
   <style>
     :root {
       --font-serif: Georgia, "Times New Roman", "Songti SC", serif;
-      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      --font-mono: "Courier New", Consolas, monospace;
-      
-      --color-primary: #2563EB;
-      --color-primary-dark: #1E3A8A;
-      --color-text: #111827;
-      --color-muted: #4B5563;
-      --color-bg-bar: #F3F4F6;
-      --color-rule: #3B82F6;
+      --font-sans: Arial, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+      /* A restrained blue accent retains the technical theme's identity. */
+      --color-primary: #294A68;
+      --color-primary-dark: #182B3B;
+      --color-accent: #294A68;
+      --color-text: #202831;
+      --color-muted: #4C5863;
+      --color-rule: #71879A;
+      --color-border: #71879A;
+      --color-bg-bar: transparent;
+      --color-bg-subtle: #FFFFFF;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
 
-      --page-padding-y: 8.8mm;
-      --page-padding-x: 10.6mm;
-      --body-font-size: 12.0px;
-      --body-line-height: 1.62;
-      --item-gap: 4.8px;
-      --section-gap: 11.0px;
+      /* Keep all six tokens available to the shared AutoFit engine. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.5;
+      --item-gap: 4px;
+      --section-gap: 13px;
     }
 
     @page {
       size: A4 portrait;
-      margin: 0;
+      margin: var(--page-padding-y) 0;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: var(--font-sans);
@@ -54,199 +55,208 @@
       margin: 0 auto;
     }
 
-    /* Numbers & Western typography */
     .en, .num, .metric {
-      font-family: var(--font-serif);
-      font-weight: 600;
+      font-family: inherit;
+      font-variant-numeric: tabular-nums;
     }
 
     code, .cli {
       font-family: var(--font-mono);
       font-size: 0.95em;
-      background: #F1F5F9;
-      padding: 1px 4px;
-      border-radius: 2px;
-      color: #0F172A;
+      color: var(--color-primary-dark);
+      overflow-wrap: anywhere;
     }
 
-    a {
-      color: var(--color-primary);
-      text-decoration: none;
-    }
+    a { color: var(--color-primary); text-decoration: none; overflow-wrap: anywhere; }
+    a:hover { text-decoration: underline; }
 
-    a:hover {
-      text-decoration: underline;
-    }
-
-    /* Header */
+    /* These declarations intentionally override generated inline header styles.
+       The shared renderer and every other theme keep their existing behavior. */
     header {
-      margin-bottom: 8px;
+      align-items: flex-start !important;
+      border-bottom: 1.2px solid var(--color-primary) !important;
+      padding-bottom: 8px !important;
+      margin-bottom: 4px !important;
+      gap: 12px;
     }
+
+    header > div:first-child { min-width: 0; padding-right: 0 !important; }
 
     .header-top {
       display: flex;
-      justify-content: space-between;
+      flex-wrap: wrap;
       align-items: baseline;
-      border-bottom: 2px solid var(--color-primary);
-      padding-bottom: 4px;
-      margin-bottom: 4px;
+      justify-content: space-between;
+      gap: 3px 18px;
     }
 
+    .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+
     h1 {
-      font-size: 20px;
+      font-size: 25px !important;
       font-weight: 700;
-      letter-spacing: 0.5px;
-      color: #000000;
+      line-height: 1.2;
+      letter-spacing: 0.1px;
+      color: var(--color-primary-dark);
+    }
+
+    .header-top > span {
+      color: var(--color-muted) !important;
+      font-weight: 400 !important;
+      line-height: 1.4;
     }
 
     .contacts {
-      font-size: 11px;
-      color: var(--color-muted);
       display: flex;
-      gap: 10px;
-    }
-
-    .headline {
-      font-size: 11.5px;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 2px 8px !important;
+      margin-top: 5px !important;
+      font-size: 11px !important;
+      line-height: 1.45;
       color: var(--color-muted);
-      font-weight: 500;
-      margin-top: 2px;
     }
 
-    /* Section Headers */
+    .contacts span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .contacts a { min-width: 0; overflow-wrap: anywhere; }
+    .headline { margin-top: 3px; font-size: 11.5px; color: var(--color-muted); }
+
+    /* Full-width rules and plain rows give the document one clear reading path. */
     .section-header {
-      display: flex;
-      align-items: center;
+      display: block;
       margin-top: var(--section-gap);
-      margin-bottom: 4px;
+      margin-bottom: 5px;
+      padding-bottom: 2px;
+      border-bottom: 0.8px solid var(--color-rule);
     }
 
     h2 {
-      font-size: 13px;
+      font-size: 1.08em;
+      line-height: 1.4;
       font-weight: 700;
       color: var(--color-primary);
-      white-space: nowrap;
-      margin-right: 8px;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.6px;
+      overflow-wrap: anywhere;
     }
 
-    .rule {
-      flex: 1;
-      height: 1.2px;
-      background-color: var(--color-rule);
-      border: none;
-    }
+    .rule { display: none; }
 
-    /* Organization Bar (Grey band) */
-    .org-bar {
+    .org-bar, .project-header {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
-      align-items: center;
-      background-color: var(--color-bg-bar);
-      padding: 3px 6px;
-      border-radius: 2px;
-      margin-top: 5px;
-      margin-bottom: 3px;
-      font-size: 11.5px;
-    }
-
-    .org-left {
-      display: flex;
       align-items: baseline;
-      gap: 8px;
-    }
-
-    .org-title {
-      font-weight: 700;
-      color: #000000;
-    }
-
-    .org-role {
-      font-weight: 600;
-      color: var(--color-primary-dark);
-    }
-
-    .org-right {
-      font-family: var(--font-serif);
-      font-size: 11px;
-      color: var(--color-muted);
-      font-weight: 500;
-    }
-
-    /* Lead Paragraph */
-    .lead {
-      font-weight: 600;
-      color: var(--color-primary-dark);
+      gap: 2px 14px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      margin-top: 6px;
       margin-bottom: 3px;
     }
 
-    /* Project Items */
-    .project-header {
+    .org-left, .project-header > div:first-child {
       display: flex;
-      justify-content: space-between;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      min-width: 0;
       align-items: baseline;
-      margin-top: 4px;
-      margin-bottom: 2px;
+      gap: 2px 10px !important;
     }
 
-    h3 {
-      font-size: 12px;
+    .org-left > *, .project-header > div:first-child > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .org-title, .project-header > div:first-child > span:first-child {
+      font-size: 1em !important;
       font-weight: 700;
       color: var(--color-primary-dark);
     }
 
-    .project-tag {
-      font-size: 11px;
-      color: var(--color-muted);
-      font-weight: 500;
+    .org-role, .project-header > div:first-child > span + span {
+      font-size: 0.96em !important;
+      font-weight: 400 !important;
+      color: var(--color-text) !important;
     }
 
-    /* Bullet Lists */
-    ul {
-      list-style-type: none;
-      padding-left: 0;
+    .org-right, .project-header > div:last-child {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      margin-left: auto;
+      font-size: 11px;
+      font-family: var(--font-sans);
+      font-variant-numeric: tabular-nums;
+      color: var(--color-muted);
+      text-align: right;
+      overflow-wrap: anywhere;
     }
+
+    .edu-grid { column-gap: 10px; }
+    .edu-grid > div { min-width: 0; overflow-wrap: anywhere; }
+    .lead { color: var(--color-text); margin-bottom: 3px; }
+    h3 { font-size: 12px; font-weight: 700; color: var(--color-primary-dark); }
+    .project-tag { font-size: 11px; color: var(--color-muted); }
+
+    ul { list-style: none; padding-left: 0; }
 
     li {
       position: relative;
-      padding-left: 14px;
+      padding-left: 13px;
       margin-bottom: var(--item-gap);
-      text-align: justify;
+      text-align: start;
+      overflow-wrap: anywhere;
     }
 
     li::before {
       content: "•";
       position: absolute;
       left: 2px;
-      color: var(--color-primary);
-      font-weight: bold;
+      color: var(--color-text);
     }
 
-    li.sub {
-      padding-left: 24px;
-    }
+    li.sub { padding-left: 25px; }
+    li.sub::before { content: "◦"; left: 14px; }
 
-    li.sub::before {
-      content: "◦";
-      left: 12px;
-      color: var(--color-muted);
+    /* Skills are conventional label/value lines, without decorative bullets. */
+    #skills li {
+      display: flex !important;
+      flex-wrap: wrap;
+      padding-left: 0;
+      gap: 0 5px !important;
+      margin-bottom: var(--item-gap) !important;
+      line-height: var(--body-line-height) !important;
+      font-size: var(--body-font-size) !important;
     }
+    #skills li::before { content: none; }
+    #skills li > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    #skills li > span:first-child { flex: 0 1 auto !important; white-space: normal !important; }
+    #skills li > span:last-child { flex: 1 1 20em; }
 
-    /* Key Bold Words */
-    b, strong {
-      color: var(--color-primary-dark);
+    b, strong { color: var(--color-primary-dark); font-weight: 700; }
+    .todo {
+      background: var(--color-todo-bg);
+      color: var(--color-todo-text);
+      padding: 0 4px;
+      border: 1px dashed var(--color-todo-text);
       font-weight: 700;
     }
 
-    /* TODO Warning Marker */
-    .todo {
-      background-color: var(--color-todo-bg);
-      color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
-      border: 1px dashed var(--color-todo-text);
-      font-weight: bold;
+    @media print {
+      .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      header, .section-header, .org-bar, .project-header {
+        break-inside: avoid;
+        break-after: avoid;
+      }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
     }
   </style>
 </head>
