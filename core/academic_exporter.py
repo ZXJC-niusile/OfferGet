@@ -17,7 +17,7 @@ Exports CandidateProfile SSOT to Native Academic LaTeX and Typst Resumes:
 
 from __future__ import annotations
 
-import base64
+import json
 import re
 import shutil
 import subprocess
@@ -26,30 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 
-def _image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional[str]:
-    """Converts a local image file to a base64 data URI."""
-    if not image_path:
-        return None
-    p = Path(image_path).resolve()
-    if not p.is_file():
-        return None
-    suffix = p.suffix.lower()
-    mime_types = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-        ".gif": "image/gif",
-        ".svg": "image/svg+xml",
-    }
-    mime_type = mime_types.get(suffix, "image/jpeg")
-    try:
-        data = p.read_bytes()
-        b64 = base64.b64encode(data).decode("ascii")
-        return f"data:{mime_type};base64,{b64}"
-    except Exception:
-        return None
-
+from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
 
 
 from core.security_gate import (
@@ -73,19 +50,38 @@ class AcademicExporter:
     def _resolve_view_model(
         self,
         profile_or_vm: Union[Any, Dict[str, Any]],
-        reserve_photo: bool = False,
+        reserve_photo: Optional[bool] = None,
         photo_path: Optional[Union[str, Path]] = None,
+        photo_mode: Optional[str] = None,
     ) -> Any:
+        from dataclasses import replace
         from core.resume_view_model import ResumeViewModel
-        from core.profile_adapter import ProfileContext
 
         if isinstance(profile_or_vm, ResumeViewModel):
-            return profile_or_vm
-        if isinstance(profile_or_vm, ProfileContext):
-            return profile_or_vm.to_view_model(photo_path=photo_path, reserve_photo=reserve_photo)
-        if isinstance(profile_or_vm, dict):
-            return ResumeViewModel.from_profile(profile_or_vm, photo_path=photo_path, reserve_photo=reserve_photo)
-        return ResumeViewModel.from_profile({}, photo_path=photo_path, reserve_photo=reserve_photo)
+            if reserve_photo is False or photo_mode == "no-photo":
+                return replace(profile_or_vm, photo_path=None, photo_data_uri=None,
+                               reserve_photo=False, photo_mode="no-photo")
+            # A resolved VM is authoritative unless the caller explicitly changes it.
+            if photo_mode is None and photo_path is None:
+                return profile_or_vm
+            selection = resolve_photo({}, photo_path=photo_path or profile_or_vm.photo_path,
+                                      photo_mode=photo_mode or profile_or_vm.photo_mode,
+                                      reserve_photo=True)
+            return replace(profile_or_vm, photo_path=selection.path, photo_data_uri=selection.data_uri,
+                           reserve_photo=selection.mode != "no-photo", photo_mode=selection.mode)
+        # Preserve the native exporter's old no-slot default while allowing an
+        # explicitly supplied image. Explicit false always excludes that image.
+        candidate = (getattr(profile_or_vm, "normalized_profile", profile_or_vm) or {})
+        candidate = candidate.get("candidate", candidate) if isinstance(candidate, dict) else {}
+        if reserve_photo is None:
+            reserve_photo = bool(photo_path or candidate.get("photo_path") or candidate.get("photo")
+                                 or (photo_mode or candidate.get("photo_mode")) in ("photo", "placeholder"))
+        elif (reserve_photo and photo_mode is None and candidate.get("photo_mode") is None
+              and not (photo_path or candidate.get("photo_path") or candidate.get("photo"))):
+            # Preserve the native API's explicit reserve_photo=True override.
+            photo_mode = "placeholder"
+        return ResumeViewModel.from_profile(profile_or_vm, photo_path=photo_path,
+                                             reserve_photo=reserve_photo, photo_mode=photo_mode)
 
     @staticmethod
     def _raw_field(item: Dict[str, Any], key: str) -> str:
@@ -117,20 +113,21 @@ class AcademicExporter:
     def generate_latex(
         self,
         profile: Union[Any, Dict[str, Any]],
-        reserve_photo: bool = False,
+        reserve_photo: Optional[bool] = None,
         photo_path: Optional[Union[str, Path]] = None,
         lang: str = "zh",
         section_titles: Optional[Dict[str, str]] = None,
+        photo_mode: Optional[str] = None,
     ) -> str:
         """Generate a conventional A4 academic resume with literal source facts."""
         from html import unescape
-        vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
+        vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path, photo_mode=photo_mode)
         is_en = str(lang).lower().startswith("en")
         titles = section_titles or {}
         esc = self._latex_text
         raw = self._raw_field
-        photo = photo_path or vm.photo_path
-        photo_needed = reserve_photo or vm.reserve_photo or bool(photo)
+        photo = vm.photo_path
+        photo_needed = vm.reserve_photo or bool(vm.photo_data_uri)
         lines = [
             r"\documentclass[a4paper,11pt]{article}",
             r"\usepackage{xeCJK}",
@@ -168,8 +165,11 @@ class AcademicExporter:
             lines.append(r"{\small " + contact + r"}\par")
         if photo_needed:
             lines += [r"\end{minipage}\hfill\begin{minipage}[c]{60pt}\raggedleft"]
-            if photo and Path(photo).is_file():
+            if photo:
+                _image_to_base64_data_uri(photo)
                 # \detokenize keeps spaces and underscores in ordinary filenames literal.
+                if Path(photo).suffix.lower() not in (".png", ".jpg", ".jpeg"):
+                    raise ValueError("LaTeX photos require PNG or JPEG; convert the image explicitly before exporting")
                 path = Path(photo).resolve().as_posix()
                 if any(char in path for char in "{}%\n\r"):
                     raise ValueError("LaTeX photo filenames cannot contain braces, percent signs or line breaks")
@@ -273,17 +273,21 @@ class AcademicExporter:
     def generate_typst(
         self,
         profile: Union[Any, Dict[str, Any]],
-        reserve_photo: bool = False,
+        reserve_photo: Optional[bool] = None,
         photo_path: Optional[Union[str, Path]] = None,
+        photo_mode: Optional[str] = None,
+        photo_reference: Optional[str] = None,
     ) -> str:
         """Generate a restrained, single-column native Typst resume."""
         import json
         from html import unescape
-        vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
+        vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path, photo_mode=photo_mode)
         raw = self._raw_field
         esc = self._typst_text
-        photo = photo_path or vm.photo_path
-        photo_needed = reserve_photo or vm.reserve_photo or bool(photo)
+        photo = vm.photo_path
+        photo_needed = vm.reserve_photo or bool(vm.photo_data_uri)
+        if photo:
+            _image_to_base64_data_uri(photo)
         lines = [
             '#set page(paper: "a4", margin: (x: 18mm, y: 18mm))',
             '#set text(font: ("Liberation Sans", "Noto Sans CJK SC"), size: 10.5pt, fill: rgb("#252525"), lang: "zh", hyphenate: false)',
@@ -306,8 +310,7 @@ class AcademicExporter:
             identity.append(f'#block(above: 0pt, below: 0pt)[#text(size: 9.5pt)[{contacts}]]')
         if photo_needed:
             if photo:
-                from pathlib import PureWindowsPath
-                path = PureWindowsPath(str(photo)).name if ":" in str(photo) else Path(photo).as_posix()
+                path = photo_reference or Path(photo).as_posix()
                 # File paths are code strings, not content markup. JSON quoting
                 # safely preserves quotes/backslashes and cannot emit Typst code.
                 picture = f'#image({json.dumps(path, ensure_ascii=False)}, width: 54pt, height: 72pt, fit: "contain")'
@@ -392,7 +395,7 @@ class AcademicExporter:
     def generate_latex_html_preview(
         self,
         profile: Union[Any, Dict[str, Any]],
-        reserve_photo: bool = True,
+        reserve_photo: Optional[bool] = True,
         photo_path: Optional[Union[str, Path]] = None,
         photo_size: Optional[int] = None,
         photo_width: Optional[int] = None,
@@ -400,21 +403,22 @@ class AcademicExporter:
         lang: str = "zh",
         section_titles: Optional[Dict[str, str]] = None,
         layout_config: Optional[Any] = None,
+        photo_mode: Optional[str] = None,
     ) -> str:
         """Semantic HTML fallback with the same source facts and academic hierarchy."""
         from html import unescape
-        vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path)
+        vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path, photo_mode=photo_mode)
         en = str(lang).lower().startswith("en")
         titles = section_titles or {}
         esc = escape_html_text
         raw = self._raw_field
         name = esc(vm.raw_name or unescape(vm.name) or ("Candidate" if en else "候选人"))
         title = esc(vm.raw_title or unescape(vm.title))
-        photo = photo_path or vm.photo_path
-        need_photo = reserve_photo or vm.reserve_photo or bool(photo)
+        photo = vm.photo_path
+        need_photo = vm.reserve_photo or bool(vm.photo_data_uri)
         image = ""
         if need_photo:
-            data = _image_to_base64_data_uri(photo) or vm.photo_data_uri
+            data = vm.photo_data_uri
             data = sanitize_url(data, allow_data_image=True) if data else ""
             width = max(24, min(180, int(photo_width or photo_size or 72)))
             height = max(24, min(240, int(photo_height or photo_size or 96)))

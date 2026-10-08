@@ -99,6 +99,8 @@ def test_photo_percent_and_brace_filenames_fail_clearly(tmp_path):
     import pytest
     exporter = AcademicExporter()
     for name in ("photo%example.png", "photo{example}.png"):
-        path = tmp_path / name; path.write_bytes(b"synthetic placeholder")
+        from PIL import Image
+        path = tmp_path / name
+        Image.new("RGB", (12, 16), "#336699").save(path)
         with pytest.raises(ValueError, match="photo filenames"):
             exporter.generate_latex(fixture(), photo_path=path)

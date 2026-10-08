@@ -31,3 +31,12 @@ are used. This change does not alter LaTeX or the previously verified HTML fallb
 Reference: [Typst block stickiness](https://typst.app/docs/reference/layout/block/),
 [bullet list spacing](https://typst.app/docs/reference/model/list/), and the
 [maintainer-published Python compiler](https://pypi.org/project/typst/0.15.0/).
+
+## Photo mode compatibility
+
+The native renderer consumes the shared resolved photo selection. Explicit no-photo
+(including `reserve_photo=False`) excludes profile images without reading them.
+Placeholder mode only draws a reserved slot. Photo mode validates a real raster;
+the builder's separately quoted `photo_reference` only relocates an already selected
+image and cannot enable an excluded photo. The visual harness resolves all three
+modes explicitly before rendering native and fallback sources.

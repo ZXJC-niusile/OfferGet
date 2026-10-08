@@ -1,6 +1,5 @@
 """Literal facts, native markup and layout contracts for Typst."""
 import json
-import re
 from pathlib import Path
 
 from core.academic_exporter import AcademicExporter
@@ -38,9 +37,13 @@ def test_typst_legacy_view_model_decodes_once():
     assert "A & B" in source and "*C++ & SQL*" in source and r"x \< 2." in source
 
 
-def test_typst_photo_filename_is_a_quoted_code_string():
+def test_typst_photo_filename_is_a_quoted_code_string(tmp_path):
+    from PIL import Image
     path = 'photo"name%[x].png'
-    source = AcademicExporter().generate_typst(fixture(), photo_path=path)
+    image = tmp_path / path
+    Image.new("RGB", (30, 40), "gray").save(image)
+    source = AcademicExporter().generate_typst(fixture(), photo_path=image,
+                                               photo_mode="photo", photo_reference=path)
     assert '#image(' + json.dumps(path) + ',' in source
     # A quoted filename cannot escape into a Typst expression.
     assert 'photo\\"name%[x].png' in source
@@ -56,3 +59,17 @@ def test_multiline_source_remains_inside_its_original_bullet():
     profile["experience"][0]["bullets"] = ["Start\n+ literal plus\n- literal dash"]
     source = AcademicExporter().generate_typst(profile)
     assert "- Start\n  " + r"\+ literal plus" + "\n  " + r"\- literal dash" in source
+
+
+def test_typst_photo_reference_cannot_reenable_excluded_photo(tmp_path):
+    from unittest.mock import patch
+    exporter = AcademicExporter()
+    profile = fixture()
+    profile["candidate"]["photo_path"] = str(tmp_path / "must-not-read.png")
+    with patch("core.resume_photo.image_to_base64_data_uri", side_effect=AssertionError("disabled photo must not be read")):
+        for options in ({"reserve_photo": False, "photo_mode": "photo"}, {"photo_mode": "no-photo"},
+                        {"photo_mode": "placeholder"}):
+            source = exporter.generate_typst(profile, photo_reference="must-not-enable.png", **options)
+            assert "#image(" not in source
+            assert ("#rect(" in source) == (options.get("photo_mode") == "placeholder")
+            assert r"Research & Systems \<Group\>" in source

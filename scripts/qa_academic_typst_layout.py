@@ -31,6 +31,7 @@ def main():
     compiler_version = version("typst")
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
     sources = ["core/academic_exporter.py", "core/resume_view_model.py", "core/profile_adapter.py",
+               "core/resume_photo.py", "core/resume_builder.py",
                "scripts/qa_academic_typst_layout.py", "scripts/qa_ats_docx_layout.py", "scripts/qa_modern_navy_layout.py"]
     manifest = {}
     for source in sources:
@@ -55,11 +56,13 @@ def main():
                     profile["experience"][0]["company"] = "Example & Research <Group>"
                     profile["experience"][0]["role"] = "R&D Engineer"
                     profile["experience"][0]["bullets"][-1] = "TYPST-RAW-FACT: **C++ & Python**; latency < 20 ms. Literal // comment remains visible. ~/.config --- literal.\n+ source item\n- source bullet"
-                vm = ResumeViewModel.from_profile(profile, photo_path=photo, reserve_photo=case["photo"] == "reserved")
+                mode = {"none": "no-photo", "reserved": "placeholder", "embedded": "photo"}[case["photo"]]
+                vm = ResumeViewModel.from_profile(profile, photo_path=photo,
+                                                  reserve_photo=mode != "no-photo", photo_mode=mode)
                 tex = folder / "resume.typ"
-                tex.write_text(exporter.generate_typst(vm, photo_path=photo.name if photo else None), encoding="utf-8")
+                tex.write_text(exporter.generate_typst(vm, photo_reference=photo.name if photo else None), encoding="utf-8")
                 html = folder / "resume.html"
-                html.write_text(exporter.generate_latex_html_preview(vm, reserve_photo=case["photo"] == "reserved"), encoding="utf-8")
+                html.write_text(exporter.generate_latex_html_preview(vm), encoding="utf-8")
                 native = folder / "native"; native.mkdir(exist_ok=True)
                 try:
                     typst.compile(tex, output=str(native / "resume.pdf"))

@@ -5,36 +5,29 @@
   <title>Resume - Silicon Clean Theme</title>
   <style>
     :root {
-      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      --font-mono: "SF Mono", "Fira Code", Menlo, Consolas, monospace;
-      
-      --color-primary: #0F172A;        /* Deep Charcoal / Slate */
-      --color-accent: #334155;         /* Medium Slate */
-      --color-text: #1E293B;           /* Dark Slate Text */
-      --color-muted: #64748B;          /* Muted Gray */
-      --color-border: #CBD5E1;         /* Refined Border */
-      --color-bg-subtle: #F8FAFC;      /* Subtle Light Slate Background */
+      --font-sans: Arial, "Helvetica Neue", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --color-primary: #202020;
+      --color-primary-dark: #202020;
+      --color-accent: #383838;
+      --color-text: #262626;
+      --color-muted: #505050;
+      --color-border: #9A9A9A;
+      --color-bg-subtle: #FFFFFF;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
 
-      --page-padding-y: 8.8mm;
-      --page-padding-x: 10.6mm;
-      --body-font-size: 12.0px;
-      --body-line-height: 1.62;
-      --item-gap: 4.8px;
-      --section-gap: 11.0px;
+      /* All six tokens remain available to the existing AutoFit profiles. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.5;
+      --item-gap: 4px;
+      --section-gap: 14px;
     }
 
-    @page {
-      size: A4 portrait;
-      margin: 0;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    @page { size: A4 portrait; margin: var(--page-padding-y) 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: var(--font-sans);
@@ -53,181 +46,165 @@
       margin: 0 auto;
     }
 
-    code, .cli {
-      font-family: var(--font-mono);
-      font-size: 0.92em;
-      background: #F1F5F9;
-      padding: 1px 4px;
-      border-radius: 2px;
-      color: #0F172A;
-      border: 1px solid #E2E8F0;
-    }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+    .en, .num, .metric { font-variant-numeric: tabular-nums; }
+    a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+    a:hover { text-decoration: underline; }
 
-    a {
-      color: var(--color-accent);
-      text-decoration: none;
-      border-bottom: 1px dotted var(--color-muted);
-    }
-
-    /* Header */
+    /* A centered name/contact composition gives this neutral sans theme its
+       own identity. Override only the shared renderer's presentation defaults. */
     header {
-      margin-bottom: 8px;
+      align-items: center !important;
+      border-bottom: 1px solid var(--color-primary) !important;
+      padding-bottom: 8px !important;
+      margin-bottom: 4px !important;
+      gap: 12px;
     }
+    header > div:first-child { min-width: 0; padding-right: 0 !important; text-align: center; }
 
     .header-top {
       display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      border-bottom: 1.5px solid var(--color-primary);
-      padding-bottom: 4px;
-      margin-bottom: 4px;
+      flex-direction: column;
+      flex-wrap: wrap;
+      align-items: center !important;
+      justify-content: center !important;
+      gap: 2px;
     }
-
+    .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
     h1 {
-      font-size: 21px;
+      font-size: 25px !important;
+      line-height: 1.18;
       font-weight: 700;
-      letter-spacing: -0.3px;
       color: var(--color-primary);
+      letter-spacing: 0.3px;
     }
-
+    .header-top > span {
+      font-size: 0.95em !important;
+      font-weight: 400 !important;
+      color: var(--color-muted) !important;
+      line-height: 1.4;
+    }
     .contacts {
-      font-size: 11px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: baseline;
+      gap: 2px 8px !important;
+      margin-top: 4px !important;
+      font-size: 0.9em !important;
+      line-height: 1.45;
       color: var(--color-muted);
-      display: flex;
-      gap: 10px;
     }
+    .contacts span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .contacts a { min-width: 0; overflow-wrap: anywhere; }
+    .headline { font-size: 0.95em; color: var(--color-muted); text-align: center; }
 
-    .headline {
-      font-size: 11.5px;
-      color: var(--color-accent);
-      font-weight: 500;
-      margin-top: 2px;
-    }
-
-    /* Section Headers */
+    /* Conventional centered section labels, separated by white space. */
     .section-header {
-      display: flex;
-      align-items: center;
+      display: block;
       margin-top: var(--section-gap);
-      margin-bottom: 4px;
-      border-bottom: 1px solid var(--color-border);
-      padding-bottom: 2px;
+      margin-bottom: 5px;
+      text-align: center;
     }
-
     h2 {
-      font-size: 12.5px;
+      font-size: 1.05em;
+      line-height: 1.4;
       font-weight: 700;
       color: var(--color-primary);
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.7px;
+      overflow-wrap: anywhere;
     }
+    .rule { display: none; }
 
-    /* Organization Bar */
-    .org-bar {
+    .org-bar, .project-header {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       align-items: baseline;
-      margin-top: 5px;
-      margin-bottom: 2px;
-      font-size: 11.5px;
+      gap: 2px 14px;
+      background: transparent;
+      border: 0;
+      padding: 0;
     }
-
-    .org-left {
-      display: flex;
-      align-items: baseline;
-      gap: 8px;
+    .org-left, .project-header > div:first-child {
+      display: block !important;
+      flex: 1 1 24em;
+      min-width: 0;
     }
-
-    .org-title {
+    .org-left > *, .project-header > div:first-child > * {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .org-title, .project-header > div:first-child > span:first-child {
+      font-size: 1em !important;
       font-weight: 700;
       color: var(--color-primary);
     }
-
-    .org-role {
-      font-weight: 600;
-      color: var(--color-accent);
+    .org-role, .project-header > div:first-child > span + span {
+      font-size: 0.96em !important;
+      font-weight: 400 !important;
+      color: var(--color-text) !important;
     }
-
-    .org-right {
-      font-size: 11px;
+    .org-right, .project-header > div:last-child {
+      flex: 0 1 auto;
+      min-width: 0;
+      max-width: 100%;
+      margin-left: auto;
+      font-size: 0.9em !important;
+      font-variant-numeric: tabular-nums;
       color: var(--color-muted);
-      font-weight: 500;
+      text-align: right;
+      overflow-wrap: anywhere;
     }
+    .edu-grid { column-gap: 10px; font-size: 0.92em !important; }
+    .edu-grid > div { min-width: 0; overflow-wrap: anywhere; }
+    .lead { color: var(--color-text); margin-bottom: 3px; }
+    h3 { font-size: 1em; font-weight: 700; }
+    .project-tag { font-size: 0.95em; color: var(--color-muted); }
 
-    /* Lead Paragraph */
-    .lead {
-      font-weight: 600;
-      color: var(--color-primary);
-      margin-bottom: 3px;
-    }
-
-    /* Project Items */
-    .project-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-top: 4px;
-      margin-bottom: 2px;
-    }
-
-    h3 {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--color-primary);
-    }
-
-    .project-tag {
-      font-size: 11px;
-      color: var(--color-muted);
-      font-weight: 500;
-    }
-
-    /* Bullet Lists */
-    ul {
-      list-style-type: none;
-      padding-left: 0;
-    }
-
+    /* Standard round bullets with a shared hanging text edge. */
+    ul { list-style: disc; padding-left: 17px; }
     li {
-      position: relative;
-      padding-left: 14px;
+      padding-left: 1px;
       margin-bottom: var(--item-gap);
-      text-align: justify;
+      text-align: start;
+      overflow-wrap: anywhere;
     }
+    li::marker { color: var(--color-text); font-size: 0.9em; }
+    li.sub { margin-left: 14px; list-style-type: circle; }
 
-    li::before {
-      content: "▪";
-      position: absolute;
-      left: 2px;
-      color: var(--color-accent);
-      font-size: 10px;
-      top: -1px;
+    /* Ordinary label/value lines; long labels may wrap without stealing width
+       from the value or forcing the browser to shrink the entire PDF. */
+    #skills li {
+      display: block !important;
+      padding-left: 0;
+      font-size: 1em !important;
+      line-height: var(--body-line-height) !important;
+      margin-bottom: var(--item-gap) !important;
     }
+    #skills li > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
 
-    li.sub {
-      padding-left: 24px;
-    }
-
-    li.sub::before {
-      content: "▫";
-      left: 12px;
-      color: var(--color-muted);
-    }
-
-    /* Key Bold Words */
-    b, strong {
-      color: #000000;
+    b, strong { color: var(--color-primary); font-weight: 700; }
+    .todo {
+      background: var(--color-todo-bg);
+      color: var(--color-todo-text);
+      padding: 0 3px;
+      border: 1px dashed var(--color-todo-text);
       font-weight: 700;
     }
 
-    /* TODO Warning Marker */
-    .todo {
-      background-color: var(--color-todo-bg);
-      color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
-      border: 1px dashed var(--color-todo-text);
-      font-weight: bold;
+    @media print {
+      .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      header, .section-header, .org-bar, .project-header { break-inside: avoid; break-after: avoid; }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
     }
   </style>
 </head>

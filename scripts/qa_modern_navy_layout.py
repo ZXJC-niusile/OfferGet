@@ -318,7 +318,7 @@ def fixtures(theme=DEFAULT_THEME):
             result.append({"name": f"skills-long-{mode}-{photo}", "profile": skills_long,
                            "photo": photo, "mode": mode, "max_pages": 2,
                            "require_autofit": False})
-    if theme == "academic-postgraduate":
+    if theme in {"academic-postgraduate", "sidebar-clean"}:
         for long_exam in (False, True):
             academic = json.loads(json.dumps(short))
             academic["intent"] = "计算机科学硕士 / MSc Computer Science"
@@ -429,20 +429,50 @@ def revision(root):
     return result.stdout.strip() if result.returncode == 0 else None
 
 
-def inspect_pdf(path, anchors):
+def pdf_line_overlaps(lines):
+    """Detect substantial intersections between actual PDF text-line boxes.
+
+    A print-media DOM does not reflect Chromium's fragmented grid pages. Ignore
+    tiny font overhangs; overlapping line height and width must both be material.
+    """
+    findings = []
+    for index, first in enumerate(lines):
+        a = first["bbox"]
+        for second in lines[index + 1:]:
+            b = second["bbox"]
+            width = min(a[2], b[2]) - max(a[0], b[0])
+            height = min(a[3], b[3]) - max(a[1], b[1])
+            minimum_height = min(a[3] - a[1], b[3] - b[1])
+            if width > 2 and height > max(2, minimum_height * 0.4):
+                findings.append({"first": first["text"], "second": second["text"],
+                                 "firstBox": list(a), "secondBox": list(b)})
+    return findings
+
+
+def inspect_pdf(path, anchors, check_text_overlap=False):
     import fitz
 
     with fitz.open(path) as doc:
         text = "\n".join(page.get_text() for page in doc)
         compact = squash(text)
         pages = []
+        overlapping_lines = []
         for number, page in enumerate(doc, 1):
+            if check_text_overlap:
+                lines = [{"bbox": line["bbox"],
+                          "text": "".join(span["text"] for span in line["spans"])}
+                         for block in page.get_text("dict")["blocks"] if "lines" in block
+                         for line in block["lines"]]
+                lines = [line for line in lines if line["text"].strip()]
+                overlapping_lines.extend(dict(finding, page=number)
+                                         for finding in pdf_line_overlaps(lines))
             blocks = [block for block in page.get_text("blocks") if block[4].strip()]
             pages.append({"number": number, "widthPt": page.rect.width, "heightPt": page.rect.height,
                           "textTopPt": min((b[1] for b in blocks), default=None),
                           "textBottomPt": max((b[3] for b in blocks), default=None)})
             page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(path.with_name(f"print-{number}.png"))
         return {"pages": len(doc), "pageBounds": pages, "textHash": digest(squash(text)),
+                "overlappingTextLines": overlapping_lines,
                 "missingAnchors": [anchor for anchor in anchors if squash(anchor) not in compact]}
 
 
@@ -461,6 +491,8 @@ def final_failures(metrics, case):
     if any(not img["complete"] or img["width"] == 0 for img in metrics["screen"]["images"]):
         failures.append("embedded image did not load")
     pdf = metrics["pdf"]
+    if pdf.get("overlappingTextLines"):
+        failures.append(f"PDF text lines overlap ({len(pdf['overlappingTextLines'])} pairs)")
     if not 1 <= pdf["pages"] <= case["max_pages"]:
         failures.append(f"PDF page count {pdf['pages']} exceeds fixture budget {case['max_pages']}")
     if case["name"].startswith("dense") and pdf["pages"] < 2:
@@ -531,7 +563,8 @@ def run(baseline, output, theme=DEFAULT_THEME):
                     else:
                         page.pdf(path=str(target / "resume.pdf"), prefer_css_page_size=True, print_background=True,
                                  display_header_footer=False)
-                    metrics["pdf"] = inspect_pdf(target / "resume.pdf", metrics["screen"]["anchors"])
+                    metrics["pdf"] = inspect_pdf(target / "resume.pdf", metrics["screen"]["anchors"],
+                                                 check_text_overlap=theme == "sidebar-clean")
                     metrics["failures"] = final_failures(metrics, case)
                     # Store text only once in HTML and keep the JSON compact and reviewable.
                     for media in ("screen", "print"):
