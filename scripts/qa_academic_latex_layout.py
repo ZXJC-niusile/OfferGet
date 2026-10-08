@@ -96,7 +96,7 @@ def main():
                     report.append({"case": case["name"], "mode": mode, "pages": len(pdf), "missing": missing,
                                    "overflow": overflow, "overlaps": overlaps if mode == "fallback" else [],
                                    "overfull_boxes": len(re.findall(r"Overfull \\hbox", log)) if mode == "native" else 0,
-                                   "max_pages": 3 if case["name"] == "dense-none" else 2})
+                                   "max_pages": 3 if case["name"] == "dense-none" else (1 if case["name"] == "exam-publications" else 2)})
             # Verify the actual builder return path in both modes, not only the
             # generator. The native result must not silently be a browser PDF.
             from core.resume_builder import ResumeBuilder
@@ -115,7 +115,9 @@ def main():
                         trace["browser"].append({"ok": result[0], "pages": result[1], "message": result[2]})
                         return result
                 folder = output / ("production-" + mode); folder.mkdir(exist_ok=True)
-                builder = ResumeBuilder(production["profile"], renderer=TracedBrowser(browser_path=playwright.chromium.executable_path))
+                renderer = TracedBrowser()
+                trace["browserPath"] = str(renderer.browser_path)
+                builder = ResumeBuilder(production["profile"], renderer=renderer)
                 builder.academic_exporter = TracedExporter()
                 result = builder.build_academic_latex(folder, photo=False)
                 trace["returned_pdf"] = str(result["pdf"])

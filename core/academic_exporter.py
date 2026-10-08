@@ -141,11 +141,12 @@ class AcademicExporter:
             r"\IfFontExistsTF{Noto Serif CJK SC}{\setCJKmainfont{Noto Serif CJK SC}}{\IfFontExistsTF{Source Han Serif SC}{\setCJKmainfont{Source Han Serif SC}}{\IfFontExistsTF{SimSun}{\setCJKmainfont{SimSun}}{\setCJKmainfont{FandolSong-Regular}[BoldFont=FandolSong-Bold]}}}",
             r"\pagestyle{empty}",
             r"\setlength{\parindent}{0pt}",
-            r"\setlength{\parskip}{2pt}",
+            r"\setlength{\parskip}{1pt}",
+            r"\clubpenalty=10000\widowpenalty=10000",
             r"\setlength{\emergencystretch}{3em}",
             r"\raggedright",
             r"\setlist[itemize]{leftmargin=1.2em,label=\textbullet,itemsep=1pt,topsep=2pt,parsep=0pt,partopsep=0pt}",
-            r"\titlespacing*{\section}{0pt}{8pt}{3pt}",
+            r"\titlespacing*{\section}{0pt}{6pt}{3pt}",
             r"\titleformat{\section}{\fontsize{11.5}{14}\selectfont\bfseries}{}{0em}{}",
             r"\newcommand{\resumeentry}[3]{\Needspace{3\baselineskip}\begin{tabularx}{\linewidth}{@{}Xr@{}}\textbf{#1}&{\small #2}\end{tabularx}\par\nopagebreak[4]\if\relax\detokenize{#3}\relax\else{\color{black!75}#3}\par\nopagebreak[4]\fi}",
             r"\begin{document}",
@@ -536,7 +537,7 @@ html, body {{ margin: 0; padding: 0; }}
 body {{ font-family: "Times New Roman", "Noto Serif CJK SC", "Songti SC", "SimSun", serif;
   font-size: 10.5pt; line-height: 1.30; color: #202020; background: white; }}
 .page {{ width: 100%; }}
-.header {{ display: flex; align-items: center; gap: 18pt; margin-bottom: 10pt; }}
+.header {{ display: flex; align-items: center; gap: 18pt; margin-bottom: 8pt; }}
 .identity {{ flex: 1; min-width: 0; overflow-wrap: anywhere; }}
 .header.no-photo {{ display: block; text-align: center; }}
 h1 {{ font-size: 22pt; line-height: 1.2; margin: 0 0 3pt; }}
@@ -545,13 +546,13 @@ h1 {{ font-size: 22pt; line-height: 1.2; margin: 0 0 3pt; }}
 .photo, .photo-placeholder {{ flex: none; object-fit: contain; }}
 .photo-placeholder {{ width: 72px; height: 96px; border: 1px solid #888;
   display: flex; align-items: center; justify-content: center; text-align: center; font-size: 8pt; color: #555; }}
-h2 {{ font-size: 11.5pt; margin: 8pt 0 3pt; line-height: 1.25; break-after: avoid; }}
+h2 {{ font-size: 11.5pt; margin: 6pt 0 3pt; line-height: 1.25; break-after: avoid; }}
 .item-header {{ display: grid; grid-template-columns: minmax(0, 1fr) auto;
   gap: 10pt; margin-top: 4pt; break-after: avoid; }}
 .item-header strong {{ min-width: 0; overflow-wrap: anywhere; }}
 .date {{ font-size: 9.5pt; text-align: right; max-width: 48mm; overflow-wrap: anywhere; }}
 .role {{ color: #444; margin-top: 1pt; break-after: avoid; }}
-p {{ margin: 2pt 0; overflow-wrap: anywhere; }}
+p {{ margin: 1pt 0; overflow-wrap: anywhere; }}
 ul {{ margin: 2pt 0 5pt; padding-left: 1.2em; }}
 li {{ margin: 0 0 1.5pt; overflow-wrap: anywhere; orphans: 2; widows: 2; }}
 strong {{ font-weight: 700; }}
@@ -619,7 +620,7 @@ strong {{ font-weight: 700; }}
         from core.layout_solver import LayoutConfig, inject_micro_typography
         config = layout_config or LayoutConfig(
             target_body_font_pt=10.5, min_line_height=1.30, target_line_height=1.30,
-            min_section_margin_pt=8, target_section_margin_pt=8,
+            min_section_margin_pt=6, target_section_margin_pt=6,
             min_item_gap_pt=1.5, target_item_gap_pt=1.5,
             target_page_padding_y_mm=18, max_page_padding_y_mm=18,
             target_letter_spacing_em=0, page_mode="auto",
