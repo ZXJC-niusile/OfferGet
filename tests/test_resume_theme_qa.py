@@ -30,7 +30,7 @@ def test_explicit_theme_uses_its_actual_template_and_preserves_facts(theme):
 
 def test_default_fixture_matrix_remains_compatible_with_modern_navy():
     assert all(case["theme"] == DEFAULT_THEME for case in fixtures())
-    assert len(fixtures()) == 12
+    assert len(fixtures()) == 16
     assert "request.get('theme', 'modern-navy')" in BUILDER_GENERATOR
 
 
@@ -85,6 +85,22 @@ def test_academic_exam_fixtures_cover_every_field_and_long_subjects():
         assert set(exam) == {"target_school", "target_major", "direction", "scores", "total_score"}
         assert sum(int(score) for score in exam["scores"].values()) == int(exam["total_score"])
     assert max(len(label) for case in cases for label in case["profile"]["postgraduate_exam"]["scores"]) > 70
+
+
+def test_long_skills_are_checked_for_every_theme_through_raw_and_builder_paths():
+    for theme in THEMES:
+        cases = [case for case in fixtures(theme) if case["name"].startswith("skills-long-")]
+        assert len(cases) == 4
+        assert {case["mode"] for case in cases} == {"raw", "builder"}
+        assert {case["photo"] for case in cases} == {"none", "reserved"}
+        assert all(max(len(label) for label in case["profile"]["skills"]) > 100 for case in cases)
+
+
+def test_navy_long_skill_category_can_wrap_despite_shared_inline_defaults():
+    template = (ROOT / theme_path("modern-navy")).read_text(encoding="utf-8")
+    rule = re.search(r"#skills li > span:first-child\s*\{([^}]+)\}", template)
+    assert "white-space: normal !important;" in rule.group(1)
+    assert "flex-shrink: 1 !important;" in rule.group(1)
 
 
 def test_git_paths_are_matched_portably_on_windows(monkeypatch):

@@ -141,9 +141,16 @@ MEASURE = r'''() => {
     for (const parent of document.querySelectorAll(selector)) {
       const children = [...parent.children].filter(el => el.getBoundingClientRect().width);
       for (let i=0;i<children.length;i++) for (let j=i+1;j<children.length;j++) {
-        const a=children[i].getBoundingClientRect(), b=children[j].getBoundingClientRect();
-        if (Math.min(a.right,b.right)-Math.max(a.left,b.left)>1 &&
-            Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1) {
+        // Inline spans can wrap into several disjoint line rectangles. Their
+        // enclosing boxes may overlap even when the actual text does not.
+        const rects = element => {
+          if (selector !== '#skills li') return [element.getBoundingClientRect()];
+          const range = document.createRange(); range.selectNodeContents(element);
+          return [...range.getClientRects()].filter(rect=>rect.width && rect.height);
+        };
+        if (rects(children[i]).some(a=>rects(children[j]).some(b=>
+            Math.min(a.right,b.right)-Math.max(a.left,b.left)>1 &&
+            Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1))) {
           overlaps.push({selector, first:children[i].textContent.trim(),
                          second:children[j].textContent.trim()});
         }
@@ -299,6 +306,17 @@ def fixtures(theme=DEFAULT_THEME):
     for photo in ("none", "reserved"):
         result.append({"name": f"professional-{photo}", "profile": professional,
                        "photo": photo, "mode": "builder", "max_pages": 2})
+    skills_long = json.loads(json.dumps(short))
+    skills_long["skills"] = {
+        "分布式系统可靠性与故障排查 / Distributed Systems Reliability and Troubleshooting":
+            "Python, SQL, Linux, reproducible validation and operational documentation",
+        "CrossPlatformInfrastructureCompatibilityAndResearchEngineering" * 2:
+            "LongUnbrokenTechnicalSkillValueForWrappingChecks" * 3,
+    }
+    for mode in ("raw", "builder"):
+        for photo in ("none", "reserved"):
+            result.append({"name": f"skills-long-{mode}-{photo}", "profile": skills_long,
+                           "photo": photo, "mode": mode, "max_pages": 2})
     if theme == "academic-postgraduate":
         for long_exam in (False, True):
             academic = json.loads(json.dumps(short))

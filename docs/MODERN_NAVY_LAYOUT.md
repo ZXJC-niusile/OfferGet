@@ -44,7 +44,7 @@ rewrites either input tree, or fetches a baseline. Each baseline/current HTML is
 created in a separate Python interpreter importing that tree's actual
 `ResumeViewModel`, `HtmlThemeRenderer`, and applicable layout/AutoFit code.
 
-The twelve paired fixtures cover:
+The sixteen paired fixtures cover:
 
 - Short bilingual resumes with and without a reserved photo slot
 - Long names, unbroken email/organization/project strings and education metadata,
@@ -61,6 +61,10 @@ The twelve paired fixtures cover:
 - Two realistic, medium-density bilingual resumes through that same production
   builder, with and without a photo slot, each containing two work entries and
   two projects. These support aesthetic review alongside the extreme fixtures.
+
+- Long bilingual and unbroken skill-category labels and values through both raw
+  and production-builder rendering, with and without a photo slot. The theme
+  explicitly overrides the shared label nowrap/shrink defaults.
 
 This exercises the renderer, all six AutoFit variables, solver print CSS, and the
 production builder pipeline. The builder measurement API can fall back to a PDF
