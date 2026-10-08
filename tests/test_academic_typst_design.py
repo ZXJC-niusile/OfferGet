@@ -44,3 +44,15 @@ def test_typst_photo_filename_is_a_quoted_code_string():
     assert '#image(' + json.dumps(path) + ',' in source
     # A quoted filename cannot escape into a Typst expression.
     assert 'photo\\"name%[x].png' in source
+
+
+def test_typst_preserves_shorthands_and_multiline_list_markers():
+    escaped = AcademicExporter._typst_text("~/.config --- literal\n- item\n+ numbered\n= heading")
+    assert escaped == r"\~\/.config \-\-\- literal" + "\n" + r"\- item" + "\n" + r"\+ numbered" + "\n" + r"\= heading"
+
+
+def test_multiline_source_remains_inside_its_original_bullet():
+    profile = fixture()
+    profile["experience"][0]["bullets"] = ["Start\n+ literal plus\n- literal dash"]
+    source = AcademicExporter().generate_typst(profile)
+    assert "- Start\n  " + r"\+ literal plus" + "\n  " + r"\- literal dash" in source

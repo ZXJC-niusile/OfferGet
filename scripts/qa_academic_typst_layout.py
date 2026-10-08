@@ -47,14 +47,14 @@ def main():
                 folder = output / case["name"]; folder.mkdir(exist_ok=True)
                 photo = None
                 if case["photo"] == "embedded":
-                    photo = folder / "synthetic-photo.png"
+                    photo = folder / 'synthetic "photo" %.png'
                     photo.write_bytes(base64.b64decode(case["photo_data_uri"].split(",", 1)[1]))
                 profile = case["profile"]
                 # Cover entities in organization/role as well as bullets/publications.
                 if case["name"] == "exam-publications":
                     profile["experience"][0]["company"] = "Example & Research <Group>"
                     profile["experience"][0]["role"] = "R&D Engineer"
-                    profile["experience"][0]["bullets"][-1] = "TYPST-RAW-FACT: **C++ & Python**; latency < 20 ms. Literal // comment remains visible."
+                    profile["experience"][0]["bullets"][-1] = "TYPST-RAW-FACT: **C++ & Python**; latency < 20 ms. Literal // comment remains visible. ~/.config --- literal.\n+ source item\n- source bullet"
                 vm = ResumeViewModel.from_profile(profile, photo_path=photo, reserve_photo=case["photo"] == "reserved")
                 tex = folder / "resume.typ"
                 tex.write_text(exporter.generate_typst(vm, photo_path=photo.name if photo else None), encoding="utf-8")

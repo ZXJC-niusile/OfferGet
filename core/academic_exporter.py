@@ -259,8 +259,10 @@ class AcademicExporter:
     def _typst_text(value: str) -> str:
         """Escape markup/labels/comments, with invisible breaks in long tokens."""
         def literal(text: str) -> str:
-            escaped = escape_typst(text).replace("<", r"\<").replace(">", r"\>").replace("/", r"\/")
-            return re.sub(r"(?m)^(\s*)(=+)(?=\s)", lambda match: match[1] + match[2].replace("=", r"\="), escaped)
+            escaped = escape_typst(text).replace("<", r"\<").replace(">", r"\>").replace("/", r"\/").replace("~", r"\~")
+            escaped = re.sub(r"-{2,}", lambda match: r"\-" * len(match[0]), escaped)
+            return re.sub(r"(?m)^(\s*)(=+|[-+])(?=\s)",
+                          lambda match: match[1] + "".join("\\" + char for char in match[2]), escaped)
         chunks = re.split(r"(\S{40,})", str(value))
         return "".join(
             r"\u{200b}".join(literal(chunk[i:i + 12]) for i in range(0, len(chunk), 12))
@@ -359,7 +361,7 @@ class AcademicExporter:
                 for item in records:
                     entry(raw(item, "org" if key == "experience" else "name"), raw(item, "time"),
                           raw(item, "role_label") or raw(item, "role"))
-                    lines.extend('- ' + bullet(value) for value in self._raw_bullets(item))
+                    lines.extend('- ' + bullet(value).replace('\n', '\n  ') for value in self._raw_bullets(item))
                     lines.append('')
         if vm.publications:
             lines.append('== 学术发表与代表作')
