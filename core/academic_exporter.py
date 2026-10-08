@@ -27,6 +27,7 @@ from typing import Any, Dict, Optional, Union
 
 
 from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
+from core.resume_view_model import PUBLICATION_LABELS, publication_facts, publication_text_parts
 
 
 from core.security_gate import (
@@ -239,12 +240,13 @@ class AcademicExporter:
                     lines.extend(r"\item " + bullet(text) for text in bullets)
                     lines.append(r"\end{itemize}")
 
-        if vm.publications:
+        publications = [publication_text_parts(pub) for pub in vm.publications]
+        publications = [parts for parts in publications if parts]
+        if publications:
             section("publications", "PUBLICATIONS", "学术发表与代表作")
             lines.append(r"\begin{itemize}")
-            for publication in vm.publications:
-                parts = [raw(publication, key) for key in ("title", "authors", "venue", "year")]
-                lines.append(r"\item " + " · ".join(esc(part) for part in parts if part))
+            for parts in publications:
+                lines.append(r"\item " + " · ".join(esc(part) for part in parts))
             lines.append(r"\end{itemize}")
         if vm.competencies:
             section("skills", "SKILLS", "专业技能")
@@ -366,23 +368,20 @@ class AcademicExporter:
                           raw(item, "role_label") or raw(item, "role"))
                     lines.extend('- ' + bullet(value).replace('\n', '\n  ') for value in self._raw_bullets(item))
                     lines.append('')
-        if vm.publications:
+        publications = [publication_facts(pub) for pub in vm.publications]
+        publications = [facts for facts in publications if facts]
+        if publications:
             lines.append('== 学术发表与代表作')
-            for publication in vm.publications:
+            for facts in publications:
                 parts = []
-                title = raw(publication, "title")
-                authors = raw(publication, "authors")
-                venue = raw(publication, "venue")
-                year = raw(publication, "year")
-                if title:
-                    parts.append('*' + esc(title) + '*')
-                if authors:
-                    parts.append(esc(authors))
-                if venue:
-                    parts.append('_' + esc(venue) + '_')
-                if year:
-                    parts.append(esc(year))
-                lines.append('- ' + ' · '.join(parts))
+                for key, value in facts:
+                    text = esc(PUBLICATION_LABELS.get(key, "") + value)
+                    if key == "title":
+                        text = '*' + text + '*'
+                    elif key == "venue":
+                        text = '_' + text + '_'
+                    parts.append(text)
+                lines.append('- ' + ' · '.join(parts).replace('\n', '\n  '))
             lines.append('')
         if vm.competencies:
             lines.append('== 专业技能')
@@ -505,12 +504,13 @@ strong {{ font-weight: 700; }}
                     entry(raw(item, "org" if key == "experience" else "name"), raw(item, "time"),
                           raw(item, "role_label") or raw(item, "role"))
                     parts.append("<ul>" + "".join("<li>" + bullet(text) + "</li>" for text in self._raw_bullets(item)) + "</ul>")
-        if vm.publications:
+        publications = [publication_text_parts(pub) for pub in vm.publications]
+        publications = [fields for fields in publications if fields]
+        if publications:
             section("publications", "PUBLICATIONS", "学术发表与代表作")
             parts.append("<ul>")
-            for publication in vm.publications:
-                fields = [raw(publication, key) for key in ("title", "authors", "venue", "year")]
-                parts.append("<li>" + " · ".join(esc(value) for value in fields if value) + "</li>")
+            for fields in publications:
+                parts.append("<li>" + " · ".join(esc(value) for value in fields) + "</li>")
             parts.append("</ul>")
         if vm.competencies:
             section("skills", "SKILLS", "专业技能")

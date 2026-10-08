@@ -235,12 +235,12 @@ def test_silicon_does_not_reserve_an_empty_editorial_column(missing):
 
 
 @pytest.mark.parametrize("theme", LEGACY)
-def test_unmigrated_themes_do_not_receive_structural_wrappers_or_publications(theme):
+def test_unmigrated_themes_keep_legacy_structure_and_include_publications(theme):
     doc = Document(render(theme))
     assert not doc.matching("data-layout")
     assert not doc.classes("resume-entry")
     assert not doc.classes("resume-section-body")
-    assert not doc.matching("id", "publications")
+    assert len(doc.matching("id", "publications")) == 1
 
 
 # Canonical legacy section signatures from verified f01d6c1. The header photo
@@ -313,7 +313,12 @@ def test_legacy_section_elements_text_and_inline_styles_match_archived_baseline(
     expected = json.loads(
         (Path(__file__).parent / "fixtures/legacy_resume_signatures.json").read_text()
     )
-    assert legacy_signature(render(theme)) == expected[theme]
+    # Publications were missing in the archive. Preserve every other section's
+    # elements, text, and styles; verify the added section independently.
+    import re
+    html = render(theme)
+    without_publications = re.sub(r'<section id="publications".*?</section>', '', html, flags=re.S)
+    assert legacy_signature(without_publications) == expected[theme]
 
 
 @pytest.mark.parametrize("theme", PILOTS)

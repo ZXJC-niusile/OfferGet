@@ -35,7 +35,7 @@ try:
 except ImportError:
     _DOCX_AVAILABLE = False
 
-from core.resume_view_model import ResumeViewModel
+from core.resume_view_model import ResumeViewModel, publication_text_parts
 from core.registry import QualityRuleRegistry
 from core.resume_photo import image_to_base64_data_uri, photo_data_uri_to_png
 
@@ -124,11 +124,12 @@ class AtsDocxRenderer:
             self._render_skills(doc, vm)
 
         # 7. Publications (if any)
-        if vm.publications:
+        publications = [publication_text_parts(pub) for pub in vm.publications]
+        publications = [fields for fields in publications if fields]
+        if publications:
             self._render_section_heading(doc, "学术成果与论文 / Publications")
-            for pub in vm.publications:
-                fields = [self._raw(pub, key) for key in ("title", "authors", "venue", "year")]
-                self._render_bullet(doc, " · ".join(value for value in fields if value))
+            for fields in publications:
+                self._render_bullet(doc, " · ".join(fields), literal=True)
 
         out_file = Path(output_path).resolve()
         out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -373,13 +374,16 @@ class AtsDocxRenderer:
                 self._run(p, f"{category}: ", bold=True)
                 self._run(p, ", ".join(skills))
 
-    def _render_bullet(self, doc: Any, bullet_text: str) -> None:
+    def _render_bullet(self, doc: Any, bullet_text: str, *, literal: bool = False) -> None:
         p = doc.add_paragraph(style="List Bullet")
         p.paragraph_format.space_before = Pt(0)
         p.paragraph_format.space_after = Pt(1.5)
         p.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.25)
         # A bullet may span pages when necessary; do not keep entire jobs together.
         p.paragraph_format.keep_with_next = False
+        if literal:
+            self._run(p, bullet_text)
+            return
         for part in re.split(r"(\*\*.*?\*\*)", bullet_text):
             bold = part.startswith("**") and part.endswith("**") and len(part) >= 4
             self._run(p, part[2:-2] if bold else part, bold=bold)
