@@ -1,0 +1,48 @@
+name: ATS DOCX visual QA
+
+on:
+  pull_request:
+    paths:
+      - 'core/ats_docx_renderer.py'
+      - 'core/resume_view_model.py'
+      - 'core/profile_adapter.py'
+      - 'scripts/qa_ats_docx_layout.py'
+      - 'scripts/qa_modern_navy_layout.py'
+      - 'tests/test_ats_docx_design.py'
+      - '.github/workflows/ats-docx-layout.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docx-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real document renderer and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice-writer fonts-noto-cjk fonts-liberation
+          python -m pip install -e '.[all]'
+      - name: Check DOCX source and structure
+        run: python -m pytest tests/test_ats_docx_design.py tests/test_ats_checker.py tests/test_resume_builder.py -k 'docx or Docx' -v
+      - name: Render synthetic DOCX resumes and verify PDF text and geometry
+        run: python scripts/qa_ats_docx_layout.py --output artifacts/ats-docx-layout
+      - name: Upload actual DOCX, PDF, page PNGs and checks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ats-docx-layout-${{ github.sha }}
+          path: |
+            artifacts/ats-docx-layout/**/*.docx
+            artifacts/ats-docx-layout/**/*.pdf
+            artifacts/ats-docx-layout/**/*.png
+            artifacts/ats-docx-layout/**/render.log
+            artifacts/ats-docx-layout/report.json
+            artifacts/ats-docx-layout/source-manifest.json
+          if-no-files-found: error

@@ -30,7 +30,7 @@ def test_explicit_theme_uses_its_actual_template_and_preserves_facts(theme):
 
 def test_default_fixture_matrix_remains_compatible_with_modern_navy():
     assert all(case["theme"] == DEFAULT_THEME for case in fixtures())
-    assert len(fixtures()) == 12
+    assert len(fixtures()) == 16
     assert "request.get('theme', 'modern-navy')" in BUILDER_GENERATOR
 
 
@@ -87,9 +87,56 @@ def test_academic_exam_fixtures_cover_every_field_and_long_subjects():
     assert max(len(label) for case in cases for label in case["profile"]["postgraduate_exam"]["scores"]) > 70
 
 
+def test_long_skills_are_checked_for_every_theme_through_raw_and_builder_paths():
+    for theme in THEMES:
+        cases = [case for case in fixtures(theme) if case["name"].startswith("skills-long-")]
+        assert len(cases) == 4
+        assert {case["mode"] for case in cases} == {"raw", "builder"}
+        assert {case["photo"] for case in cases} == {"none", "reserved"}
+        assert all(max(len(label) for label in case["profile"]["skills"]) > 100 for case in cases)
+
+
+def test_navy_long_skill_category_can_wrap_despite_shared_inline_defaults():
+    template = (ROOT / theme_path("modern-navy")).read_text(encoding="utf-8")
+    rule = re.search(r"#skills li > span:first-child\s*\{([^}]+)\}", template)
+    assert "white-space: normal !important;" in rule.group(1)
+    assert "flex-shrink: 1 !important;" in rule.group(1)
+
+
 def test_git_paths_are_matched_portably_on_windows(monkeypatch):
     from pathlib import PureWindowsPath
     monkeypatch.setattr("scripts.qa_modern_navy_layout.theme_path",
                         lambda theme: PureWindowsPath("themes") / f"{theme}.html")
     assert changed_themes(["themes/classic-tech.html"]) == ["classic-tech"]
     assert changed_themes(["themes/modern-corporate.html"]) == ["modern-corporate"]
+
+
+@pytest.mark.parametrize("require_autofit", [False, True])
+def test_stress_builder_can_report_real_multi_page_branch_without_single_page_autofit(
+        tmp_path, monkeypatch, require_autofit):
+    import json
+    from types import SimpleNamespace
+    from scripts.qa_modern_navy_layout import render_production
+    output = tmp_path / "production"
+
+    def child(*args, **kwargs):
+        output.mkdir()
+        html, pdf = output / "resume.html", output / "resume.pdf"
+        html.write_text("<html><body>synthetic multi-page baseline</body></html>")
+        pdf.write_bytes(b"%PDF-unit-test")
+        return SimpleNamespace(returncode=0, stderr="", stdout=json.dumps({
+            "html": str(html), "pdf": str(pdf), "trace": {
+                "measurements": [[4400, 3300]], "renders": [{"ok": True, "pages": 4}],
+                "autofit": [],
+            },
+        }))
+
+    monkeypatch.setattr("scripts.qa_modern_navy_layout.subprocess.run", child)
+    case = {"mode": "builder", "require_autofit": require_autofit}
+    if require_autofit:
+        with pytest.raises(ValueError, match="required AutoFit"):
+            render_production(ROOT, case, output)
+    else:
+        _, result = render_production(ROOT, case, output)
+        assert result["trace"]["renders"][0]["pages"] == 4
+        assert result["trace"]["autofit"] == []
