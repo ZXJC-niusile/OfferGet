@@ -44,6 +44,14 @@ def image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional
             raise ValueError("Photo file exceeds the 10 MiB limit")
     except OSError as exc:
         raise ValueError(f"Cannot read photo file: {path}") from exc
+    image_format, _, _ = validate_raster_bytes(data, expected_format=_SUFFIXES[path.suffix.lower()])
+    return f"data:{_FORMATS[image_format]};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+def validate_raster_bytes(data: bytes, expected_format: Optional[str] = None):
+    """Verify bounded still-image bytes, including direct data-URI API inputs."""
+    if len(data) > MAX_PHOTO_BYTES:
+        raise ValueError("Photo file exceeds the 10 MiB limit")
     try:
         from PIL import Image
     except ImportError as exc:
@@ -53,19 +61,46 @@ def image_to_base64_data_uri(image_path: Optional[Union[str, Path]]) -> Optional
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(io.BytesIO(data)) as image:
                 image_format = image.format
-                if image_format not in _FORMATS or _SUFFIXES[path.suffix.lower()] != image_format:
-                    raise ValueError("Photo filename extension does not match a supported raster image")
+                if image_format not in _FORMATS or (expected_format and expected_format != image_format):
+                    raise ValueError("Photo filename extension or MIME type does not match a supported raster image")
                 if image.width * image.height > MAX_PHOTO_PIXELS:
                     raise ValueError("Photo exceeds the 25 megapixel limit")
                 if getattr(image, "n_frames", 1) != 1:
                     raise ValueError("Photo must be a single-frame still image")
+                dimensions = image.size
                 image.verify()
-            # verify checks container integrity; load also checks pixel decoding.
             with Image.open(io.BytesIO(data)) as image:
                 image.load()
     except (OSError, SyntaxError, ValueError, Image.DecompressionBombWarning, Image.DecompressionBombError) as exc:
-        raise ValueError(f"Invalid photo image: {path.name}: {exc}") from exc
-    return f"data:{_FORMATS[image_format]};base64,{base64.b64encode(data).decode('ascii')}"
+        raise ValueError(f"Invalid photo image: {exc}") from exc
+    return image_format, *dimensions
+
+
+def photo_data_uri_to_png(data_uri: str):
+    """Return verified Word-compatible PNG bytes, preserving pixels/aspect ratio.
+
+    EXIF orientation is normalized, with no resize or crop. This also makes
+    supported WebP/GIF inputs portable to Word without external relationships.
+    """
+    import binascii
+    if not isinstance(data_uri, str) or len(data_uri) > MAX_PHOTO_BYTES * 4 // 3 + 100:
+        raise ValueError("Invalid or oversized photo data URI")
+    header, separator, payload = data_uri.partition(",")
+    expected = {f"data:{mime};base64": fmt for fmt, mime in _FORMATS.items()}.get(header)
+    if not separator or expected is None:
+        raise ValueError("Photo must use a supported raster data URI")
+    try:
+        data = base64.b64decode(payload, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Invalid photo base64 data") from exc
+    validate_raster_bytes(data, expected_format=expected)
+    from PIL import Image, ImageOps
+    with Image.open(io.BytesIO(data)) as image:
+        oriented = ImageOps.exif_transpose(image)
+        pixels = oriented.convert("RGBA" if "A" in oriented.getbands() or "transparency" in oriented.info else "RGB")
+        output = io.BytesIO()
+        pixels.save(output, format="PNG")
+        return output.getvalue(), pixels.width, pixels.height
 
 
 def resolve_photo(candidate: Mapping[str, Any], *, photo_path=None,

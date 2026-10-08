@@ -5,7 +5,7 @@ OfferGet native ATS-optimized resume rendering engine.
 Produces deterministic, single-column Word (.docx) documents optimized for ATS parsers:
 1. ATS-Friendly Structure:
    - Linear flow (Header -> Summary -> Experience -> Projects -> Education -> Skills).
-   - Strict single-column layout without complex nested blocks or text boxes.
+   - Linear body with an optional borderless two-cell photo masthead; no text boxes.
    - Standard section titles mapped directly from QualityRuleRegistry.STANDARD_SECTIONS.
 2. Direct ResumeViewModel Consumption:
    - Consumes OfferGet's SSOT ResumeViewModel (or auto-converts from candidate profile).
@@ -15,6 +15,7 @@ Produces deterministic, single-column Word (.docx) documents optimized for ATS p
 
 from __future__ import annotations
 
+import io
 import re
 from html import unescape
 from unicodedata import east_asian_width
@@ -26,15 +27,17 @@ try:
     import docx
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+    from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    from docx.shared import Inches, Mm, Pt, RGBColor
+    from docx.shared import Emu, Inches, Mm, Pt, RGBColor
     _DOCX_AVAILABLE = True
 except ImportError:
     _DOCX_AVAILABLE = False
 
 from core.resume_view_model import ResumeViewModel
 from core.registry import QualityRuleRegistry
+from core.resume_photo import image_to_base64_data_uri, photo_data_uri_to_png
 
 
 @dataclass
@@ -65,15 +68,20 @@ class AtsDocxRenderer:
         self,
         view_model_or_profile: Union[ResumeViewModel, Dict[str, Any]],
         output_path: Union[str, Path],
+        photo_mode: Optional[str] = None,
     ) -> Path:
         """
         Renders the resume to a .docx file at output_path.
         Returns the resolved Path to the generated document.
         """
         if isinstance(view_model_or_profile, ResumeViewModel):
-            vm = view_model_or_profile
+            vm = (ResumeViewModel.from_profile(view_model_or_profile, photo_mode=photo_mode)
+                  if photo_mode is not None else view_model_or_profile)
         else:
-            vm = ResumeViewModel.from_profile(view_model_or_profile)
+            candidate = view_model_or_profile.get("candidate", view_model_or_profile)
+            selected_mode = (photo_mode or candidate.get("photo_mode")
+                             or ("photo" if candidate.get("photo_path") or candidate.get("photo") else "no-photo"))
+            vm = ResumeViewModel.from_profile(view_model_or_profile, photo_mode=selected_mode)
 
         doc = Document()
         self._apply_page_margins(doc)
@@ -194,7 +202,75 @@ class AtsDocxRenderer:
         return run
 
     def _render_header(self, doc: Any, vm: ResumeViewModel) -> None:
-        """Compact centered identity, still in the ordinary document body."""
+        """Editable identity with an optional compact upper-right portrait."""
+        payload = self._photo_payload(vm)
+        if payload is not None:
+            image_bytes, width, height = payload
+            table = doc.add_table(rows=1, cols=2)
+            table.autofit = False
+            section = doc.sections[0]
+            body_width = section.page_width - section.left_margin - section.right_margin
+            column_widths = (Emu(body_width - Pt(72)), Pt(72))
+            for index, cell_width in enumerate(column_widths):
+                table.columns[index].width = cell_width
+                table.cell(0, index).width = cell_width
+            props = table._tbl.tblPr
+            tbl_width = props.find(qn("w:tblW"))
+            tbl_width.set(qn("w:type"), "dxa")
+            tbl_width.set(qn("w:w"), str(Emu(body_width).twips))
+            borders = OxmlElement("w:tblBorders")
+            for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+                element = OxmlElement("w:" + edge)
+                element.set(qn("w:val"), "nil")
+                borders.append(element)
+            props.append(borders)
+            table.rows[0]._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
+            for cell in table.rows[0].cells:
+                cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+                margins = OxmlElement("w:tcMar")
+                for edge in ("top", "left", "bottom", "right"):
+                    element = OxmlElement("w:" + edge)
+                    element.set(qn("w:w"), "0")
+                    element.set(qn("w:type"), "dxa")
+                    margins.append(element)
+                cell._tc.get_or_add_tcPr().append(margins)
+            self._render_identity(table.cell(0, 0), vm, WD_ALIGN_PARAGRAPH.LEFT,
+                                  first_paragraph=table.cell(0, 0).paragraphs[0])
+            paragraph = table.cell(0, 1).paragraphs[0]
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            paragraph.paragraph_format.space_before = Pt(0)
+            paragraph.paragraph_format.space_after = Pt(0)
+            paragraph.paragraph_format.line_spacing = 1.0
+            paragraph.paragraph_format.keep_with_next = True
+            # Contain in 54 x 72 pt without changing the portrait's aspect ratio.
+            scale = min(54 / width, 72 / height)
+            shape = paragraph.add_run().add_picture(io.BytesIO(image_bytes),
+                                                    width=Pt(width * scale), height=Pt(height * scale))
+            shape._inline.docPr.set("descr", "Candidate photo")
+            shape._inline.docPr.set("title", "Candidate photo")
+        else:
+            if vm.photo_mode == "placeholder" and vm.reserve_photo:
+                paragraph = doc.add_paragraph()
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                paragraph.paragraph_format.keep_with_next = True
+                self._run(paragraph, "照片占位预览 / Photo placeholder (preview only)", muted=True)
+            self._render_identity(doc, vm, WD_ALIGN_PARAGRAPH.CENTER)
+
+    @staticmethod
+    def _photo_payload(vm: ResumeViewModel):
+        if vm.photo_mode == "no-photo" or not vm.reserve_photo:
+            return None
+        data_uri = vm.photo_data_uri
+        if not data_uri and vm.photo_path:
+            data_uri = image_to_base64_data_uri(vm.photo_path)
+        if data_uri:
+            return photo_data_uri_to_png(data_uri)
+        if vm.photo_mode == "photo":
+            raise ValueError("Photo mode requires an actual validated image")
+        return None
+
+    def _render_identity(self, container: Any, vm: ResumeViewModel, alignment: Any,
+                         first_paragraph: Any = None) -> None:
         for text, size, bold, after in (
             (vm.raw_name or unescape(vm.name), self.config.font_size_name, True, 2),
             (vm.raw_title or unescape(vm.title), self.config.font_size_title, False, 3),
@@ -205,8 +281,9 @@ class AtsDocxRenderer:
         ):
             if not text:
                 continue
-            p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p = first_paragraph if first_paragraph is not None else container.add_paragraph()
+            first_paragraph = None
+            p.alignment = alignment
             p.paragraph_format.space_before = Pt(0)
             p.paragraph_format.space_after = Pt(after)
             p.paragraph_format.line_spacing = Pt(size * 1.3)

@@ -209,10 +209,11 @@ def test_typst_copies_only_validated_selected_image(profile, tmp_path):
 
 
 @pytest.mark.parametrize("mode", ["photo", "placeholder"])
-def test_docx_never_silently_discards_explicit_photo_request(profile, tmp_path, mode):
+def test_docx_honors_explicit_photo_request(profile, tmp_path, mode):
     builder = ResumeBuilder(profile, photo_mode=mode)
-    with pytest.raises(ValueError, match="no-photo only"):
-        builder.build_theme("ats-docx", tmp_path, diff_ledger=False)
+    result = builder.build_theme("ats-docx", tmp_path, diff_ledger=False)
+    from docx import Document
+    assert len(Document(result["docx"]).inline_shapes) == (1 if mode == "photo" else 0)
 
 
 @pytest.mark.parametrize("flags", [[], ["--no-photo"], ["--photo-mode", "no-photo"]])
@@ -309,6 +310,7 @@ def test_removed_selected_image_never_downgrades_to_placeholder(profile, portrai
 def test_docx_profile_selected_photo_mode_is_not_silently_dropped(profile, tmp_path):
     profile["candidate"]["photo_mode"] = "photo"
     builder = ResumeBuilder(profile)
-    with pytest.raises(ValueError, match="no-photo only"):
-        builder.build_theme("ats-docx", tmp_path, diff_ledger=False)
+    from docx import Document
+    result = builder.build_theme("ats-docx", tmp_path, diff_ledger=False)
+    assert len(Document(result["docx"]).inline_shapes) == 1
     assert builder.build_theme("ats-docx", tmp_path, photo=False, diff_ledger=False)["docx"].exists()
