@@ -111,7 +111,12 @@ Examples:
     report_parser.add_argument("jd_file", help="Path to JD text file")
     report_parser.add_argument("--profile", required=True, help="Path to candidate_profile.json")
     report_parser.add_argument("--output", default="report.html", help="Output HTML filepath")
-    report_parser.add_argument("--template", help="Custom HTML template filepath")
+    report_parser.add_argument(
+        "--template",
+        help=("Custom HTML filepath; omit for the Python-rendered default. "
+              "The bundled templates/offer_strategy.html path is a legacy alias "
+              "for that default; its file contents are not rendered."),
+    )
 
     # `offerget ats ...`
     ats_parser = subparsers.add_parser("ats", help="ATS Auditor & verification operations")

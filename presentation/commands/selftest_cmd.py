@@ -5,7 +5,6 @@ OfferGet installed-runtime smoke checks using synthetic diagnostic fixtures.
 from __future__ import annotations
 
 import sys
-from importlib.resources import as_file, files
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -59,10 +58,9 @@ def _run_smoke_checks(output_dir: Path):
     # 3. Test Report Generator & Bilingual Validator
     print("[4/11] Testing Report Generator & Bilingual Twin Validator ...")
     test_out = output_dir / "test_output_report.html"
-    with as_file(files("templates").joinpath("offer_strategy.html")) as template_path:
-        ReportService().generate_offer_strategy_report(
-            decoded, match_result, output_path=str(test_out), template_path=str(template_path)
-        )
+    ReportService().generate_offer_strategy_report(
+        decoded, match_result, output_path=str(test_out)
+    )
 
     val = validate_bilingual_html(str(test_out))
     if not val["passed"]:
