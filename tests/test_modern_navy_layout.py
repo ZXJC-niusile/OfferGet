@@ -224,3 +224,29 @@ def test_production_uses_default_browser_selection_and_records_its_path(tmp_path
     assert "synthetic" in html
     assert returned["trace"]["browserPath"] == "/test/default-browser"
     assert (output / "child-stdout.txt").is_file()
+
+
+def test_conventional_resume_presentation_replaces_decorative_blocks():
+    assert "h2::before" not in TEMPLATE
+    assert "li::before" not in TEMPLATE
+    assert "linear-gradient" not in TEMPLATE
+    assert "border-left:" not in TEMPLATE
+    for selector in (".org-bar", ".project-tag", "code, .cli"):
+        rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
+        assert rule, selector
+        assert "border-radius" not in rule.group(1)
+        assert "background:" not in rule.group(1) or "background: transparent;" in rule.group(1)
+    assert "list-style: disc;" in TEMPLATE
+    for selector in (".org-left", ".project-header > div:first-child"):
+        rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
+        assert "flex-direction: column;" in rule.group(1)
+    assert "--body-font-size: 13.333px;" in TEMPLATE
+
+
+def test_fixture_matrix_has_realistic_production_resumes():
+    cases = [case for case in fixtures() if case["name"].startswith("professional-")]
+    assert {case["photo"] for case in cases} == {"none", "reserved"}
+    for case in cases:
+        assert case["mode"] == "builder"
+        assert len(case["profile"]["experience"]) == 2
+        assert len(case["profile"]["campus_experience"]) == 2

@@ -1,11 +1,23 @@
 # Modern Navy layout regression checks
 
-This theme-only change keeps the existing palette, factual content, A4 dimensions,
-and six AutoFit CSS tokens. It lets long names, email addresses, organizations,
-roles, project names, and education metadata wrap inside their available space.
-Dates keep their own aligned column; bilingual bullets use natural start alignment.
-Printed continuation pages repeat the vertical gutter, and entry headings stay
-with their following content. Other themes and the shared renderer are unchanged.
+Modern Navy uses a conventional, single-column resume hierarchy: a stacked name
+and target role, plain organization headings with subordinate role lines, aligned
+dates, round hanging bullets, and thin rules below section labels. Navy is reserved
+for the name and section labels; body text uses one familiar sans-serif family.
+The default body size is 13.333px (10pt), with 14mm side margins. Shaded organization
+bands, left rails, section pins, ornamental serif dates and project/code badges
+have been removed. Safety warnings for unresolved facts remain visible.
+
+The theme still preserves all factual content, A4 dimensions, six AutoFit tokens,
+long-field wrapping, and repeatable print gutters. Existing AutoFit may select a
+smaller profile for dense input; this change does not alter its ladder or the
+shared renderer. Theme-scoped overrides are necessary for that renderer's inline
+presentation defaults. Other themes are unchanged.
+
+Design references: [MIT CAPD master's sample](https://cdn.uconnectlabs.com/wp-content/uploads/sites/123/2025/05/MITCAPD-MastersII.pdf)
+and [Harvard's bullet resume template](https://cdn-careerservices.fas.harvard.edu/wp-content/uploads/sites/161/2024/07/resume-bullets.pdf).
+These inform the typography-led hierarchy, plain entries, and hanging bullets;
+this is not a reproduction or a claim of guaranteed ATS acceptance.
 
 ## Reproduce the visual comparison
 
@@ -32,7 +44,7 @@ rewrites either input tree, or fetches a baseline. Each baseline/current HTML is
 created in a separate Python interpreter importing that tree's actual
 `ResumeViewModel`, `HtmlThemeRenderer`, and applicable layout/AutoFit code.
 
-The ten paired fixtures cover:
+The twelve paired fixtures cover:
 
 - Short bilingual resumes with and without a reserved photo slot
 - Long names, unbroken email/organization/project strings and education metadata,
@@ -45,6 +57,10 @@ The ten paired fixtures cover:
 - A short resume through the real `ResumeBuilder.build_html_theme` production path,
   tracing the BrowserRenderer measurement API, the layout solver, and AutoFit; the returned
   HTML/PDF paths are checked and that actual PDF is inspected
+
+- Two realistic, medium-density bilingual resumes through that same production
+  builder, with and without a photo slot, each containing two work entries and
+  two projects. These support aesthetic review alongside the extreme fixtures.
 
 This exercises the renderer, all six AutoFit variables, solver print CSS, and the
 production builder pipeline. The builder measurement API can fall back to a PDF

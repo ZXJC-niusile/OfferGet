@@ -5,39 +5,34 @@
   <title>Resume - Modern Corporate Theme</title>
   <style>
     :root {
-      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-
-      /* Executive Emerald Teal Palette */
-      --color-primary: #0F5156;         /* Deep Emerald Teal */
-      --color-primary-light: #166534;   /* Forest Green Accent */
-      --color-accent: #0284C7;          /* Sky Blue */
-      --color-text: #1E293B;            /* Slate Black */
-      --color-muted: #64748B;           /* Cool Gray */
-      --color-border: #E2E8F0;          /* Clean Line */
-      --color-bg-card: #F8FAFC;        /* Subtle Card Background */
+      /* One familiar, locally available family throughout the resume. */
+      --font-sans: Arial, "Helvetica Neue", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SF Mono", Menlo, Consolas, monospace;
+      --color-primary: #0F5156;
+      --color-primary-dark: #202830;
+      --color-accent: #394956;
+      --color-text: #202830;
+      --color-muted: #4A5660;
+      --color-border: #A8B3BD;
       --color-todo-bg: #FEF3C7;
       --color-todo-text: #92400E;
 
-      /* Dynamic Layout Tokens for Auto-Fit Compaction Engine */
-      --page-padding-y: 8.8mm;
-      --page-padding-x: 10.8mm;
-      --body-font-size: 11.6px;
-      --body-line-height: 1.58;
-      --item-gap: 4.4px;
-      --section-gap: 10.2px;
+      /* Keep all six tokens editable by the existing AutoFit engine. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.5;
+      --item-gap: 4px;
+      --section-gap: 15px;
     }
 
     @page {
       size: A4 portrait;
-      margin: 0;
+      /* Repeat the vertical gutter on every printed page. */
+      margin: var(--page-padding-y) 0;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: var(--font-sans);
@@ -56,155 +51,163 @@
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
       background: #FFFFFF;
-      position: relative;
     }
 
-    /* Executive Header */
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 2px solid var(--color-primary);
-      padding-bottom: 7px;
-      margin-bottom: var(--section-gap);
-    }
+    a { color: inherit; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+    .en, .num, .metric { font-variant-numeric: tabular-nums; }
+
+    /* The shared renderer has inline presentation defaults. Narrow overrides
+       below change only this theme, leaving its content and other themes intact. */
+    header { padding-bottom: 9px !important; }
+    header > div:first-child { min-width: 0; }
 
     .header-top {
       display: flex;
-      align-items: baseline;
+      flex-wrap: wrap;
+      align-items: baseline !important;
       justify-content: space-between;
+      gap: 3px 14px;
     }
-
-    h1 {
-      font-size: 23px;
-      font-weight: 700;
-      color: var(--color-primary);
-      letter-spacing: -0.3px;
+    .header-top > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
+    h1 { font-size: 25px !important; font-weight: 700; color: var(--color-primary); line-height: 1.2; }
+    .header-top > span { font-weight: 400 !important; font-size: 0.96em !important; }
 
     .contacts {
       display: flex;
-      gap: 10px;
-      font-size: 11.2px;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 3px 8px !important;
+      font-size: 0.92em !important;
       color: var(--color-muted);
-      margin-top: 4px;
     }
-
-    .contacts a {
-      color: var(--color-primary);
-      text-decoration: none;
+    .contacts span {
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      align-items: baseline;
     }
+    .contacts a { min-width: 0; overflow-wrap: anywhere; }
+    .headline, .lead { font-weight: 400; margin-top: 4px; overflow-wrap: anywhere; }
 
-    /* Section Headers with Accent Badge */
+    /* A restrained teal label and white space distinguish this business theme. */
     .section-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      display: block;
       margin-top: var(--section-gap);
       margin-bottom: 5px;
+      padding-bottom: 0;
     }
+    h2 { font-size: 1.05em; font-weight: 700; color: var(--color-primary); letter-spacing: 0.65px; text-transform: uppercase; }
+    .rule { display: none; }
 
-    .section-header h2 {
-      font-size: 13.2px;
-      font-weight: 700;
-      color: var(--color-primary);
-      letter-spacing: 0.3px;
-      text-transform: uppercase;
-      white-space: nowrap;
-    }
-
-    .section-header .rule {
-      flex: 1;
-      height: 1.2px;
-      background: linear-gradient(to right, var(--color-primary), var(--color-border));
-    }
-
-    /* Organization Bars with Clean Outline */
+    /* Compact, plain-text entry headings; long titles wrap before the date. */
     .org-bar {
       display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
       justify-content: space-between;
       align-items: baseline;
-      background: var(--color-bg-card);
-      border-left: 3px solid var(--color-primary);
-      padding: 3.5px 8px;
-      border-radius: 2px;
-      margin-top: var(--item-gap);
-      margin-bottom: 3.5px;
+      background: transparent;
+      border: 0;
+      padding: 0;
     }
-
-    .org-title {
-      font-size: 12.4px;
+    .org-left {
+      display: flex;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      min-width: 0;
+      align-items: baseline !important;
+      gap: 2px 8px !important;
+    }
+    .org-left > *,
+    .project-header > div:first-child > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    .org-title,
+    .project-header > div:first-child > span:first-child {
+      font-size: 1em !important;
       font-weight: 700;
-      color: var(--color-text);
     }
-
-    .org-role {
-      font-size: 11.6px;
-      font-weight: 600;
-      color: var(--color-primary);
-      margin-left: 6px;
+    .org-role,
+    .project-header > div:first-child > span + span {
+      font-size: 0.96em !important;
+      font-weight: 400 !important;
+      color: var(--color-text) !important;
     }
-
-    .org-right {
-      font-size: 10.8px;
+    .org-right,
+    .project-header > div:last-child {
+      flex: 0 0 auto;
+      max-width: 100%;
+      margin-left: auto;
+      white-space: nowrap;
+      font-size: 0.9em !important;
+      font-variant-numeric: tabular-nums;
       color: var(--color-muted);
-      font-family: var(--font-mono);
     }
-
-    ul {
-      list-style: none;
-      padding-left: 0;
-      margin-top: 2px;
-      margin-bottom: 4px;
+    .project-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
+      justify-content: space-between;
+      align-items: baseline;
     }
+    .project-header > div:first-child {
+      display: flex;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      min-width: 0;
+      align-items: baseline !important;
+      gap: 2px 8px !important;
+    }
+    .edu-grid { column-gap: 10px; font-size: 0.92em !important; }
+    .edu-grid > div,
+    #skills li > span { min-width: 0; overflow-wrap: anywhere; }
+    h3 { font-size: 1em; font-weight: 700; }
+    .project-tag { font-size: 0.96em; color: var(--color-muted); }
 
+    /* Standard hanging bullets; wrapped lines share one clean text edge. */
+    ul { list-style: disc; padding-left: 17px; }
     li {
-      position: relative;
-      padding-left: 14px;
+      padding-left: 1px;
       margin-bottom: var(--item-gap);
-      font-size: var(--body-font-size);
-      line-height: var(--body-line-height);
+      text-align: start;
+      overflow-wrap: anywhere;
     }
+    li::marker { color: var(--color-text); font-size: 0.85em; }
+    li.sub { margin-left: 14px; list-style-type: circle; }
+    #skills li { padding-left: 0; font-size: 1em !important; flex-wrap: wrap; }
+    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
+    b, strong { color: var(--color-text); font-weight: 700; }
 
-    li::before {
-      content: "▪";
-      position: absolute;
-      left: 2px;
-      color: var(--color-primary);
-      font-size: 8.5px;
-    }
-
-    b, strong {
-      color: var(--color-primary);
-      font-weight: 700;
-    }
-
-    .num, .metric {
-      font-weight: 600;
-      color: var(--color-primary);
-    }
-
-    .edu-grid {
-      display: grid;
-      row-gap: 3px;
-      font-size: 11.2px;
-      color: var(--color-muted);
-      padding: 2px 4px;
-    }
-
-    .skill-category {
-      font-weight: 700;
-      color: var(--color-primary);
-      margin-right: 6px;
-    }
-
+    /* Unresolved facts must remain visibly marked; this is not a resume badge. */
     .todo {
       background-color: var(--color-todo-bg);
       color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
+      padding: 0 3px;
       border: 1px dashed var(--color-todo-text);
       font-weight: 600;
+    }
+
+    @media print {
+      .page {
+        /* Page margins own vertical padding, including continuation pages. */
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      header, .section-header, .org-bar, .project-header {
+        break-inside: avoid;
+        break-after: avoid;
+      }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
     }
   </style>
 </head>

@@ -2,7 +2,7 @@
 
 Run with a git-archived baseline, never a user's resume. This script intentionally
 requires real Playwright/Chromium and PyMuPDF; it does not replace a missing browser
-with mocked screenshots or pass an unchecked layout. See docs/MODERN_NAVY_LAYOUT.md.
+with mocked screenshots or pass an unchecked layout. See docs/RESUME_THEME_QA.md.
 """
 
 from __future__ import annotations
@@ -21,7 +21,30 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-THEME = Path("themes/modern-navy.html")
+DEFAULT_THEME = "modern-navy"
+THEMES = ("modern-navy", "modern-corporate", "classic-tech", "silicon-clean",
+          "asu-dense", "sidebar-clean", "academic-postgraduate", "engineering-sb2nov")
+
+
+def theme_path(theme=DEFAULT_THEME):
+    if theme not in THEMES:
+        raise ValueError(f"Unsupported HTML theme: {theme}")
+    return Path("themes") / f"{theme}.html"
+
+
+def changed_themes(paths):
+    """Select actual edited themes; renderer changes must exercise every theme."""
+    paths = set(paths)
+    rendering_sources = {"core/resume_view_model.py", "core/resume_builder.py",
+                         "core/browser_renderer.py", "core/autofit.py", "core/layout_solver.py"}
+    if paths & rendering_sources:
+        return list(THEMES)
+    selected = {theme for theme in THEMES if theme_path(theme).as_posix() in paths}
+    harness_sources = {"scripts/qa_modern_navy_layout.py", "tests/test_resume_theme_qa.py",
+                       "tests/test_modern_navy_layout.py", ".github/workflows/resume-visual.yml"}
+    if paths & harness_sources or not selected:
+        selected.add(DEFAULT_THEME)
+    return [theme for theme in THEMES if theme in selected]
 
 # Run the same public rendering API in separate interpreters and source trees.
 # -I plus an explicit root avoids importing the current tree for the baseline.
@@ -37,7 +60,7 @@ request = json.load(sys.stdin)
 vm = ResumeViewModel.from_profile(request['profile'], reserve_photo=request['photo'] == 'reserved')
 if request['photo'] == 'embedded':
     vm.photo_data_uri = request['photo_data_uri']
-html = HtmlThemeRenderer().render(vm, 'modern-navy', template_dir=root / 'themes')
+html = HtmlThemeRenderer().render(vm, request.get('theme', 'modern-navy'), template_dir=root / 'themes')
 if request['mode'] == 'compact':
     # Token application is browser-independent; rendering is performed below.
     html = AutoFitEngine(renderer=object()).apply_profile_to_html(html, TUNING_LADDER[-1])
@@ -80,7 +103,7 @@ try:
     trace['browserPath'] = str(renderer.browser_path)
     builder = ResumeBuilder(request['profile'], template_dir=root / 'themes',
                             renderer=renderer, autofit_engine=MeasuredAutoFit(renderer))
-    result = builder.build_html_theme('modern-navy', output,
+    result = builder.build_html_theme(request.get('theme', 'modern-navy'), output,
         photo=request['photo'] == 'reserved', pages='auto', autofit=True,
         adaptive_fill=True, diff_ledger=False)
     print(json.dumps({'html': str(result['html']), 'pdf': str(result['pdf']), 'trace': trace}))
@@ -112,7 +135,8 @@ MEASURE = r'''() => {
   }
   const overlaps = [];
   const selectors = ['header', '.header-top', '.contacts', '.org-bar', '.org-left',
-    '.project-header', '.project-header > div:first-child', '.edu-grid', '#skills li'];
+    '.project-header', '.project-header > div:first-child', '.edu-grid', '#skills li',
+    '.exam-target-bar', '.exam-score-table tr'];
   for (const selector of selectors) {
     for (const parent of document.querySelectorAll(selector)) {
       const children = [...parent.children].filter(el => el.getBoundingClientRect().width);
@@ -129,7 +153,7 @@ MEASURE = r'''() => {
   const anchors = [...document.querySelectorAll(
     'h1, .header-top > span, .contacts > span, .org-title, .org-role, .org-right, '+
     '.project-header > div:first-child > span, .project-header > div:last-child, '+
-    '.edu-grid > div, li')].map(el=>el.textContent.trim()).filter(Boolean);
+    '.edu-grid > div, .exam-target-bar > span, .exam-score-table th, .exam-score-table td, li')].map(el=>el.textContent.trim()).filter(Boolean);
   return {pageWidth:box.width, contentWidth:right-left,
           bodyFontPx:parseFloat(getComputedStyle(document.body).fontSize),
           lineHeight:getComputedStyle(document.body).lineHeight,
@@ -189,7 +213,7 @@ def synthetic_photo():
     return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
 
 
-def fixtures():
+def fixtures(theme=DEFAULT_THEME):
     """All names, organizations, contacts and claims here are fabricated QA data."""
     short = {
         "name": "林示例 Alex Lin", "intent": "平台工程师 / Platform Engineer",
@@ -247,6 +271,59 @@ def fixtures():
                    "photo_data_uri": synthetic_photo(), "mode": "raw", "max_pages": 2})
     result.append({"name": "production-reserved", "profile": short, "photo": "reserved",
                    "mode": "builder", "max_pages": 1})
+    # Ordinary-length bilingual content complements pathological overflow tests.
+    # All organizations, contacts, dates and achievements are fabricated QA data.
+    professional = json.loads(json.dumps(short))
+    professional["experience"] = [
+        {"company": "示例云平台 / Example Cloud", "role": "后端工程师 / Backend Engineer",
+         "time": "2022.07 - 2025.06", "bullets": [
+             "维护订单服务的 Python 接口，补充输入校验与错误处理。 Maintained Python APIs for the order service and added request validation.",
+             "为发布流程建立回归检查，记录验证步骤与回滚条件。 Added release regression checks with documented validation and rollback steps.",
+             "与产品和支持团队复盘用户反馈，修复可重现的问题。 Worked with product and support teams to reproduce and resolve reported issues."]},
+        {"company": "示例软件工作室 / Example Software", "role": "软件工程师 / Software Engineer",
+         "time": "2020.07 - 2022.06", "bullets": [
+             "开发内部数据查询工具，为运营同事提供统一的检索入口。 Built an internal data lookup tool for the operations team.",
+             "整理 SQL 查询与数据字段说明，补充常见问题排查文档。 Documented SQL queries, data fields, and common troubleshooting steps.",
+             "参与代码评审与单元测试维护，跟进缺陷直到验证完成。 Reviewed code, maintained unit tests, and verified defect fixes."]},
+    ]
+    professional["campus_experience"] = [
+        {"name": "服务运行手册 / Service Runbooks", "role": "维护者 / Maintainer",
+         "time": "2023.03 - 2024.12", "bullets": [
+             "汇总值班流程与故障处理步骤，使用测试环境验证操作顺序。 Organized on-call procedures and verified recovery steps in a test environment.",
+             "补充检索索引与更新记录，方便团队定位相关说明。 Added a search index and change log for shared operational documentation."]},
+        {"name": "开源数据工具 / Open Data Tools", "role": "贡献者 / Contributor",
+         "time": "2019.09 - 2020.06", "bullets": [
+             "为 CSV 导入流程添加格式检查，并编写中英文使用示例。 Added CSV format checks and bilingual usage examples.",
+             "整理社区报告的边界情况，补充对应回归测试。 Converted reported edge cases into repeatable regression tests."]},
+    ]
+    for photo in ("none", "reserved"):
+        result.append({"name": f"professional-{photo}", "profile": professional,
+                       "photo": photo, "mode": "builder", "max_pages": 2})
+    if theme == "academic-postgraduate":
+        for long_exam in (False, True):
+            academic = json.loads(json.dumps(short))
+            academic["intent"] = "计算机科学硕士 / MSc Computer Science"
+            academic["postgraduate_exam"] = {
+                "target_school": "示例大学 / Example University",
+                "target_major": "计算机科学与技术 / Computer Science",
+                "direction": "可信软件 / Reliable Software",
+                "scores": {"思想政治理论": "72", "英语（一）": "78", "数学（一）": "125", "计算机学科基础": "120"},
+                "total_score": "395",
+            }
+            if long_exam:
+                academic["postgraduate_exam"].update({
+                    "target_school": "InternationalInstituteOfAdvancedComputingAndInterdisciplinaryResearch" * 2,
+                    "direction": "分布式系统的形式化验证与可信软件研究 / Formal Verification of Distributed Systems",
+                    "scores": {"思想政治理论 / Political Theory": "72", "英语（一） / Academic English": "78",
+                               "AdvancedMathematicsAndStatisticalMethods" * 2: "125",
+                               "计算机学科专业基础综合 / Computer Science Foundations": "120"},
+                })
+            for photo in ("none", "reserved"):
+                label = "long" if long_exam else "normal"
+                result.append({"name": f"exam-{label}-{photo}", "profile": academic,
+                               "photo": photo, "mode": "builder", "max_pages": 2})
+    for case in result:
+        case["theme"] = theme
     return result
 
 
@@ -299,9 +376,9 @@ def render_production(root, case, output):
     return Path(returned["html"]).read_text(encoding="utf-8"), returned
 
 
-def validate_paths(baseline, output):
+def validate_paths(baseline, output, theme=DEFAULT_THEME):
     baseline, output = baseline.resolve(), output.resolve()
-    if not (baseline / THEME).is_file() or not (baseline / "core/resume_view_model.py").is_file():
+    if not (baseline / theme_path(theme)).is_file() or not (baseline / "core/resume_view_model.py").is_file():
         raise ValueError("--baseline-root must contain an isolated OfferGet source tree")
     if baseline == ROOT or ROOT in baseline.parents:
         raise ValueError("Baseline must be isolated outside the current source tree")
@@ -377,12 +454,12 @@ def final_failures(metrics, case):
     return failures
 
 
-def run(baseline, output):
-    report = {"syntheticDataOnly": True, "baselineRevision": os.environ.get("BASELINE_SHA") or revision(baseline),
+def run(baseline, output, theme=DEFAULT_THEME):
+    report = {"theme": theme, "syntheticDataOnly": True, "baselineRevision": os.environ.get("BASELINE_SHA") or revision(baseline),
               "currentRevision": os.environ.get("GITHUB_SHA") or revision(ROOT),
               "requestedHeadRevision": os.environ.get("QA_HEAD_SHA"),
-              "baselineTemplateHash": digest((baseline / THEME).read_text(encoding="utf-8")),
-              "currentTemplateHash": digest((ROOT / THEME).read_text(encoding="utf-8")),
+              "baselineTemplateHash": digest((baseline / theme_path(theme)).read_text(encoding="utf-8")),
+              "currentTemplateHash": digest((ROOT / theme_path(theme)).read_text(encoding="utf-8")),
               "fixtures": [], "failures": []}
     try:
         from importlib.metadata import version
@@ -394,7 +471,7 @@ def run(baseline, output):
             browser = playwright.chromium.launch(headless=True)
             report["browserVersion"] = browser.version
             context = browser.new_context(viewport={"width": 1000, "height": 1200}, device_scale_factor=1)
-            for case in fixtures():
+            for case in fixtures(theme):
                 pair = {"name": case["name"], "mode": case["mode"], "photo": case["photo"]}
                 html, production = {}, {}
                 for phase, root in (("before", baseline), ("after", ROOT)):
@@ -455,14 +532,15 @@ def run(baseline, output):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--theme", choices=THEMES, default=DEFAULT_THEME)
     parser.add_argument("--baseline-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        baseline, output = validate_paths(args.baseline_root, args.output_dir)
+        baseline, output = validate_paths(args.baseline_root, args.output_dir, args.theme)
     except ValueError as exc:
         parser.error(str(exc))
-    report = run(baseline, output)
+    report = run(baseline, output, args.theme)
     if report["failures"]:
         print("\n".join(report["failures"]), file=sys.stderr)
         return 1

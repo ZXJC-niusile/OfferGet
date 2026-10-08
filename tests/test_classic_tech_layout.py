@@ -85,3 +85,28 @@ def test_renderer_inline_styles_cannot_restore_colored_role_or_skill_chips():
 def test_heading_hierarchy_scales_with_production_body_type():
     assert "font-size: 1.08em;" in TEMPLATE
     assert "font-size: 1em !important;" in TEMPLATE
+
+
+@pytest.mark.parametrize("label", [
+    "ReliabilityAndInfrastructureEngineering" * 7,
+    "跨区域分布式基础设施可靠性与研发协作能力" * 9,
+])
+def test_unbroken_skill_labels_and_long_dates_preserve_all_text(label):
+    profile = copy.deepcopy(fixtures()[0]["profile"])
+    profile["skills"] = {label: "Synthetic Python, SQL, Linux capability list"}
+    long_date = "2020.07 – present / " + "SyntheticDateQualifier" * 5
+    profile["experience"][0]["time"] = long_date
+    vm = ResumeViewModel.from_profile(profile)
+    rendered = HtmlThemeRenderer().render(vm, "classic-tech", template_content=TEMPLATE)
+    assert label in text_content(rendered)
+    assert long_date in text_content(rendered)
+    assert "white-space: normal !important;" in TEMPLATE
+    date_rule = re.search(r"\.org-right, \.project-header > div:last-child\s*\{([^}]+)\}", TEMPLATE)
+    assert "overflow-wrap: anywhere;" in date_rule.group(1)
+    assert "max-width: 100%;" in date_rule.group(1)
+
+
+def test_default_type_and_gutters_are_readable_before_autofit():
+    assert "--body-font-size: 13.333px;" in TEMPLATE
+    assert "--page-padding-x: 14mm;" in TEMPLATE
+    assert "--page-padding-y: 12.7mm;" in TEMPLATE
