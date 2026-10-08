@@ -109,6 +109,7 @@ class ResumeBuilder:
         autofit_engine: Optional[AutoFitEngine] = None,
         photo_path: Optional[Union[str, Path]] = None,
         anonymize: Optional[str] = None,
+        photo_mode: Optional[str] = None,
     ):
         if isinstance(profile_or_path, (str, Path)):
             p_path = Path(profile_or_path).resolve()
@@ -129,9 +130,10 @@ class ResumeBuilder:
 
         self.raw_profile = raw_data
         self.anonymize = anonymize
+        self.photo_mode = photo_mode
         self.photo_path = Path(photo_path).resolve() if photo_path else None
         self.deanon_map: Dict[str, str] = {}
-        self._vm_cache: Dict[Tuple[str, Optional[str], bool], ResumeViewModel] = {}
+        self._vm_cache: Dict[tuple, ResumeViewModel] = {}
 
         if hasattr(profile_or_path, "normalized_profile") and not anonymize:
             self.profile = copy.deepcopy(profile_or_path.normalized_profile)
@@ -146,11 +148,14 @@ class ResumeBuilder:
 
         self.html_renderer = HtmlThemeRenderer()
         self.ats_renderer = AtsPlainRenderer()
-        self.view_model: ResumeViewModel = self._get_view_model(
-            self.profile,
-            photo_path=self.photo_path,
-            reserve_photo=True,
-        )
+        self._view_model: Optional[ResumeViewModel] = None
+
+    @property
+    def view_model(self) -> ResumeViewModel:
+        # Do not open a constructor/profile photo before a later no-photo build.
+        if self._view_model is None:
+            self._view_model = self._get_view_model(self.profile, reserve_photo=True)
+        return self._view_model
 
     @property
     def renderer(self) -> BrowserRenderer:
@@ -179,7 +184,7 @@ class ResumeBuilder:
         reserve_photo: bool = True,
     ) -> ResumeViewModel:
         """Retrieves cached ResumeViewModel or constructs and caches a new one."""
-        eff_photo_path = str(photo_path) if photo_path else (str(self.photo_path) if self.photo_path else None)
+        eff_photo_path = (str(photo_path) if photo_path else (str(self.photo_path) if self.photo_path else None)) if reserve_photo and self.photo_mode != "no-photo" else None
 
         # 1. If no profile passed or self.profile passed: it is ALREADY normalized by ResumeBuilder.__init__
         if profile is None or profile is self.profile:
@@ -195,7 +200,7 @@ class ResumeBuilder:
             raw_p = profile if isinstance(profile, dict) else getattr(self, "raw_profile", None)
 
         profile_fp = _compute_profile_fingerprint(norm_profile)
-        cache_key = (profile_fp, eff_photo_path, reserve_photo)
+        cache_key = (profile_fp, eff_photo_path, reserve_photo, self.photo_mode)
         if cache_key in self._vm_cache:
             return self._vm_cache[cache_key]
 
@@ -204,6 +209,7 @@ class ResumeBuilder:
             photo_path=eff_photo_path,
             reserve_photo=reserve_photo,
             raw_profile=raw_p,
+            photo_mode=self.photo_mode,
         )
         self._vm_cache[cache_key] = vm
         return vm
@@ -448,8 +454,6 @@ class ResumeBuilder:
 
         tex_src = self.academic_exporter.generate_latex(
             vm,
-            reserve_photo=photo,
-            photo_path=eff_photo_path,
             lang=lang,
             section_titles=section_titles,
         )
@@ -458,8 +462,6 @@ class ResumeBuilder:
 
         html_src = self.academic_exporter.generate_latex_html_preview(
             vm,
-            reserve_photo=photo,
-            photo_path=eff_photo_path,
             photo_size=photo_size,
             photo_width=photo_width,
             photo_height=photo_height,
@@ -496,19 +498,15 @@ class ResumeBuilder:
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        typ_photo = eff_photo_path
-        if eff_photo_path and Path(eff_photo_path).is_file():
-            import shutil
-            try:
-                dest_photo = out_dir / Path(eff_photo_path).name
-                if dest_photo.resolve() != Path(eff_photo_path).resolve():
-                    shutil.copy2(eff_photo_path, dest_photo)
-                typ_photo = dest_photo.name
-            except Exception:
-                typ_photo = eff_photo_path
-
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
-        typ_src = self.academic_exporter.generate_typst(vm, reserve_photo=photo, photo_path=typ_photo)
+        photo_reference = None
+        if vm.photo_path:
+            import shutil
+            dest_photo = out_dir / Path(vm.photo_path).name
+            if dest_photo.resolve() != Path(vm.photo_path).resolve():
+                shutil.copy2(vm.photo_path, dest_photo)
+            photo_reference = dest_photo.name
+        typ_src = self.academic_exporter.generate_typst(vm, photo_reference=photo_reference)
         typ_path = out_dir / "resume_academic_typst.typ"
         actual_typ_path = Path(write_text_atomic(typ_src, typ_path))
 
@@ -521,8 +519,6 @@ class ResumeBuilder:
         if not compiled or not Path(actual_compiled_pdf).exists():
             html_src = self.academic_exporter.generate_latex_html_preview(
                 vm,
-                reserve_photo=photo,
-                photo_path=eff_photo_path,
                 lang="zh",
             )
             html_path = out_dir / "resume_academic_typst.html"
@@ -594,9 +590,12 @@ class ResumeBuilder:
                 anonymize=anonymize,
             )
         elif theme_normalized in ("ats-docx", "docx"):
+            if photo and (self.photo_mode or self.profile.get("candidate", {}).get("photo_mode")) in ("photo", "placeholder"):
+                raise ValueError("ats-docx supports no-photo only; choose an HTML or academic theme for a photo variant")
             res = self.build_ats_docx(
                 output_dir,
                 anonymize=anonymize,
+                photo=photo,
             )
         else:
             raise ValueError(f"Unknown resume theme '{theme}'. Choices: {self.THEMES}")
@@ -633,13 +632,16 @@ class ResumeBuilder:
         self,
         output_dir: Union[str, Path],
         anonymize: Optional[str] = None,
+        photo: Optional[bool] = None,
     ) -> Dict[str, Path]:
         """Builds ATS-friendly single-column Word (.docx) resume."""
         from core.ats_docx_renderer import AtsDocxRenderer
         out_dir = Path(output_dir).resolve()
         out_dir.mkdir(parents=True, exist_ok=True)
         prof = self._resolve_profile(anonymize)
-        vm = self._get_view_model(profile=prof)
+        if photo is not False and (self.photo_mode or self.profile.get("candidate", {}).get("photo_mode")) in ("photo", "placeholder"):
+            raise ValueError("ats-docx supports no-photo only; choose an HTML or academic theme for a photo variant")
+        vm = self._get_view_model(profile=prof, reserve_photo=False)
         docx_path = out_dir / "resume_ats.docx"
         actual_docx = AtsDocxRenderer().render(vm, docx_path)
         return {"docx": Path(actual_docx)}

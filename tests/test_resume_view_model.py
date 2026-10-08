@@ -13,6 +13,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from PIL import Image
 from pathlib import Path
 
 from core.resume_view_model import (
@@ -121,14 +122,9 @@ class TestResumeViewModel(unittest.TestCase):
             },
         }
 
-        # 1x1 valid PNG image
-        self.dummy_png = (
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
-            b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00"
-            b"\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
-        )
         self.sample_photo_path = self.test_dir / "candidate_photo.png"
-        self.sample_photo_path.write_bytes(self.dummy_png)
+        Image.new("RGB", (12, 16), "#336699").save(self.sample_photo_path)
+        self.dummy_png = self.sample_photo_path.read_bytes()
 
     def tearDown(self):
         if self.test_dir.exists():
@@ -339,12 +335,12 @@ class TestResumeViewModel(unittest.TestCase):
         html_2 = renderer_html.render(vm_photo, "modern-navy")
         self.assertIn("photo-placeholder", html_2)
         self.assertIn("<img src=\"data:image/png;base64,", html_2)
-        self.assertIn("onerror=", html_2)
-        self.assertIn("预留证件照", html_2)  # Fallback div present
+        self.assertNotIn("onerror=", html_2)
+        self.assertNotIn("预留证件照", html_2)  # No silent real-photo downgrade
 
         ats_html_2 = renderer_ats.render_html(vm_photo)
         self.assertIn("<img src=\"data:image/png;base64,", ats_html_2)
-        self.assertIn("onerror=", ats_html_2)
+        self.assertNotIn("onerror=", ats_html_2)
 
         ats_md_2 = renderer_ats.render_markdown(vm_photo)
         self.assertIn(str(self.sample_photo_path), ats_md_2)
@@ -537,7 +533,7 @@ class TestAcademicExporter(unittest.TestCase):
         self.assertIn("预留证件照", tex_photo)
 
         dummy_img = self.test_dir / "avatar.jpg"
-        dummy_img.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 10)
+        Image.new("RGB", (12, 16), "#336699").save(dummy_img)
         tex_with_img = self.exporter.generate_latex(self.sample_profile, reserve_photo=True, photo_path=dummy_img)
         self.assertIn(r"\includegraphics", tex_with_img)
         self.assertIn("avatar.jpg", tex_with_img)
@@ -560,7 +556,7 @@ class TestAcademicExporter(unittest.TestCase):
         self.assertIn("预留证件照", typ_rect)
 
         dummy_img = self.test_dir / "photo.png"
-        dummy_img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 10)
+        Image.new("RGB", (12, 16), "#336699").save(dummy_img)
         typ_img = self.exporter.generate_typst(self.sample_profile, reserve_photo=True, photo_path=dummy_img)
         self.assertIn("#image(", typ_img)
         self.assertIn("photo.png", typ_img)

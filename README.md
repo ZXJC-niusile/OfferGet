@@ -230,6 +230,16 @@ New-Item -ItemType Junction -Path "$HOME\.agents\skills\offerget" -Target "C:\ab
 
 ---
 
+### 有照片版 / 无照片版
+
+新版 CLI 默认生成无照片版，不留空白照片框。使用同一份资料和同一个主题，
+分别指定 `--photo-mode no-photo` 与 `--photo-mode photo --photo-path candidate.png`，
+并写到不同输出目录，即可得到内容一致的两个版本。
+`--no-photo` 继续可用；`--photo-mode placeholder` 仅用于明确要求的占位预览。
+照片缺失或文件无效会直接报错，不会悄悄替换成空框。
+目前 `ats-docx` 仅支持无照片版；真实照片的原生 LaTeX 导出请用 PNG/JPEG。
+详见[照片模式、输入字段与兼容性说明](docs/RESUME_PHOTO_MODES.md)。
+
 ## 🎨 简历排版画廊与主题生态 (12 种渲染主题)
 
 OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术升学与海外申请全场景：
