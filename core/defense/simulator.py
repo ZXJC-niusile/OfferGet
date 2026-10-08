@@ -187,7 +187,11 @@ class FollowUpRound:
 
 @dataclass
 class FollowUpChain:
-    """A realistic 3-round progressive follow-up interrogation chain targeting a weak spot."""
+    """Claim-targeted simulation rounds, also exported as ProjectInterrogationChain.
+
+    Keep this historical class name for module imports and pickle compatibility.
+    The package-level FollowUpChain instead names the separate question model.
+    """
     chain_id: str
     target_claim_id: str
     target_claim: str
@@ -203,6 +207,10 @@ class FollowUpChain:
         data = asdict(self)
         data["rounds"] = [r.to_dict() if isinstance(r, FollowUpRound) else r for r in self.rounds]
         return data
+
+
+# Descriptive public alias; preserve the historical class identity and pickle path.
+ProjectInterrogationChain = FollowUpChain
 
 
 @dataclass
@@ -227,7 +235,7 @@ class DefenseSimulationResult:
     scenario: str
     matrix: List[ClaimItem] = field(default_factory=list)
     high_risk_gaps: List[Dict[str, Any]] = field(default_factory=list)
-    follow_up_chains: List[FollowUpChain] = field(default_factory=list)
+    follow_up_chains: List[ProjectInterrogationChain] = field(default_factory=list)
     intensity_questions: List[Dict[str, str]] = field(default_factory=list)
     defensible_strategy: Dict[str, Any] = field(default_factory=dict)
     material_repairs: List[Dict[str, Any]] = field(default_factory=list)
@@ -1116,7 +1124,7 @@ class DefenseSimulator:
         high_risk_gaps: List[Dict[str, Any]],
         scenario: str,
         intensity: str
-    ) -> List[FollowUpChain]:
+    ) -> List[ProjectInterrogationChain]:
         """
         Generates realistic 3-round sequential follow-up interrogation chains
         for the top 3-5 weak spots:
@@ -1124,7 +1132,7 @@ class DefenseSimulator:
         - Round 2: 机制深挖 - 剥离依赖与选型替代 (Stripping dependencies, alternative challenge)
         - Round 3: 终局施压 - 极限工况/消融伪证/15分钟复现 (Edge case failure, clean reproduction)
         """
-        chains: List[FollowUpChain] = []
+        chains: List[ProjectInterrogationChain] = []
         roles = SCENARIO_ROLES.get(scenario, SCENARIO_ROLES[DEFAULT_SCENARIO])
         lead_role = roles[0]
 
@@ -1482,8 +1490,6 @@ def simulate_project_defense(
         return result.to_markdown()
     return result.to_dict()
 
-
-ProjectInterrogationChain = FollowUpChain
 
 __all__ = [
     "ARCHITECTURE_KEYWORDS",

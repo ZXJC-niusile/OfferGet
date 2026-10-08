@@ -43,7 +43,11 @@ class DefenseQuestion:
 
 @dataclass
 class FollowUpChain:
-    """A 2-4 layer progression of defense questions."""
+    """A 2-4 layer question progression; also exported as QuestionFollowUpChain.
+
+    The historical class name is retained for imports and pickle compatibility.
+    Simulator rounds use the separate ProjectInterrogationChain model.
+    """
     chain_type: QuestionChainType
     title: str
     questions: List[DefenseQuestion] = field(default_factory=list)
@@ -67,6 +71,10 @@ class FollowUpChain:
         }
 
 
+# Descriptive public alias; preserve the historical class identity and pickle path.
+QuestionFollowUpChain = FollowUpChain
+
+
 class DefenseQuestionChain:
     """
     Constructs role-aware follow-up chains from claims, materials, and identified weakness dimensions.
@@ -87,7 +95,7 @@ class DefenseQuestionChain:
         context_text: str = "",
         role: DefenseRole = DefenseRole.TECH_INTERVIEWER,
         num_layers: int = 3,
-    ) -> FollowUpChain:
+    ) -> QuestionFollowUpChain:
         """
         Generates a 2-4 layer question chain for the specified dimension.
         """
