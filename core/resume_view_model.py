@@ -888,195 +888,156 @@ class AtsPlainRenderer:
         return "\n".join(md_lines)
 
     def render_html(self, vm: ResumeViewModel) -> str:
-        """Renders single-column ATS clean HTML."""
+        """Render readable, linear HTML without changing the Markdown contract."""
         photo_box = ""
         if vm.photo_data_uri:
             src_attr = escape_html_attribute(vm.photo_data_uri)
             photo_box = f"""
-    <div style="width: 72px; height: 96px; border: none !important; outline: none !important; box-shadow: none !important; background: transparent; border-radius: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;" title="证件照">
-      <img src="{src_attr}" alt="证件照" style="max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; border:none !important; outline:none !important; box-shadow:none !important; display:block; image-rendering:-webkit-optimize-contrast;" />
-    </div>
-            """
+      <div class="photo" title="证件照">
+        <img src="{src_attr}" alt="证件照" />
+      </div>"""
         elif vm.reserve_photo:
             photo_box = """
-    <div style="width: 72px; height: 96px; border: 1.5px dashed #4b5563; background: #f9fafb; border-radius: 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; flex-shrink: 0;" title="预留证件照位置">
-      <span style="font-size: 8pt; color: #4b5563; line-height: 1.2;">预留证件照<br>一寸 / 二寸</span>
-    </div>
-            """
+      <div class="photo photo-reserved" title="预留证件照位置">
+        <span>预留证件照<br>一寸 / 二寸</span>
+      </div>"""
 
-        grid = vm.education_grid_rows
-        max_cols = max((len(r) for r in grid), default=1)
-        if max_cols >= 3:
-            col_template = "38% 28% 1fr"
-        elif max_cols == 2:
-            col_template = "45% 1fr"
-        else:
-            col_template = "1fr"
+        # Education remains in source order, but no longer depends on columns
+        # whose individual cells can collide or interleave in text extraction.
+        education_rows = []
+        for row in vm.education_grid_rows:
+            cells = [re.sub(r"\s*[｜|]\s*", " ", cell).strip() for cell in row]
+            education_rows.extend(f"<p>{cell}</p>" for cell in cells if cell)
 
-        grid_cells_html = []
-        for r in grid:
-            for i in range(max_cols):
-                cell_text = r[i] if i < len(r) else ""
-                cell_clean = re.sub(r"\s*[｜|]\s*", " ", cell_text).strip()
-                grid_cells_html.append(f'<div>{cell_clean}</div>')
-
-        title_div = (
-            f'<div style="font-size: 11pt; font-weight: bold; margin-bottom: 3pt;">求职意向：{vm.title}</div>'
-            if vm.title else ""
-        )
+        title_line = f'<p class="target-role">求职意向：{vm.title}</p>' if vm.title else ""
+        contacts = []
+        if vm.phone:
+            contacts.append(f"<span>电话：{vm.phone}</span>")
+        if vm.email:
+            contacts.append(f"<span>邮箱：{vm.email}</span>")
+        if vm.location:
+            contacts.append(f"<span>{vm.location}</span>")
+        contact_line = ' <span class="separator" aria-hidden="true">|</span> '.join(contacts)
 
         ats_html = f"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Resume - ATS Plain ({vm.name})</title>
   <style>
-    @page {{
-      size: A4 portrait;
-      margin: 10mm 12mm;
-    }}
-    * {{
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }}
+    @page {{ size: A4 portrait; margin: 15mm 16mm; }}
+    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{
-      font-family: Arial, Helvetica, "SimSun", sans-serif;
-      font-size: 9.8pt;
-      line-height: 1.46;
-      color: #000000;
-      background: #FFFFFF;
+      font-family: Arial, Helvetica, "Noto Sans CJK SC", "Microsoft YaHei", "SimSun", sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.48;
+      color: #171717;
+      background: #ffffff;
+      overflow-wrap: anywhere;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }}
-    .header {{
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 7pt;
-      border-bottom: 1pt solid #000000;
-      padding-bottom: 4pt;
-    }}
-    h1 {{
-      font-size: 18.5pt;
-      font-weight: bold;
-      margin: 0 0 2pt 0;
-    }}
-    .contact {{
-      font-size: 9.8pt;
-      color: #222222;
-    }}
+    .resume {{ max-width: 210mm; margin: 0 auto; padding: 15mm 16mm; }}
+    .header {{ display: flex; flex-wrap: wrap; gap: 10pt 16pt; margin-bottom: 14pt; }}
+    .identity {{ flex: 1 1 240px; min-width: 0; }}
+    h1 {{ font-size: 23pt; line-height: 1.18; font-weight: 700; margin-bottom: 5pt; }}
+    .target-role {{ font-size: 11pt; line-height: 1.4; margin-bottom: 5pt; }}
+    .contact {{ font-size: 9.5pt; line-height: 1.5; }}
+    .contact > span {{ overflow-wrap: anywhere; }}
+    .separator {{ padding: 0 2pt; }}
     h2 {{
-      font-size: 11.2pt;
-      font-weight: bold;
-      border-bottom: 0.8pt solid #333333;
-      padding-bottom: 1.5pt;
-      margin-top: 7pt;
-      margin-bottom: 3.5pt;
-      text-transform: uppercase;
+      font-size: 11.5pt; line-height: 1.35; font-weight: 700;
+      margin: 13pt 0 6pt; padding-bottom: 3pt; border-bottom: 0.6pt solid #737373;
+      break-after: avoid; page-break-after: avoid;
     }}
     .item-header {{
-      display: flex;
-      justify-content: space-between;
-      font-size: 10.2pt;
-      font-weight: bold;
-      margin-top: 4.5pt;
+      font-size: 10.5pt; line-height: 1.45; font-weight: 700; margin-top: 7pt;
+      break-after: avoid; page-break-after: avoid;
     }}
-    ul {{
-      margin: 2pt 0 4pt 0;
-      padding-left: 16pt;
+    .item-date {{
+      font-size: 9.5pt; line-height: 1.45; margin: 1pt 0 3pt;
+      break-after: avoid; page-break-after: avoid;
     }}
-    li {{
-      font-size: 9.8pt;
-      margin-bottom: 2.2pt;
-      text-align: justify;
-      line-height: 1.44;
+    .edu-grid, .exam-details {{ font-size: 10pt; line-height: 1.48; }}
+    .edu-grid p, .exam-details p {{ margin-top: 2pt; }}
+    ul {{ margin: 3pt 0 5pt; padding-left: 15pt; }}
+    li {{ margin-bottom: 3pt; padding-left: 1pt; text-align: left; orphans: 2; widows: 2; }}
+    p {{ orphans: 2; widows: 2; }}
+    .photo {{
+      width: 20mm; height: 26mm; flex: 0 0 20mm;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 8pt; line-height: 1.35; text-align: center;
     }}
+    .photo img {{ max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }}
+    .photo-reserved {{ border: 0.6pt dashed #737373; }}
+    @media screen and (max-width: 600px) {{ .resume {{ padding: 24px 20px; }} }}
+    @media print {{ .resume {{ max-width: none; margin: 0; padding: 0; }} }}
   </style>
 </head>
 <body>
-  <div class="header">
-      <div>
+  <main class="resume">
+    <header class="header">
+      <div class="identity">
         <h1>{vm.name}</h1>
-        {title_div}
-        <div class="contact">
-          电话：{vm.phone} &nbsp;|&nbsp; 邮箱：{vm.email} &nbsp;|&nbsp; {vm.location}
-        </div>
+        {title_line}
+        <p class="contact">{contact_line}</p>
       </div>
-    {photo_box}
-  </div>
+      {photo_box}
+    </header>
 """
         if vm.postgraduate_exam:
             pg = vm.postgraduate_exam
-            school = pg.get("target_school", "")
-            major = pg.get("target_major", "")
-            direction = pg.get("direction", "")
+            details = []
+            for key, label in (("target_school", "报考院校"), ("target_major", "报考专业"), ("direction", "研究方向")):
+                if pg.get(key):
+                    details.append(f"<p><b>{label}：</b>{pg[key]}</p>")
             subjects = pg.get("subjects", [])
-            total_score = pg.get("total_score", "")
+            score_parts = [f"{subject['name']}：{subject['score']}" for subject in subjects]
+            if pg.get("total_score"):
+                score_parts.append(f"总分：{pg['total_score']}")
+            if score_parts:
+                details.append(f"<p>初试成绩：{' | '.join(score_parts)}</p>")
+            ats_html += f"  <section><h2>报考信息</h2><div class='exam-details'>{''.join(details)}</div></section>\n"
 
-            target_items = []
-            if school:
-                target_items.append(f"<span><b>报考院校：</b>{school}</span>")
-            if major:
-                target_items.append(f"<span><b>报考专业：</b>{major}</span>")
-            if direction:
-                target_items.append(f"<span><b>研究方向：</b>{direction}</span>")
-
-            target_bar = f"  <div class='item-header' style='margin-bottom:3pt;'>{' &nbsp;&nbsp;&nbsp;&nbsp; '.join(target_items)}</div>\n" if target_items else ""
-
-            sub_items = []
-            for s in subjects:
-                sub_items.append(f"<span>{s['name']}：<b>{s['score']}</b></span>")
-            if total_score:
-                sub_items.append(f"<span>总分：<b>{total_score}</b></span>")
-
-            scores_bar = f"  <div style='font-size:9.5pt; line-height:1.4; margin-top:2pt; margin-bottom:3pt;'>初试成绩：{' &nbsp;|&nbsp; '.join(sub_items)}</div>\n" if sub_items else ""
-
-            ats_html += f"""  <h2>报考信息</h2>
-{target_bar}{scores_bar}"""
-
+        education_heading = " · ".join(value for value in (vm.edu_school, vm.edu_degree) if value)
+        education_title = f'<h3 class="item-header">{education_heading}</h3>' if education_heading else ""
+        education_date = f'<p class="item-date">{vm.edu_time}</p>' if vm.edu_time else ""
         ats_html += f"""
-  <h2>教育背景</h2>
-  <div class="item-header">
-    <span>{vm.edu_school} &nbsp;&nbsp;&nbsp;&nbsp; {vm.edu_degree}</span>
-    <span>{vm.edu_time}</span>
-  </div>
-  <div class="edu-grid" style="display:grid; grid-template-columns:{col_template}; row-gap:2pt; font-size:9.5pt; line-height:1.4; margin-top:2pt; margin-bottom:3pt;">
-    {"".join(grid_cells_html)}
-  </div>
+    <section>
+      <h2>教育背景</h2>
+      {education_title}
+      {education_date}
+      <div class="edu-grid">{''.join(education_rows)}</div>
+    </section>
 """
-        if vm.experiences:
-            ats_html += "  <h2>实习经历</h2>\n"
-            for exp in vm.experiences:
-                exp_org = exp.get("org", "")
-                role_label = exp.get("role_label") or exp.get("role", "")
-                exp_time = exp.get("time", "")
-                bullets = "".join([f"<li>{b}</li>" for b in exp.get("bullets", [])])
-                ats_html += f"""  <div class='item-header'><span>{exp_org} · {role_label}</span><span>{exp_time}</span></div>
-  <ul>{bullets}</ul>
-"""
-
-        if vm.projects:
-            ats_html += "  <h2>校园与实践经历</h2>\n"
-            for p in vm.projects:
-                p_name = p.get("name", "")
-                p_role = p.get("role", "")
-                p_time = p.get("time", "")
-                bullets = "".join([f"<li>{b}</li>" for b in p.get("bullets", [])])
-                ats_html += f"""  <div class='item-header'><span>{p_name} · {p_role}</span><span>{p_time}</span></div>
-  <ul>{bullets}</ul>
-"""
+        for title, entries, is_experience in (
+            ("实习经历", vm.experiences, True),
+            ("校园与实践经历", vm.projects, False),
+        ):
+            if not entries:
+                continue
+            ats_html += f"    <section><h2>{title}</h2>\n"
+            for entry in entries:
+                name = entry.get("org" if is_experience else "name", "")
+                role = (entry.get("role_label") or entry.get("role", "")) if is_experience else entry.get("role", "")
+                heading = " · ".join(value for value in (name, role) if value)
+                date = f'<p class="item-date">{entry["time"]}</p>' if entry.get("time") else ""
+                bullets = "".join(f"<li>{bullet}</li>" for bullet in entry.get("bullets", []))
+                ats_html += f"      <h3 class='item-header'>{heading}</h3>{date}\n"
+                if bullets:
+                    ats_html += f"      <ul>{bullets}</ul>\n"
+            ats_html += "    </section>\n"
 
         if vm.competencies:
-            ats_html += "  <h2>专业技能</h2>\n  <ul>"
-            for k, v in vm.competencies.items():
-                k_esc = escape_html_text(str(k))
-                val = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
-                val_esc = escape_html_text(val)
-                ats_html += f"<li><b>{k_esc}：</b>{val_esc}</li>"
-            ats_html += "</ul>\n"
+            ats_html += "    <section><h2>专业技能</h2>\n      <ul>"
+            for key, value in vm.competencies.items():
+                key_html = escape_html_text(str(key))
+                text = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
+                ats_html += f"<li><b>{key_html}：</b>{escape_html_text(text)}</li>"
+            ats_html += "</ul>\n    </section>\n"
 
-        ats_html += "</body>\n</html>"
+        ats_html += "  </main>\n</body>\n</html>"
         return ats_html
 
     def render(self, vm: ResumeViewModel) -> Dict[str, str]:
