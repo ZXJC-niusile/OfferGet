@@ -5,35 +5,25 @@
   <title>Resume - Modern Navy Theme</title>
   <style>
     :root {
-      /* Typography Stack - Modern Serif for Headings & Metric Numbers, Refined Sans for Body */
-      --font-serif: "Playfair Display", Georgia, "Times New Roman", "Songti SC", "Source Han Serif SC", serif;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-      --font-mono: "JetBrains Mono", "SF Mono", "Fira Code", Menlo, Consolas, monospace;
-      
-      /* Modern Navy Executive Color Palette */
-      --color-primary: #0F172A;          /* Deep Slate / Dark Navy (主色调 商务深藏蓝) */
-      --color-primary-light: #1E293B;    /* Navy Charcoal */
-      --color-accent: #0284C7;           /* Sky / Cerulean Blue (强调色 亮蓝) */
-      --color-accent-dark: #0369A1;      /* Deep Cerulean */
-      --color-accent-subtle: #E0F2FE;    /* Soft Sky Tint */
-      --color-text: #1E293B;             /* Primary Text */
-      --color-muted: #64748B;            /* Muted Slate Text */
-      --color-rule: #E2E8F0;             /* Delicate Section Rule Line */
-      --color-rule-accent: #0284C7;      /* Section Accent Pin */
-      --color-bg-bar: #F8FAFC;          /* Sophisticated Executive Band */
-      --color-bar-border: #E2E8F0;       /* Border for Org Band */
-      --color-code-bg: #F1F5F9;         /* Inline Code Background */
-      --color-code-border: #CBD5E1;     /* Inline Code Border */
-      --color-todo-bg: #FEF3C7;          /* Warning Yellow Tint */
-      --color-todo-text: #92400E;        /* Warning Amber Text */
+      /* One familiar, locally available family throughout the resume. */
+      --font-sans: Arial, "Helvetica Neue", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SF Mono", Menlo, Consolas, monospace;
+      --color-primary: #18344D;
+      --color-primary-dark: #202830;
+      --color-accent: #394956;
+      --color-text: #202830;
+      --color-muted: #4A5660;
+      --color-border: #A8B3BD;
+      --color-todo-bg: #FEF3C7;
+      --color-todo-text: #92400E;
 
-      /* Dynamic Layout Tokens for Auto-Fit Compaction Engine */
-      --page-padding-y: 8.8mm;
-      --page-padding-x: 10.6mm;
-      --body-font-size: 12.0px;
-      --body-line-height: 1.62;
-      --item-gap: 4.8px;
-      --section-gap: 11.0px;
+      /* Keep all six tokens editable by the existing AutoFit engine. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.5;
+      --item-gap: 4px;
+      --section-gap: 13px;
     }
 
     @page {
@@ -42,11 +32,7 @@
       margin: var(--page-padding-y) 0;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: var(--font-sans);
@@ -55,7 +41,6 @@
       color: var(--color-text);
       background: #FFFFFF;
       -webkit-font-smoothing: antialiased;
-      -moz-osx-font-smoothing: grayscale;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -66,89 +51,41 @@
       padding: var(--page-padding-y) var(--page-padding-x);
       margin: 0 auto;
       background: #FFFFFF;
-      position: relative;
     }
 
-    /* Numbers & Metrics Typography - Luxury Serif High-Impact Numbers */
-    .en, .num, .metric {
-      font-family: var(--font-serif);
-      font-weight: 600;
-      letter-spacing: -0.2px;
-    }
+    a { color: inherit; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+    .en, .num, .metric { font-variant-numeric: tabular-nums; }
 
-    /* Inline Code & CLI Terminals */
-    code, .cli {
-      font-family: var(--font-mono);
-      font-size: 0.92em;
-      background: var(--color-code-bg);
-      color: var(--color-primary);
-      padding: 1px 5px;
-      border-radius: 2px;
-      border: 1px solid var(--color-code-border);
-      word-break: break-all;
-    }
-
-    /* Links */
-    a {
-      color: var(--color-accent-dark);
-      text-decoration: none;
-      transition: color 0.15s ease;
-      border-bottom: 1px dotted rgba(2, 132, 199, 0.4);
-    }
-
-    a:hover {
-      color: var(--color-accent);
-      border-bottom-style: solid;
-    }
-
-    /* ==========================================================================
-       Header Block
-       ========================================================================== */
-    header {
-      margin-bottom: 8px;
-    }
-
-    /* The shared renderer supplies inline flex styles; these rules also cover
-       that generated markup without changing other themes. */
-    header > div:first-child {
-      min-width: 0;
-    }
+    /* The shared renderer has inline presentation defaults. Narrow overrides
+       below change only this theme, leaving its content and other themes intact. */
+    header { padding-bottom: 9px !important; }
+    header > div:first-child { min-width: 0; }
 
     .header-top {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px 16px;
-      justify-content: space-between;
-      align-items: flex-end;
-      border-bottom: 1.5px solid var(--color-primary);
-      padding-bottom: 4px;
-      margin-bottom: 5px;
+      flex-direction: column;
+      align-items: flex-start !important;
+      gap: 3px;
     }
-
     .header-top > * {
       min-width: 0;
       max-width: 100%;
       overflow-wrap: anywhere;
     }
-
-    h1 {
-      font-family: var(--font-serif);
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: 0.3px;
-      color: var(--color-primary);
-      line-height: 1.1;
-    }
+    h1 { font-size: 25px !important; font-weight: 700; color: var(--color-primary); line-height: 1.2; }
+    .header-top > span { font-weight: 400 !important; font-size: 1em !important; }
 
     .contacts {
-      font-size: 11px;
-      color: var(--color-muted);
       display: flex;
-      gap: 4px 9px;
       flex-wrap: wrap;
       align-items: baseline;
+      gap: 3px 8px !important;
+      font-size: 0.92em !important;
+      color: var(--color-muted);
     }
-
     .contacts span {
       display: inline-flex;
       min-width: 0;
@@ -156,256 +93,123 @@
       overflow-wrap: anywhere;
       align-items: baseline;
     }
+    .contacts a { min-width: 0; overflow-wrap: anywhere; }
+    .headline, .lead { font-weight: 400; margin-top: 4px; overflow-wrap: anywhere; }
 
-    .contacts a {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    .headline {
-      font-size: 11.5px;
-      color: var(--color-primary-light);
-      font-weight: 500;
-      line-height: 1.45;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: center;
-    }
-
-    .headline b {
-      color: var(--color-accent-dark);
-      font-weight: 600;
-    }
-
-    /* ==========================================================================
-       Section Headers
-       ========================================================================== */
+    /* Familiar resume section labels, with a single understated horizontal rule. */
     .section-header {
-      display: flex;
-      align-items: center;
+      display: block;
       margin-top: var(--section-gap);
-      margin-bottom: 4px;
+      margin-bottom: 5px;
+      padding-bottom: 2px;
+      border-bottom: 1px solid var(--color-border);
     }
+    h2 { font-size: 1.05em; font-weight: 700; color: var(--color-primary); letter-spacing: 0.15px; }
+    .rule { display: none; }
 
-    h2 {
-      font-family: var(--font-serif);
-      font-size: 12.8px;
-      font-weight: 700;
-      color: var(--color-primary);
-      white-space: nowrap;
-      margin-right: 10px;
-      letter-spacing: 0.6px;
-      text-transform: uppercase;
-      position: relative;
-      padding-left: 8px;
-    }
-
-    h2::before {
-      content: "";
-      position: absolute;
-      left: 0;
-      top: 50%;
-      transform: translateY(-50%);
-      width: 3px;
-      height: 12px;
-      background-color: var(--color-accent);
-      border-radius: 1px;
-    }
-
-    .rule {
-      flex: 1;
-      height: 1px;
-      background: linear-gradient(to right, var(--color-rule), rgba(226, 232, 240, 0.3));
-      border: none;
-    }
-
-    /* ==========================================================================
-       Organization / Experience Bar
-       ========================================================================== */
+    /* Employer/school and date form a plain heading row; the role sits below. */
     .org-bar {
       display: flex;
       flex-wrap: wrap;
-      gap: 3px 12px;
+      gap: 2px 12px;
       justify-content: space-between;
       align-items: baseline;
-      background-color: var(--color-bg-bar);
-      border-left: 2.5px solid var(--color-accent);
-      border-top: 1px solid var(--color-bar-border);
-      border-right: 1px solid var(--color-bar-border);
-      border-bottom: 1px solid var(--color-bar-border);
-      padding: 3px 8px;
-      border-radius: 0 2px 2px 0;
-      margin-top: 5px;
-      margin-bottom: 3px;
-      font-size: 11.5px;
+      background: transparent;
+      border: 0;
+      padding: 0;
     }
-
     .org-left {
       display: flex;
       flex: 1 1 24em;
       flex-wrap: wrap;
+      flex-direction: column;
       min-width: 0;
-      align-items: baseline;
-      gap: 8px;
+      align-items: flex-start !important;
+      gap: 0 !important;
     }
-
     .org-left > *,
     .project-header > div:first-child > * {
       min-width: 0;
       max-width: 100%;
       overflow-wrap: anywhere;
     }
-
-    .org-title {
+    .org-title,
+    .project-header > div:first-child > span:first-child {
+      font-size: 1em !important;
       font-weight: 700;
-      color: var(--color-primary);
     }
-
-    .org-role {
-      font-weight: 600;
-      color: var(--color-accent-dark);
+    .org-role,
+    .project-header > div:first-child > span + span {
+      font-size: 0.96em !important;
+      font-weight: 400 !important;
+      color: var(--color-text) !important;
     }
-
-    .org-right {
-      font-family: var(--font-serif);
-      font-size: 11px;
-      color: var(--color-muted);
-      font-weight: 500;
-    }
-
-    /* Lead Paragraph */
-    .lead {
-      font-weight: 600;
-      color: var(--color-primary-light);
-      margin-bottom: 3px;
-    }
-
-    /* ==========================================================================
-       Project Header Block
-       ========================================================================== */
-    .project-header {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 3px 12px;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-top: 4px;
-      margin-bottom: 2px;
-    }
-
-    .project-header > div:first-child {
-      flex: 1 1 24em;
-      flex-wrap: wrap;
-      min-width: 0;
-    }
-
     .org-right,
     .project-header > div:last-child {
       flex: 0 0 auto;
       max-width: 100%;
       margin-left: auto;
       white-space: nowrap;
+      font-size: 0.9em !important;
       font-variant-numeric: tabular-nums;
-    }
-
-    .edu-grid {
-      column-gap: 10px;
-    }
-
-    .edu-grid > div,
-    #skills li > span {
-      min-width: 0;
-      overflow-wrap: anywhere;
-    }
-
-    h3 {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--color-primary);
-    }
-
-    .project-tag {
-      font-family: var(--font-sans);
-      font-size: 10.5px;
       color: var(--color-muted);
-      font-weight: 500;
-      background: var(--color-accent-subtle);
-      color: var(--color-accent-dark);
-      padding: 0 5px;
-      border-radius: 2px;
     }
-
-    /* ==========================================================================
-       Bullet Lists & Item Hierarchy
-       ========================================================================== */
-    ul {
-      list-style-type: none;
-      padding-left: 0;
+    .project-header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px 12px;
+      justify-content: space-between;
+      align-items: baseline;
     }
+    .project-header > div:first-child {
+      display: flex;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      flex-direction: column;
+      min-width: 0;
+      align-items: flex-start !important;
+      gap: 0 !important;
+    }
+    .edu-grid { column-gap: 10px; font-size: 0.92em !important; }
+    .edu-grid > div,
+    #skills li > span { min-width: 0; overflow-wrap: anywhere; }
+    h3 { font-size: 1em; font-weight: 700; }
+    .project-tag { font-size: 0.96em; color: var(--color-muted); }
 
+    /* Standard hanging bullets; wrapped lines share one clean text edge. */
+    ul { list-style: disc; padding-left: 17px; }
     li {
-      position: relative;
-      padding-left: 14px;
+      padding-left: 1px;
       margin-bottom: var(--item-gap);
       text-align: start;
       overflow-wrap: anywhere;
     }
+    li::marker { color: var(--color-text); font-size: 0.85em; }
+    li.sub { margin-left: 14px; list-style-type: circle; }
+    #skills li { padding-left: 0; font-size: 1em !important; }
+    b, strong { color: var(--color-text); font-weight: 700; }
 
-    li::before {
-      content: "▪";
-      position: absolute;
-      left: 2px;
-      color: var(--color-accent);
-      font-size: 9px;
-      line-height: 1.7;
-    }
-
-    li.sub {
-      padding-left: 24px;
-    }
-
-    li.sub::before {
-      content: "▫";
-      left: 12px;
-      color: var(--color-muted);
-      font-size: 8px;
-    }
-
-    /* Highlight Key Terms & Numbers */
-    b, strong {
-      color: var(--color-primary);
-      font-weight: 700;
-    }
-
-    /* TODO Warning Marker */
+    /* Unresolved facts must remain visibly marked; this is not a resume badge. */
     .todo {
       background-color: var(--color-todo-bg);
       color: var(--color-todo-text);
-      padding: 0 4px;
-      border-radius: 2px;
+      padding: 0 3px;
       border: 1px dashed var(--color-todo-text);
       font-weight: 600;
     }
+
     @media print {
       .page {
-        /* Keep the A4 width and horizontal gutter used by AutoFit. Page margins
-           now own vertical padding, including continuation pages. */
+        /* Page margins own vertical padding, including continuation pages. */
         min-height: calc(297mm - 2 * var(--page-padding-y));
         padding-top: 0;
         padding-bottom: 0;
       }
-
       header, .section-header, .org-bar, .project-header {
         break-inside: avoid;
         break-after: avoid;
       }
-
-      li {
-        break-inside: avoid;
-        orphans: 2;
-        widows: 2;
-      }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
     }
   </style>
 </head>

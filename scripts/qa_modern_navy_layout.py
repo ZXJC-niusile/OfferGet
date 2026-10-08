@@ -247,6 +247,34 @@ def fixtures():
                    "photo_data_uri": synthetic_photo(), "mode": "raw", "max_pages": 2})
     result.append({"name": "production-reserved", "profile": short, "photo": "reserved",
                    "mode": "builder", "max_pages": 1})
+    # Ordinary-length bilingual content complements pathological overflow tests.
+    # All organizations, contacts, dates and achievements are fabricated QA data.
+    professional = json.loads(json.dumps(short))
+    professional["experience"] = [
+        {"company": "示例云平台 / Example Cloud", "role": "后端工程师 / Backend Engineer",
+         "time": "2022.07 - 2025.06", "bullets": [
+             "维护订单服务的 Python 接口，补充输入校验与错误处理。 Maintained Python APIs for the order service and added request validation.",
+             "为发布流程建立回归检查，记录验证步骤与回滚条件。 Added release regression checks with documented validation and rollback steps.",
+             "与产品和支持团队复盘用户反馈，修复可重现的问题。 Worked with product and support teams to reproduce and resolve reported issues."]},
+        {"company": "示例软件工作室 / Example Software", "role": "软件工程师 / Software Engineer",
+         "time": "2020.07 - 2022.06", "bullets": [
+             "开发内部数据查询工具，为运营同事提供统一的检索入口。 Built an internal data lookup tool for the operations team.",
+             "整理 SQL 查询与数据字段说明，补充常见问题排查文档。 Documented SQL queries, data fields, and common troubleshooting steps.",
+             "参与代码评审与单元测试维护，跟进缺陷直到验证完成。 Reviewed code, maintained unit tests, and verified defect fixes."]},
+    ]
+    professional["campus_experience"] = [
+        {"name": "服务运行手册 / Service Runbooks", "role": "维护者 / Maintainer",
+         "time": "2023.03 - 2024.12", "bullets": [
+             "汇总值班流程与故障处理步骤，使用测试环境验证操作顺序。 Organized on-call procedures and verified recovery steps in a test environment.",
+             "补充检索索引与更新记录，方便团队定位相关说明。 Added a search index and change log for shared operational documentation."]},
+        {"name": "开源数据工具 / Open Data Tools", "role": "贡献者 / Contributor",
+         "time": "2019.09 - 2020.06", "bullets": [
+             "为 CSV 导入流程添加格式检查，并编写中英文使用示例。 Added CSV format checks and bilingual usage examples.",
+             "整理社区报告的边界情况，补充对应回归测试。 Converted reported edge cases into repeatable regression tests."]},
+    ]
+    for photo in ("none", "reserved"):
+        result.append({"name": f"professional-{photo}", "profile": professional,
+                       "photo": photo, "mode": "builder", "max_pages": 2})
     return result
 
 
