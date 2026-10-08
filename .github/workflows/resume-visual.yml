@@ -4,18 +4,28 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'themes/modern-navy.html'
+      - 'themes/*.html'
       - 'core/resume_view_model.py'
+      - 'core/resume_builder.py'
+      - 'core/browser_renderer.py'
+      - 'core/autofit.py'
+      - 'core/layout_solver.py'
       - 'scripts/qa_modern_navy_layout.py'
       - 'tests/test_modern_navy_layout.py'
+      - 'tests/test_resume_theme_qa.py'
       - '.github/workflows/resume-visual.yml'
   push:
     branches: [main]
     paths:
-      - 'themes/modern-navy.html'
+      - 'themes/*.html'
       - 'core/resume_view_model.py'
+      - 'core/resume_builder.py'
+      - 'core/browser_renderer.py'
+      - 'core/autofit.py'
+      - 'core/layout_solver.py'
       - 'scripts/qa_modern_navy_layout.py'
       - 'tests/test_modern_navy_layout.py'
+      - 'tests/test_resume_theme_qa.py'
       - '.github/workflows/resume-visual.yml'
 
 permissions:
@@ -48,18 +58,36 @@ jobs:
           mkdir -p "$RUNNER_TEMP/offerget-baseline"
           git archive "$BASE_SHA" | tar -x -C "$RUNNER_TEMP/offerget-baseline"
           printf '%s\n' "$BASE_SHA" > "$RUNNER_TEMP/offerget-baseline/revision.txt"
-      - name: Render synthetic fixtures and check layout
+      - name: Render changed themes through the production builder
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          python scripts/qa_modern_navy_layout.py \
-            --baseline-root "$RUNNER_TEMP/offerget-baseline" \
-            --output-dir output/visual-regression
+          python - <<'PYCODE'
+          import os, subprocess, sys
+          from pathlib import Path
+          from scripts.qa_modern_navy_layout import changed_themes
+          paths = subprocess.check_output(
+              ["git", "diff", "--name-only", os.environ["BASE_SHA"], "HEAD"], text=True).splitlines()
+          themes = changed_themes(paths)
+          print("Visual themes:", ", ".join(themes), flush=True)
+          failed = []
+          for theme in themes:
+              result = subprocess.run([
+                  sys.executable, "scripts/qa_modern_navy_layout.py", "--theme", theme,
+                  "--baseline-root", str(Path(os.environ["RUNNER_TEMP"]) / "offerget-baseline"),
+                  "--output-dir", str(Path("output/visual-regression") / theme),
+              ])
+              if result.returncode:
+                  failed.append(theme)
+          if failed:
+              raise SystemExit("Visual checks failed: " + ", ".join(failed))
+          PYCODE
       - name: Preserve screenshots, PDFs, and measurements
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: modern-navy-visual-${{ github.sha }}
+          name: resume-themes-visual-${{ github.sha }}
           path: output/visual-regression/
           if-no-files-found: error
           retention-days: 14
