@@ -368,6 +368,7 @@ class ResumeBuilder:
         if layout_config is not None and pages != "auto":
             cfg.page_mode = pages
         overflow_px = float(kwargs.get("overflow_px", 0.0))
+        measurement = {"status": "supplied" if "overflow_px" in kwargs else "unverified"}
 
         # Detect overflow / underflow via renderer if available and overflow_px not explicitly supplied
         if "overflow_px" not in kwargs and self.renderer:
@@ -377,14 +378,16 @@ class ResumeBuilder:
                     tmp_measure_path = Path(tmp_measure.name)
                 try:
                     measured_h, oflow = self.renderer.measure_overflow(tmp_measure_path, a4_target_height=cfg.a4_height_px)
+                    measurement = {"status": "measured", "height_px": measured_h, "overflow_px": oflow}
                     if oflow != 0:
                         overflow_px = float(oflow)
                     elif measured_h < cfg.a4_height_px - 20:
                         overflow_px = float(measured_h - cfg.a4_height_px)
                 finally:
                     tmp_measure_path.unlink(missing_ok=True)
-            except Exception:
+            except Exception as exc:
                 overflow_px = 0.0
+                measurement = {"status": "unverified", "error": str(exc)}
 
         if not adaptive_fill and overflow_px < 0:
             overflow_px = 0.0
@@ -396,44 +399,84 @@ class ResumeBuilder:
         html_path = out_dir / f"resume_{clean_theme_name}.html"
         pdf_path = out_dir / f"resume_{clean_theme_name}.pdf"
 
-        # If layout budget is solved for multi-page (> 1), skip single-page squashing
-        is_multi_page = (solve_res.target_pages_solved > 1) or (pages == "2")
+        # Solver estimates and AutoFit claims cannot establish the final page budget.
+        layout_report = {
+            "requested_page_mode": cfg.page_mode,
+            "estimated_target_pages": solve_res.target_pages_solved,
+            "solver_solved": solve_res.solved,
+            "measurement": measurement,
+            "actual_page_count": None,
+            "page_budget_passed": False,
+            "status": "unverified",
+            "autofit": {"attempted": False},
+        }
+        report_target = out_dir / f"resume_{clean_theme_name}_layout.json"
+        actual_html, actual_pdf = html_path, pdf_path
+        is_multi_page = (solve_res.target_pages_solved > 1) or (cfg.page_mode == "2")
+        try:
+            render_res = None
+            if autofit and not is_multi_page:
+                with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as tmp:
+                    tmp.write(populated_html)
+                    tmp_path = Path(tmp.name)
+                try:
+                    layout_report["autofit"] = {"attempted": True}
+                    success, msg, details = self.autofit_engine.fit_to_single_page(
+                        input_html_path=tmp_path,
+                        output_html_path=html_path,
+                        output_pdf_path=pdf_path,
+                    )
+                    layout_report["autofit"] = {"attempted": True, "success": success, "message": msg, "details": details}
+                    if not success:
+                        actual_html = write_text_atomic(populated_html, html_path)
+                        render_res = self.renderer.render_pdf(actual_html, pdf_path)
+                    else:
+                        actual_pdf = Path(details.get("final_pdf_path", pdf_path))
+                        actual_html = Path(details.get("final_html_path", html_path))
+                finally:
+                    tmp_path.unlink(missing_ok=True)
+            else:
+                actual_html = write_text_atomic(populated_html, html_path)
+                render_res = self.renderer.render_pdf(actual_html, pdf_path)
 
-        if autofit and not is_multi_page:
-            with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as tmp:
-                tmp.write(populated_html)
-                tmp_path = Path(tmp.name)
+            if render_res is not None:
+                layout_report["render"] = {
+                    "message": str(render_res.msg if hasattr(render_res, "msg") else render_res[2]),
+                    "error": str(getattr(render_res, "error", "")),
+                    "diagnostics": getattr(render_res, "diagnostics", {}),
+                }
+                render_ok, reported_pages, render_msg, actual_pdf = _parse_render_result(render_res, pdf_path)
+                layout_report["render"]["reported_page_count"] = reported_pages
+                if not render_ok:
+                    raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
+                if not isinstance(reported_pages, int) or isinstance(reported_pages, bool) or reported_pages < 1:
+                    raise RuntimeError(f"Renderer returned an invalid page count: {reported_pages!r}")
 
-            try:
-                success, msg, details = self.autofit_engine.fit_to_single_page(
-                    input_html_path=tmp_path,
-                    output_html_path=html_path,
-                    output_pdf_path=pdf_path,
-                )
-                if not success:
-                    # Fallback write and render
-                    actual_html = write_text_atomic(populated_html, html_path)
-                    render_res = self.renderer.render_pdf(actual_html, pdf_path)
-                    render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_path)
-                    if not render_ok:
-                        raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
-                else:
-                    actual_pdf = Path(details.get("final_pdf_path", pdf_path))
-                    actual_html = Path(details.get("final_html_path", html_path))
-            finally:
-                if tmp_path.exists():
-                    try:
-                        tmp_path.unlink()
-                    except Exception:
-                        pass
-        else:
-            actual_html = write_text_atomic(populated_html, html_path)
-            render_res = self.renderer.render_pdf(actual_html, pdf_path)
-            render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_path)
-            if not render_ok:
-                raise RuntimeError(f"Failed to render PDF for theme '{theme_name}': {render_msg}")
+            if not Path(actual_html).is_file():
+                raise RuntimeError(f"Rendered HTML is missing: {actual_html}")
+            actual_pages = _verified_pdf_page_count(Path(actual_pdf))
+            layout_report["actual_page_count"] = actual_pages
+            page_limit = int(cfg.page_mode) if cfg.page_mode in ("1", "2") else None
+            fits_budget = page_limit is None or actual_pages <= page_limit
+            layout_report.update({
+                "page_budget_passed": fits_budget,
+                "status": "passed" if fits_budget else "failed",
+                "html_path": str(actual_html),
+                "pdf_path": str(actual_pdf),
+            })
+            if not fits_budget:
+                raise RuntimeError(f"Final PDF has {actual_pages} pages, exceeding requested {page_limit}-page budget")
+        except Exception as exc:
+            layout_report["error"] = str(exc)
+            report_path = write_text_atomic(json.dumps(layout_report, ensure_ascii=False, indent=2, default=str), report_target)
+            raise RuntimeError(f"Resume build failed: {exc}. Layout diagnostics: {report_path}") from exc
 
-        result_paths: Dict[str, Path] = {"html": Path(actual_html), "pdf": Path(actual_pdf)}
+        report_path = write_text_atomic(json.dumps(layout_report, ensure_ascii=False, indent=2, default=str), report_target)
+        if cfg.page_mode == "auto" and actual_pages > 1:
+            warnings.warn(f"Resume uses {actual_pages} pages in auto mode. Layout diagnostics: {report_path}", UserWarning, stacklevel=2)
+        result_paths: Dict[str, Path] = {
+            "html": Path(actual_html), "pdf": Path(actual_pdf), "layout_report_json": Path(report_path),
+        }
 
         if diff_ledger:
             effective_baseline = baseline_profile or self.raw_profile or prof
@@ -443,8 +486,14 @@ class ResumeBuilder:
                 or ""
             )
             layout_meta = {
-                "solved": solve_res.solved,
+                "solved": layout_report["page_budget_passed"],
+                "solver_solved": solve_res.solved,
                 "target_pages": solve_res.target_pages_solved,
+                "requested_page_mode": cfg.page_mode,
+                "actual_page_count": actual_pages,
+                "page_budget_passed": layout_report["page_budget_passed"],
+                "measurement": measurement,
+                "autofit": layout_report["autofit"],
                 "body_font_pt": solve_res.body_font_pt,
                 "line_height": solve_res.line_height,
                 "section_margin_pt": solve_res.section_margin_pt,
@@ -690,6 +739,34 @@ class ResumeBuilder:
         else:
             raise ValueError(f"Unknown resume theme '{theme}'. Choices: {self.THEMES}")
 
+        layout_meta = None
+        if "pdf" in res:
+            # Native and fallback exporters share the same explicit PDF budget.
+            layout_meta = {
+                "requested_page_mode": pages,
+                "actual_page_count": None,
+                "page_budget_passed": False,
+                "status": "unverified",
+                "pdf_path": str(res["pdf"]),
+            }
+            report_target = Path(output_dir).resolve() / f"resume_{theme_normalized.replace('-', '_')}_layout.json"
+            try:
+                actual_pages = _verified_pdf_page_count(Path(res["pdf"]))
+                layout_meta["actual_page_count"] = actual_pages
+                page_limit = int(pages) if pages in ("1", "2") else None
+                fits = page_limit is None or actual_pages <= page_limit
+                layout_meta.update({"page_budget_passed": fits, "solved": fits, "status": "passed" if fits else "failed"})
+                if not fits:
+                    raise RuntimeError(f"Final PDF has {actual_pages} pages, exceeding requested {page_limit}-page budget")
+            except Exception as exc:
+                layout_meta["error"] = str(exc)
+                report_path = write_text_atomic(json.dumps(layout_meta, ensure_ascii=False, indent=2), report_target)
+                raise RuntimeError(f"Resume build failed: {exc}. Layout diagnostics: {report_path}") from exc
+            report_path = write_text_atomic(json.dumps(layout_meta, ensure_ascii=False, indent=2), report_target)
+            res["layout_report_json"] = Path(report_path)
+            if pages == "auto" and actual_pages > 1:
+                warnings.warn(f"Resume uses {actual_pages} pages in auto mode. Layout diagnostics: {report_path}", UserWarning, stacklevel=2)
+
         if diff_ledger and "diff_ledger_md" not in res:
             out_dir = Path(output_dir).resolve()
             effective_baseline = baseline_profile or self.raw_profile or self.profile
@@ -711,6 +788,7 @@ class ResumeBuilder:
                 baseline_profile=effective_baseline,
                 tailored_data=self.profile,
                 candidate_name=cand_name,
+                layout_metadata=layout_meta,
             )
             saved = ledger.save(out_dir, base_name="resume")
             res["diff_ledger_md"] = saved["markdown"]
