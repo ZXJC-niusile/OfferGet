@@ -8,32 +8,33 @@ and strictly XSS-neutralized HTML Offer Strategy Reports.
 
 from __future__ import annotations
 
+import math
 import re
+from copy import deepcopy
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from core.jd_compat import DecodedJDCompat
-from core.security_gate import escape_html_text, validate_output_security
-from core.validator import validate_bilingual_html
 from core.jd_analyst.models import (
-    BusinessPainPoint,
     CandidateProfile,
-    CoreResponsibility,
-    CoreSkill,
+    ChannelProbability,
     DecodedJD,
     GapItem,
     GapState,
-    HardThreshold,
-    ImplicitSignal,
+    InterviewQuestion,
     MatcherResult,
     PredictionResult,
+    ProbabilityForecast,
+    RedFlagItem,
     RedFlagReport,
 )
-from core.jd_analyst.predictor import JDPredictor
+from core.jd_analyst.predictor import InterviewTop20Predictor
 from core.jd_analyst.redflags import RedFlagDetector
 from core.jd_analyst.reporter import OfferStrategyReporter
+from core.jd_compat import to_canonical
 from core.paths import get_project_root
+from core.security_gate import escape_html_text, validate_output_security
+from core.validator import validate_bilingual_html
 
 PROJECT_ROOT = get_project_root()
 
@@ -51,101 +52,61 @@ def _to_float_score(val: Any, default: float = 0.0) -> float:
 
 
 def _adapt_decoded_jd(decoded_jd: Any) -> DecodedJD:
-    """Adapts arbitrary decoded JD representations (dict, DecodedJDCompat, DecodedJD) into canonical DecodedJD."""
-    if isinstance(decoded_jd, DecodedJD):
-        return decoded_jd
-    if isinstance(decoded_jd, DecodedJDCompat):
-        return decoded_jd.canonical
-    if not isinstance(decoded_jd, dict):
-        return DecodedJD(raw_text="", job_title="未指定职位", company_or_dept="未指定公司")
+    """Keep report ingress on the shared canonical conversion path."""
+    return to_canonical(decoded_jd)
 
-    metadata = decoded_jd.get("metadata", {})
-    layers = decoded_jd.get("layers", {})
-    raw_text = str(decoded_jd.get("raw_text") or decoded_jd.get("clean_text") or "")
 
-    job_title = str(
-        metadata.get("role")
-        or decoded_jd.get("job_title")
-        or metadata.get("role_title")
-        or "未指定职位"
-    )
-    company = str(metadata.get("company") or decoded_jd.get("company") or "")
-    department = str(metadata.get("department") or decoded_jd.get("department") or "")
-    if company and department and department not in company:
-        company_or_dept = f"{company} · {department}"
-    else:
-        company_or_dept = company or department or "未指定公司"
+def _score_or_none(value: Any) -> Optional[float]:
+    """Return a supplied finite percentage; missing/invalid is not a score."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(score) or not 0 <= score <= 100:
+        return None
+    return score * 100.0 if 0 < score <= 1 else score
 
-    # Extract requirements & thresholds
-    reqs = decoded_jd.get("requirements", {})
-    must_haves = reqs.get("must_haves", [])
-    nice_haves = reqs.get("nice_haves", [])
 
-    hard_thresholds: List[HardThreshold] = []
-    for item in must_haves:
-        hard_thresholds.append(HardThreshold(category="mandatory", requirement=str(item), is_mandatory=True))
-    for item in nice_haves:
-        hard_thresholds.append(HardThreshold(category="preferred", requirement=str(item), is_mandatory=False))
+def _report_values(match_result: Any) -> Dict[str, Any]:
+    """Resolve supplied legacy and canonical fields without positive defaults."""
+    result = match_result if isinstance(match_result, dict) else {}
+    canonical = result.get("canonical_match")
+    canonical = canonical if isinstance(canonical, dict) else {}
+    breakdown = result.get("breakdown")
+    breakdown = breakdown if isinstance(breakdown, dict) else {}
+    score = result.get("overall_match_score", result.get("final_match_score", canonical.get("final_match_score")))
+    probability = result.get("interview_prob", result.get("prob"))
+    probability_range = result.get("interview_probability_range")
+    if probability is None and isinstance(probability_range, (list, tuple)) and len(probability_range) == 2:
+        probability = probability_range[1]
+    gate = next((source[key] for source in (result, canonical)
+                 for key in ("hard_vetoed", "is_hard_vetoed") if key in source), None)
+    return {
+        "score": _score_or_none(score),
+        "raw_score": _score_or_none(result.get("raw_match_score", canonical.get("raw_match_score", score))),
+        "must_have": _score_or_none(breakdown.get("must_have", canonical.get("must_have_score"))),
+        "nice_have": _score_or_none(breakdown.get("nice_have", canonical.get("nice_to_have_score"))),
+        "hidden_fit": _score_or_none(breakdown.get("hidden_fit", canonical.get("hidden_signal_fit"))),
+        "probability": _score_or_none(probability),
+        "gate": gate if isinstance(gate, bool) else None,
+    }
 
-    l1 = layers.get("layer_1", {}) if isinstance(layers, dict) else {}
-    if not hard_thresholds and isinstance(l1, dict) and l1.get("jd_text_zh"):
-        hard_thresholds.append(HardThreshold(category="degree", requirement=str(l1["jd_text_zh"]), is_mandatory=True))
 
-    # Core skills
-    core_skills: List[CoreSkill] = []
-    for item in must_haves:
-        core_skills.append(CoreSkill(name=str(item), category="framework", importance="MUST_HAVE", domain="通用"))
-    for item in nice_haves:
-        core_skills.append(CoreSkill(name=str(item), category="framework", importance="NICE_TO_HAVE", domain="通用"))
-
-    l2 = layers.get("layer_2", {}) if isinstance(layers, dict) else {}
-    if not core_skills and isinstance(l2, dict) and l2.get("jd_text_zh"):
-        core_skills.append(CoreSkill(name=str(l2["jd_text_zh"]), category="framework", importance="MUST_HAVE", domain="核心技术"))
-
-    # Core responsibilities
-    responsibilities: List[CoreResponsibility] = []
-    l3 = layers.get("layer_3", {}) if isinstance(layers, dict) else {}
-    if isinstance(l3, dict) and l3.get("jd_text_zh"):
-        responsibilities.append(CoreResponsibility(title=str(l3["jd_text_zh"])[:30], description=str(l3["jd_text_zh"]), domain="核心业务"))
-
-    # Implicit signals
-    implicit_signals: List[ImplicitSignal] = []
-    l4 = layers.get("layer_4", {}) if isinstance(layers, dict) else {}
-    if isinstance(l4, dict) and l4.get("jd_text_zh"):
-        implicit_signals.append(
-            ImplicitSignal(
-                original_text=str(l4.get("jd_text_zh", "")),
-                translated_meaning=str(l4.get("reality_zh", "需进一步探查实际工作节奏与交付预期")),
-                underlying_risk="排期紧凑",
-                candidate_countermeasure="在面试中结合过往高并发排障经验主动展示抗压闭环能力",
-            )
+def _supplied_prediction(value: Any) -> Optional[PredictionResult]:
+    if isinstance(value, PredictionResult):
+        return deepcopy(value)
+    if isinstance(value, dict) and isinstance(value.get("probability_forecast"), dict):
+        forecast = dict(value["probability_forecast"])
+        forecast["channel_forecasts"] = {
+            key: ChannelProbability(**item) for key, item in forecast.get("channel_forecasts", {}).items()
+        }
+        return PredictionResult(
+            ProbabilityForecast(**forecast),
+            [InterviewQuestion(**item) for item in value.get("top20_questions", [])],
         )
-    for s in decoded_jd.get("detected_signals", []):
-        if isinstance(s, dict) and "original_text" in s:
-            implicit_signals.append(ImplicitSignal(**s))
-
-    # Business pain points
-    pain_points: List[BusinessPainPoint] = []
-    l5 = layers.get("layer_5", {}) if isinstance(layers, dict) else {}
-    if isinstance(l5, dict) and l5.get("jd_text_zh"):
-        pain_points.append(
-            BusinessPainPoint(
-                aspect=str(l5.get("jd_text_zh", "算力与性能优化")),
-                description=str(l5.get("reality_zh", "面临实际业务吞吐与 SLA 挑战")),
-                evaluation_metric="P99 < 200ms · 达标率 > 99.5%",
-            )
-        )
-
-    return DecodedJD(
-        raw_text=raw_text or f"职位：{job_title}\n公司：{company_or_dept}",
-        job_title=job_title,
-        company_or_dept=company_or_dept,
-        hard_thresholds=hard_thresholds,
-        core_responsibilities=responsibilities,
-        core_skills=core_skills,
-        implicit_signals=implicit_signals,
-        business_pain_points=pain_points,
-    )
+    return None
 
 
 def _adapt_match_result(
@@ -159,56 +120,31 @@ def _adapt_match_result(
     cand_name = str(match_result.get("candidate_name") or "候选人")
     candidate = CandidateProfile(name=cand_name)
 
-    raw_match_score = (
-        match_result.get("overall_match_score")
-        if "overall_match_score" in match_result
-        else match_result.get("final_match_score", 80.0)
-    )
-    score_pct = _to_float_score(raw_match_score, 80.0)
-    final_score = score_pct / 100.0
-
-    raw_prob = (
-        match_result.get("interview_prob")
-        if "interview_prob" in match_result
-        else match_result.get("prob")
-    )
-    if raw_prob is None and "interview_probability_range" in match_result:
-        prob_range = match_result.get("interview_probability_range")
-        if isinstance(prob_range, (list, tuple)) and len(prob_range) > 1:
-            raw_prob = prob_range[1]
-    prob_pct = _to_float_score(raw_prob, 70.0)
-
-    is_hard_vetoed = bool(
-        match_result.get("hard_vetoed")
-        or match_result.get("is_hard_vetoed")
-        or (isinstance(match_result.get("canonical_match"), dict) and match_result["canonical_match"].get("is_hard_vetoed"))
-    )
-
-    hard_veto_reasons = match_result.get("hard_veto_reasons") or []
-    if is_hard_vetoed and not hard_veto_reasons:
-        hard_veto_reasons = ["硬性门槛拦截：岗位硬性条件未满足或未确认，需人工复核"]
-
-    breakthrough_advice = match_result.get("breakthrough_advice") or []
-    if is_hard_vetoed and not breakthrough_advice:
-        breakthrough_advice = ["【学历破局通道】：建议通过顶会论文、开源项目或业务代表作绕过初筛通道"]
-
-    breakdown = match_result.get("breakdown", {}) if isinstance(match_result, dict) else {}
-    must_have_score = _to_float_score(breakdown.get("must_have", 85.0)) / 100.0
-    nice_to_have_score = _to_float_score(breakdown.get("nice_have", 80.0)) / 100.0
-    hidden_signal_fit = _to_float_score(breakdown.get("hidden_fit", 75.0)) / 100.0
+    values = _report_values(match_result)
+    final_score = (values["score"] or 0.0) / 100.0
+    canonical_match = match_result.get("canonical_match")
+    canonical_match = canonical_match if isinstance(canonical_match, dict) else {}
+    is_hard_vetoed = bool(values["gate"])
+    hard_veto_reasons = match_result.get("hard_veto_reasons", canonical_match.get("hard_veto_reasons")) or []
+    breakthrough_advice = match_result.get("breakthrough_advice", canonical_match.get("breakthrough_advice")) or []
 
     # Gap items
     gap_matrix: List[GapItem] = []
-    raw_gaps = match_result.get("gap_matrix") or match_result.get("all_gaps") or match_result.get("gaps") or []
+    raw_gaps = next((source[key] for source, key in (
+        (match_result, "gap_matrix"), (match_result, "all_gaps"),
+        (canonical_match, "gap_matrix"), (match_result, "gaps"),
+    ) if key in source), []) or []
     if raw_gaps:
         for g in raw_gaps:
             if isinstance(g, GapItem):
                 gap_matrix.append(g)
             elif isinstance(g, dict):
-                st = g.get("state", "MATCHED")
-                state_enum = getattr(GapState, st, GapState.MATCHED) if isinstance(st, str) else st
-                score_val = _to_float_score(g.get("score", 1.0))
-                normalized_gap_score = score_val / 100.0 if score_val > 1.0 else float(g.get("score", 1.0))
+                st = g.get("state", "TO_BE_CONFIRMED")
+                try:
+                    state_enum = GapState(st)
+                except (TypeError, ValueError):
+                    state_enum = GapState.TO_BE_CONFIRMED
+                normalized_gap_score = (_score_or_none(g.get("score")) or 0.0) / 100.0
                 gap_matrix.append(
                     GapItem(
                         requirement_name=str(g.get("requirement_name") or g.get("title_zh") or "技能要求"),
@@ -216,45 +152,11 @@ def _adapt_match_result(
                         importance=str(g.get("importance", "must_have")),
                         state=state_enum,
                         score=normalized_gap_score,
-                        candidate_evidence=str(g.get("candidate_evidence") or g.get("evidence_zh") or "具备明确量化指标与项目实践"),
-                        gap_explanation=str(g.get("gap_explanation") or g.get("probe_zh") or "与核心技能要求吻合良好"),
-                        actionable_advice=str(g.get("actionable_advice") or g.get("fix_zh") or "准备深入架构设计细节与底层调优经历"),
+                        candidate_evidence=str(g.get("candidate_evidence") or g.get("evidence_zh") or ""),
+                        gap_explanation=str(g.get("gap_explanation") or g.get("probe_zh") or ""),
+                        actionable_advice=str(g.get("actionable_advice") or g.get("fix_zh") or ""),
                     )
                 )
-
-    if not gap_matrix:
-        gap_matrix = [
-            GapItem(
-                requirement_name="核心技能匹配度",
-                category="skill",
-                importance="must_have",
-                state=GapState.MATCHED,
-                score=0.9,
-                candidate_evidence="具备相关工程经验与高可用系统落地成果",
-                gap_explanation="与核心能力项匹配良好",
-                actionable_advice="准备深入技术选型、架构权衡与系统设计全景",
-            ),
-            GapItem(
-                requirement_name="业务痛点与指标数据化",
-                category="experience",
-                importance="must_have",
-                state=GapState.EXPRESSION_GAP,
-                score=0.75,
-                candidate_evidence="有项目经验但简历量化表达较少",
-                gap_explanation="缺少精确的吞吐、P99、SLA等业务数据支撑",
-                actionable_advice="依据 STAR 原则补足具体的集群规模与业务增量百分比",
-            ),
-            GapItem(
-                requirement_name="极端异常与攻坚实战",
-                category="system",
-                importance="nice_to_have",
-                state=GapState.INSUFFICIENT_EVIDENCE,
-                score=0.6,
-                candidate_evidence="缺少大规模生产环境排障案例",
-                gap_explanation="待面试深入核查排障与容灾细节",
-                actionable_advice="梳理 2-3 个生产事故排障与极端容量冲刺实战复盘",
-            ),
-        ]
 
     matched_cnt = sum(1 for g in gap_matrix if (g.state == GapState.MATCHED or str(g.state) == "MATCHED"))
     expr_cnt = sum(1 for g in gap_matrix if (g.state == GapState.EXPRESSION_GAP or str(g.state) == "EXPRESSION_GAP"))
@@ -263,10 +165,10 @@ def _adapt_match_result(
     tbc_cnt = sum(1 for g in gap_matrix if (g.state == GapState.TO_BE_CONFIRMED or str(g.state) == "TO_BE_CONFIRMED"))
 
     matcher = MatcherResult(
-        must_have_score=must_have_score,
-        nice_to_have_score=nice_to_have_score,
-        hidden_signal_fit=hidden_signal_fit,
-        raw_match_score=final_score,
+        must_have_score=(values["must_have"] or 0.0) / 100.0,
+        nice_to_have_score=(values["nice_have"] or 0.0) / 100.0,
+        hidden_signal_fit=(values["hidden_fit"] or 0.0) / 100.0,
+        raw_match_score=(values["raw_score"] or 0.0) / 100.0,
         final_match_score=final_score,
         is_hard_vetoed=is_hard_vetoed,
         hard_veto_reasons=hard_veto_reasons,
@@ -282,19 +184,45 @@ def _adapt_match_result(
     # RedFlags
     if "redflag_report" in match_result and isinstance(match_result["redflag_report"], RedFlagReport):
         redflags = match_result["redflag_report"]
-    else:
+    elif isinstance(match_result.get("redflag_report"), dict):
+        redflag_data = dict(match_result["redflag_report"])
+        redflag_data["flags"] = [RedFlagItem(**item) for item in redflag_data.get("flags", [])]
+        redflags = RedFlagReport(**redflag_data)
+    elif canonical_jd.raw_text.strip():
         redflags = RedFlagDetector().detect(canonical_jd)
+    else:
+        redflags = RedFlagReport()
 
     # Prediction
-    if "prediction_result" in match_result and isinstance(match_result["prediction_result"], PredictionResult):
-        prediction = match_result["prediction_result"]
+    supplied_prediction = _supplied_prediction(match_result.get("prediction_result"))
+    if supplied_prediction is not None:
+        prediction = supplied_prediction
     else:
-        prediction = JDPredictor().predict(canonical_jd, matcher, listing_age_days=10)
+        prediction = PredictionResult(
+            ProbabilityForecast(
+                base_min_prob=0.0, base_max_prob=0.0, listing_age_days=0,
+                age_decay_multiplier=1.0, is_ghost_job_risk=False,
+            ),
+            InterviewTop20Predictor().predict(canonical_jd, matcher) if values["score"] is not None else [],
+        )
 
-    # Update probability forecast with passed interview_prob
-    if prob_pct > 0.0:
-        prediction.probability_forecast.base_max_prob = prob_pct
-        prediction.probability_forecast.base_min_prob = max(0.0, prob_pct - 10.0)
+    # Explicit zero is meaningful. Never substitute a positive probability for it.
+    if values["probability"] is not None:
+        previous_range = (prediction.probability_forecast.base_min_prob, prediction.probability_forecast.base_max_prob)
+        prediction.probability_forecast.base_max_prob = values["probability"]
+        probability_range = match_result.get("interview_probability_range")
+        minimum = None
+        if isinstance(probability_range, (list, tuple)) and len(probability_range) == 2:
+            minimum = _score_or_none(probability_range[0])
+        prediction.probability_forecast.base_min_prob = (
+            minimum if minimum is not None else values["probability"]
+        )
+        current_range = (prediction.probability_forecast.base_min_prob, prediction.probability_forecast.base_max_prob)
+        if current_range != previous_range:
+            # Channels derived from a different range do not support the supplied estimate.
+            prediction.probability_forecast.channel_forecasts = {}
+            prediction.probability_forecast.recommended_channel = ""
+            prediction.probability_forecast.strategic_summary = ""
 
     return candidate, matcher, redflags, prediction
 
@@ -404,21 +332,11 @@ def _safe_fallback_render(
     meta = decoded_jd.get("metadata", {}) if isinstance(decoded_jd, dict) else {}
     layers = decoded_jd.get("layers", {}) if isinstance(decoded_jd, dict) else {}
     verdict = match_result.get("verdict", {}) if isinstance(match_result, dict) else {}
-    breakdown = match_result.get("breakdown", {}) if isinstance(match_result, dict) else {}
+    values = _report_values(match_result)
 
-    raw_match_score = (
-        match_result.get("overall_match_score")
-        if "overall_match_score" in match_result
-        else match_result.get("final_match_score", 0.0)
-    )
-    match_score = _to_float_score(raw_match_score, 0.0)
-
-    raw_prob = (
-        match_result.get("interview_prob")
-        if "interview_prob" in match_result
-        else match_result.get("prob", 0.0)
-    )
-    interview_prob = _to_float_score(raw_prob, 0.0)
+    def metric(key: str) -> str:
+        value = values[key]
+        return "N/A" if value is None else f"{value:.1f}".rstrip("0").rstrip(".")
 
     today_str = date.today().strftime("%Y-%m-%d")
 
@@ -443,11 +361,11 @@ def _safe_fallback_render(
         "{{VERDICT_TITLE_ZH}}": escape_html_text(verdict.get("title_zh") or "信息不足，无法判断"),
         "{{VERDICT_DESC_EN}}": escape_html_text(verdict.get("desc_en") or "Review before deciding."),
         "{{VERDICT_DESC_ZH}}": escape_html_text(verdict.get("desc_zh") or "缺少匹配证据时不生成投递结论。"),
-        "{{MATCH_SCORE_NUM}}": f"{match_score:.1f}".rstrip("0").rstrip("."),
-        "{{INTERVIEW_PROB_NUM}}": f"{interview_prob:.1f}".rstrip("0").rstrip("."),
-        "{{MUST_HAVE_SCORE}}": str(round(_to_float_score(breakdown.get("must_have", 0)))),
-        "{{NICE_HAVE_SCORE}}": str(round(_to_float_score(breakdown.get("nice_have", 0)))),
-        "{{HIDDEN_FIT_SCORE}}": str(round(_to_float_score(breakdown.get("hidden_fit", 0)))),
+        "{{MATCH_SCORE_NUM}}": metric("score"),
+        "{{INTERVIEW_PROB_NUM}}": metric("probability"),
+        "{{MUST_HAVE_SCORE}}": metric("must_have"),
+        "{{NICE_HAVE_SCORE}}": metric("nice_have"),
+        "{{HIDDEN_FIT_SCORE}}": metric("hidden_fit"),
         "{{L1_JD_TEXT_ZH}}": escape_html_text(_get_layer_val("layer_1", "jd_text_zh", "")),
         "{{L1_JD_TEXT_EN}}": escape_html_text(_get_layer_val("layer_1", "jd_text_en", "")),
         "{{L1_REALITY_ZH}}": escape_html_text(_get_layer_val("layer_1", "reality_zh", "")),
@@ -499,6 +417,7 @@ def generate_report(
     5. Bilingual twin audit via core.validator.validate_bilingual_html.
     """
     # 1. Adapt inputs into canonical models
+    match_result = match_result if isinstance(match_result, dict) else {}
     canonical_jd = _adapt_decoded_jd(decoded_jd)
     candidate, matcher, redflags, prediction = _adapt_match_result(match_result, canonical_jd)
 
@@ -511,12 +430,20 @@ def generate_report(
     # 3. Render HTML report
     if is_default_template(resolved_template):
         reporter = OfferStrategyReporter()
+        unavailable = {key for key, value in _report_values(match_result).items() if value is None}
+        if _supplied_prediction(match_result.get("prediction_result")) is not None:
+            unavailable.discard("probability")
+        else:
+            unavailable.add("listing_age")
+        if not canonical_jd.raw_text.strip() and not match_result.get("redflag_report"):
+            unavailable.add("risk")
         html = reporter.generate_html(
             jd=canonical_jd,
             candidate=candidate,
             matcher=matcher,
             redflags=redflags,
             prediction=prediction,
+            unavailable_fields=frozenset(unavailable),
         )
 
         # 4. Verify bilingual parity on default reports

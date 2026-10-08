@@ -5,10 +5,10 @@ Strictly zero external dependencies, robust CSS tab interactions, and
 100% compliant with OfferGet Bilingual Twin parity and Security Gate audits.
 """
 
-import os
 
 from core.artifacts import write_text_atomic
 from core.security_gate import escape_html_text as _esc
+
 from .models import (
     CandidateProfile,
     DecodedJD,
@@ -33,13 +33,28 @@ class OfferStrategyReporter:
         matcher: MatcherResult,
         redflags: RedFlagReport,
         prediction: PredictionResult,
+        *,
+        unavailable_fields: frozenset[str] = frozenset(),
     ) -> str:
         """Compile all analytics into an interactive bilingual HTML report."""
         score_pct = round(matcher.final_match_score * 100, 1)
-        raw_pct = round(matcher.raw_match_score * 100, 1)
 
-        # Determine theme color based on score & veto
-        if matcher.is_hard_vetoed:
+        def metric(value: float, field: str) -> str:
+            return "N/A" if field in unavailable_fields else f"{round(value * 100, 1)}%"
+
+        score_text = metric(matcher.final_match_score, "score")
+        raw_text = metric(matcher.raw_match_score, "raw_score")
+        must_text = metric(matcher.must_have_score, "must_have")
+        nice_text = metric(matcher.nice_to_have_score, "nice_have")
+        hidden_text = metric(matcher.hidden_signal_fit, "hidden_fit")
+        unknown_html = '<span data-lang="zh">信息不足，待确认</span> <span data-lang="en">Insufficient information; not assessed</span>'
+
+        # Determine theme color based on supplied score & veto.
+        if "score" in unavailable_fields and not matcher.is_hard_vetoed:
+            gauge_color = "#9ca3af"
+            status_text_cn = "信息不足，待确认"
+            status_text_en = "Not Assessed"
+        elif matcher.is_hard_vetoed:
             gauge_color = "#e11d48"  # Red
             status_text_cn = "硬门槛未通过，需人工复核"
             status_text_en = "Hard Threshold Vetoed"
@@ -57,17 +72,29 @@ class OfferStrategyReporter:
             status_text_en = "Low Fit"
 
         # Generate SVG Dashboards
-        gauge_svg = self._render_gauge_svg(score_pct, gauge_color)
+        gauge_svg = unknown_html if "score" in unavailable_fields else self._render_gauge_svg(score_pct, gauge_color)
         gap_chart_svg = self._render_gap_chart_svg(matcher)
         channel_chart_svg = self._render_channel_chart_svg(prediction)
 
         # Build sections with strict bilingual twin tags
-        tldr_html = self._build_tldr_html(jd, candidate, matcher, redflags, prediction, score_pct)
-        thresholds_html = self._build_thresholds_html(matcher)
+        tldr_html = self._build_tldr_html(
+            jd, candidate, matcher, redflags, prediction, score_pct,
+            score_available="score" not in unavailable_fields,
+            probability_available="probability" not in unavailable_fields,
+            risk_available="risk" not in unavailable_fields,
+        )
+        thresholds_html = (
+            '<div class="card"><h2><span data-lang="zh">硬门槛检查</span> <span data-lang="en">Hard Threshold Check</span></h2>'
+            + unknown_html + '</div>'
+        ) if "gate" in unavailable_fields else self._build_thresholds_html(matcher)
         decoding_html = self._build_decoding_html(jd)
         gap_matrix_html = self._build_gap_matrix_html(matcher)
-        redflags_html = self._build_redflags_html(redflags)
-        probability_html = self._build_probability_html(prediction, channel_chart_svg)
+        redflags_html = unknown_html if "risk" in unavailable_fields else self._build_redflags_html(redflags)
+        risk_text = "N/A" if "risk" in unavailable_fields else f"{redflags.risk_score}/100 ({redflags.overall_risk_level})"
+        probability_html = (
+            '<div class="item-box"><strong><span data-lang="zh">拿面概率与渠道</span> <span data-lang="en">Interview Probability and Channels</span></strong><p>'
+            + unknown_html + '</p></div>'
+        ) if "probability" in unavailable_fields else self._build_probability_html(prediction, channel_chart_svg, age_available="listing_age" not in unavailable_fields)
         top20_html = self._build_top20_html(prediction)
         action_plan_html = self._build_action_plan_html()
 
@@ -438,15 +465,15 @@ class OfferStrategyReporter:
                 <div class="score-box">
                     <div>{gauge_svg}</div>
                     <div class="score-text">
-                        <div class="score-number" style="color: {gauge_color};">{score_pct}%</div>
+                        <div class="score-number" style="color: {gauge_color};">{score_text}</div>
                         <div class="score-status" style="color: {gauge_color};"><span data-lang="zh">{status_text_cn}</span></div>
                         <div style="color: var(--text-muted); font-size: 12px;"><span data-lang="en">{status_text_en}</span></div>
                     </div>
                 </div>
                 <div class="formula-card">
                     <div><strong><span data-lang="zh">算法公式:</span> <span data-lang="en">Formula:</span></strong></div>
-                    <code>Match Score = 0.6 * MustHave ({round(matcher.must_have_score*100,1)}%) + 0.2 * NiceToHave ({round(matcher.nice_to_have_score*100,1)}%) + 0.2 * HiddenSignal ({round(matcher.hidden_signal_fit*100,1)}%)</code>
-                    <div style="margin-top: 4px; font-size: 12px;"><span data-lang="zh">原始无扣罚分:</span> <span data-lang="en">Raw Match Score:</span> {raw_pct}% {f' | ⚠️ 触发一票否决扣罚' if matcher.is_hard_vetoed else ''}</div>
+                    <code>Match Score = 0.6 * MustHave ({must_text}) + 0.2 * NiceToHave ({nice_text}) + 0.2 * HiddenSignal ({hidden_text})</code>
+                    <div style="margin-top: 4px; font-size: 12px;"><span data-lang="zh">原始无扣罚分:</span> <span data-lang="en">Raw Match Score:</span> {raw_text} {' | ⚠️ 触发一票否决扣罚' if matcher.is_hard_vetoed else ''}</div>
                 </div>
             </div>
 
@@ -501,7 +528,7 @@ class OfferStrategyReporter:
         <div class="card" style="margin-bottom: 24px;">
             <div class="card-header">
                 <h2><span data-lang="zh">技术岗位红旗与陷阱探测</span> <span class="en-label" data-lang="en">/ Red Flags & Trap Radar</span></h2>
-                <span class="badge { 'badge-rose' if redflags.risk_score >= 40 else 'badge-emerald' }"><span data-lang="zh">风险评分:</span> <span data-lang="en">Risk Score:</span> {redflags.risk_score}/100 ({redflags.overall_risk_level})</span>
+                <span class="badge { 'badge-rose' if redflags.risk_score >= 40 else 'badge-emerald' }"><span data-lang="zh">风险评分:</span> <span data-lang="en">Risk Score:</span> {risk_text}</span>
             </div>
             {redflags_html}
         </div>
@@ -630,11 +657,21 @@ class OfferStrategyReporter:
         redflags: RedFlagReport,
         pred: PredictionResult,
         score_pct: float,
+        *,
+        score_available: bool = True,
+        probability_available: bool = True,
+        risk_available: bool = True,
     ) -> str:
+        probability_available = probability_available and bool(pred.probability_forecast.channel_forecasts)
         best_chan = pred.probability_forecast.channel_forecasts.get("INTERNAL_REFERRAL")
         chan_text = f"{best_chan.min_prob}%-{best_chan.max_prob}%" if best_chan else "N/A"
 
-        if matcher.is_hard_vetoed:
+        if not score_available and not matcher.is_hard_vetoed:
+            verdict_title_zh = "信息不足，无法判断"
+            verdict_title_en = "Not Assessed"
+            verdict_desc_zh = "未提供有效匹配评分，请先完成证据核对。"
+            verdict_desc_en = "No valid match score supplied; review the evidence first."
+        elif matcher.is_hard_vetoed:
             verdict_title_zh = "硬门槛未通过，需人工复核"
             verdict_title_en = "Hard Threshold Vetoed"
             verdict_desc_zh = "候选人存在岗位硬性条件未满足或未确认的情况，不能由其他优势自动抵消。"
@@ -655,6 +692,13 @@ class OfferStrategyReporter:
             verdict_desc_zh = "当前材料与岗位要求的直接对应关系较少，建议先确认真实缺口。"
             verdict_desc_en = "Significant gaps identified relative to core job requirements."
 
+        risk_level = redflags.overall_risk_level if risk_available else "N/A"
+        risk_summary = _esc(redflags.summary[:50]) if risk_available else "待提供 JD 原文 / Supply the source JD"
+        channel_title_zh = f"内部员工内推 ({chan_text})" if probability_available else "渠道概率待确认"
+        channel_title_en = f"Internal Referral ({chan_text})" if probability_available else "Channel probabilities not assessed"
+        channel_desc_zh = "渠道估计仅供参考，请核对预测依据和招聘方实际反馈。" if probability_available else "缺少可核对的渠道预测，不推断渠道胜率。"
+        channel_desc_en = "Channel estimates are illustrative; verify their basis and actual recruiter feedback." if probability_available else "No supported channel forecast supplied; channel rates are unknown."
+
         return f"""
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
             <div class="item-box" style="border-left: 4px solid var(--accent-blue);">
@@ -664,13 +708,13 @@ class OfferStrategyReporter:
             </div>
             <div class="item-box" style="border-left: 4px solid var(--accent-emerald);">
                 <div style="font-size: 12px; color: var(--text-muted);"><span data-lang="zh">推荐突破渠道</span> <span class="en-label" data-lang="en">/ Best Channel</span></div>
-                <div style="font-size: 16px; font-weight: bold; margin: 4px 0; color: #34d399;"><span data-lang="zh">内部员工内推 ({chan_text})</span> <span data-lang="en">Internal Referral ({chan_text})</span></div>
-                <div style="font-size: 13px; color: #94a3b8;"><span data-lang="zh">相比海投胜率放大 8.3x，可有效跨过机器ATS初筛并直接触达技术主管。</span> <span data-lang="en">Amplifies interview rate by 8.3x over cold application and reaches hiring managers directly.</span></div>
+                <div style="font-size: 16px; font-weight: bold; margin: 4px 0; color: #34d399;"><span data-lang="zh">{channel_title_zh}</span> <span data-lang="en">{channel_title_en}</span></div>
+                <div style="font-size: 13px; color: #94a3b8;"><span data-lang="zh">{channel_desc_zh}</span> <span data-lang="en">{channel_desc_en}</span></div>
             </div>
             <div class="item-box" style="border-left: 4px solid { '#f43f5e' if redflags.risk_score >= 40 else '#10b981' };">
                 <div style="font-size: 12px; color: var(--text-muted);"><span data-lang="zh">红旗与陷阱预警</span> <span class="en-label" data-lang="en">/ Risk Radar</span></div>
-                <div style="font-size: 16px; font-weight: bold; margin: 4px 0;"><span data-lang="zh">{redflags.overall_risk_level} 风险级别</span> <span data-lang="en">{redflags.overall_risk_level} Risk Level</span></div>
-                <div style="font-size: 13px; color: #94a3b8;"><span data-lang="zh">侦测到 {len(redflags.flags)} 处关键警示: {_esc(redflags.summary[:50])}...</span> <span data-lang="en">Detected {len(redflags.flags)} risk warnings in job posting.</span></div>
+                <div style="font-size: 16px; font-weight: bold; margin: 4px 0;"><span data-lang="zh">{risk_level} 风险级别</span> <span data-lang="en">{risk_level} Risk Level</span></div>
+                <div style="font-size: 13px; color: #94a3b8;"><span data-lang="zh">侦测到 {len(redflags.flags)} 处关键警示: {risk_summary}</span> <span data-lang="en">Detected {len(redflags.flags)} risk warnings in job posting.</span></div>
             </div>
         </div>
         """
@@ -815,6 +859,9 @@ class OfferStrategyReporter:
             </div>
             """)
 
+        if not items_html:
+            items_html.append('<div class="item-box"><strong><span data-lang="zh">暂无差距条目</span> <span data-lang="en">No Gap Items Supplied</span></strong><p><span data-lang="zh">未生成候选人经历或能力判断，请核对原始材料。</span> <span data-lang="en">No candidate experience or capability claims were added; review the source material.</span></p></div>')
+
         return f"""
         <input type="radio" name="gap_tab" id="gap-tab-all" class="tab-radio" checked>
         <input type="radio" name="gap_tab" id="gap-tab-matched" class="tab-radio">
@@ -862,8 +909,10 @@ class OfferStrategyReporter:
 
         return f"<div class='item-list'>{''.join(flags_html)}</div>"
 
-    def _build_probability_html(self, pred: PredictionResult, chart_svg: str) -> str:
+    def _build_probability_html(self, pred: PredictionResult, chart_svg: str, *, age_available: bool = True) -> str:
         fc = pred.probability_forecast
+        age_text = str(fc.listing_age_days) if age_available else "N/A"
+        decay_text = f"{fc.age_decay_multiplier}x" if age_available else "N/A"
         age_warning = ""
         if fc.is_ghost_job_risk:
             age_warning = f"""
@@ -882,7 +931,7 @@ class OfferStrategyReporter:
                 <div style="font-size: 13px; color: #94a3b8;"><span data-lang="zh">战略投递指导</span> <span class="en-label" data-lang="en">/ Strategy Summary</span></div>
                 <div style="font-size: 14px; margin-top: 6px; line-height: 1.7; color: #f1f5f9;"><span data-lang="zh">{_esc(fc.strategic_summary)}</span> <span data-lang="en">{_esc(fc.strategic_summary)}</span></div>
                 <div style="margin-top: 12px; font-size: 12px; color: #a5b4fc;">
-                    <strong><span data-lang="zh">预估拿面概率:</span> <span data-lang="en">Estimated Probability:</span></strong> {round(fc.base_max_prob, 1)}% • <strong><span data-lang="zh">挂出时效调整:</span> <span data-lang="en">Listing Age Adjustment:</span></strong> {fc.listing_age_days} <span data-lang="zh">天</span> <span data-lang="en">Days</span> (<span data-lang="zh">衰减乘数:</span> <span data-lang="en">Decay Multiplier:</span> {fc.age_decay_multiplier}x)
+                    <strong><span data-lang="zh">预估拿面概率:</span> <span data-lang="en">Estimated Probability:</span></strong> {round(fc.base_max_prob, 1)}% • <strong><span data-lang="zh">挂出时效调整:</span> <span data-lang="en">Listing Age Adjustment:</span></strong> {age_text} <span data-lang="zh">天</span> <span data-lang="en">Days</span> (<span data-lang="zh">衰减乘数:</span> <span data-lang="en">Decay Multiplier:</span> {decay_text})
                 </div>
             </div>
         </div>
@@ -912,6 +961,12 @@ class OfferStrategyReporter:
             </div>
             """)
 
+        if not qs_html:
+            qs_html.append('<div class="item-box"><strong><span data-lang="zh">暂无个性化面试问题</span> <span data-lang="en">No Personalized Questions Available</span></strong><p><span data-lang="zh">请先提供岗位分析与候选人匹配证据。</span> <span data-lang="en">Supply job analysis and candidate matching evidence first.</span></p></div>')
+
+        def question_count(category: str) -> int:
+            return sum(q.category_type == category for q in pred.top20_questions)
+
         return f"""
         <input type="radio" name="top_tab" id="top-tab-all" class="tab-radio" checked>
         <input type="radio" name="top_tab" id="top-tab-arch" class="tab-radio">
@@ -920,11 +975,11 @@ class OfferStrategyReporter:
         <input type="radio" name="top_tab" id="top-tab-reverse" class="tab-radio">
         <div class="card-inner">
             <div class="tab-bar" id="top20-tabs">
-                <label for="top-tab-all" class="tab-btn"><span data-lang="zh">全部押题</span> <span data-lang="en">All Questions</span> (20)</label>
-                <label for="top-tab-arch" class="tab-btn"><span data-lang="zh">架构与系统设计</span> <span data-lang="en">Architecture & Design</span> (5)</label>
-                <label for="top-tab-principles" class="tab-btn"><span data-lang="zh">底层原理与算法细节</span> <span data-lang="en">Principles & Algorithms</span> (5)</label>
-                <label for="top-tab-bq" class="tab-btn"><span data-lang="zh">BQ 与团队协同</span> <span data-lang="en">Behavioral Questions</span> (5)</label>
-                <label for="top-tab-reverse" class="tab-btn"><span data-lang="zh">候选人反问高级提问</span> <span data-lang="en">Reverse Inquiries</span> (5)</label>
+                <label for="top-tab-all" class="tab-btn"><span data-lang="zh">全部押题</span> <span data-lang="en">All Questions</span> ({len(pred.top20_questions)})</label>
+                <label for="top-tab-arch" class="tab-btn"><span data-lang="zh">架构与系统设计</span> <span data-lang="en">Architecture & Design</span> ({question_count("ARCHITECTURE")})</label>
+                <label for="top-tab-principles" class="tab-btn"><span data-lang="zh">底层原理与算法细节</span> <span data-lang="en">Principles & Algorithms</span> ({question_count("PRINCIPLES")})</label>
+                <label for="top-tab-bq" class="tab-btn"><span data-lang="zh">BQ 与团队协同</span> <span data-lang="en">Behavioral Questions</span> ({question_count("BQ")})</label>
+                <label for="top-tab-reverse" class="tab-btn"><span data-lang="zh">候选人反问高级提问</span> <span data-lang="en">Reverse Inquiries</span> ({question_count("REVERSE")})</label>
             </div>
             <div class="item-list top20-list">
                 {''.join(qs_html)}
@@ -969,7 +1024,7 @@ class OfferStrategyReporter:
             <div class="timeline-step">
                 <div class="timeline-title"><span data-lang="zh">第 6 周: 渠道突破冲刺与反问攻防落地</span> <span class="en-label" data-lang="en">/ Phase 4: Channel Sprints & Reverse Inquiries</span></div>
                 <div class="timeline-desc">
-                    <span data-lang="zh">1. 放弃盲目海投，全力锁定【内部员工内推】（胜率提升 8.3 倍）与业务 Leader 直联；<br>
+                    <span data-lang="zh">1. 放弃盲目海投，全力锁定【内部员工内推】与业务 Leader 直联；<br>
                     2. 附带定制 Cover Letter 与开源战功链接直接发起沟通；<br>
                     3. 在技术终面与主管面中熟练运用【5道高阶反问提问】，争取最优职级与薪酬 Offer。</span>
                     <span data-lang="en">1. Prioritize internal employee referrals and direct outreach to hiring engineering leaders;<br>

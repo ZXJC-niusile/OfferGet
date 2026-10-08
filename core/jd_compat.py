@@ -8,19 +8,15 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Union
 
-from core.profile_adapter import (
-    ProfileContext,
-    build_profile_evidence_index,
-    normalize_candidate_profile,
-)
-from core.registry import TaxonomyRegistry
 from core.jd_analyst.decoder import JDDecoder
 from core.jd_analyst.matcher import JDMatcher
 from core.jd_analyst.models import (
+    BoilerplateFiltered,
+    BusinessPainPoint,
     CandidateProfile,
     CoreResponsibility,
     CoreSkill,
@@ -31,6 +27,12 @@ from core.jd_analyst.models import (
     SkillImportance,
 )
 from core.jd_analyst.predictor import InterviewProbabilityCalculator
+from core.profile_adapter import (
+    ProfileContext,
+    build_profile_evidence_index,
+    normalize_candidate_profile,
+)
+from core.registry import TaxonomyRegistry
 
 ROLE_TAXONOMIES: Dict[str, Dict[str, Any]] = TaxonomyRegistry.list_taxonomies()
 
@@ -110,6 +112,8 @@ def canonical_to_legacy(canonical: DecodedJD) -> DecodedJDCompat:
     }
 
     payload = {
+        # Preserve typed details across JSON persistence; legacy fields remain intact.
+        "canonical_jd": _json_safe(asdict(canonical)),
         "metadata": {
             **meta,
             "role_category": taxonomy_info["taxonomy"]["title"],
@@ -184,6 +188,20 @@ def profile_to_canonical(profile_data: Union[Dict[str, Any], ProfileContext]) ->
 
 def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
     """Rehydrate a plain JSON legacy result when it did not come from decode_legacy."""
+    canonical_data = decoded.get("canonical_jd")
+    if not isinstance(canonical_data, dict) and {"raw_text", "job_title", "company_or_dept"} <= decoded.keys():
+        canonical_data = decoded
+    if isinstance(canonical_data, dict):
+        values = {field.name: canonical_data[field.name] for field in fields(DecodedJD) if field.name in canonical_data}
+        for key, item_type in (
+            ("hard_thresholds", HardThreshold), ("core_skills", CoreSkill),
+            ("core_responsibilities", CoreResponsibility), ("implicit_signals", ImplicitSignal),
+            ("business_pain_points", BusinessPainPoint), ("filtered_boilerplates", BoilerplateFiltered),
+        ):
+            if key in values:
+                values[key] = [item if isinstance(item, item_type) else item_type(**item) for item in values[key]]
+        return DecodedJD(**values)
+
     raw_text = str(decoded.get("raw_text") or decoded.get("clean_text") or "")
     if raw_text and not any(k in decoded for k in ("job_title", "title", "required_skills", "core_skills", "requirements")):
         return JDDecoder().decode(raw_text)
@@ -239,7 +257,37 @@ def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
             if text:
                 responsibilities.append(CoreResponsibility(title=text[:30], description=text, domain="general"))
 
+    layers = decoded.get("layers", {}) if isinstance(decoded.get("layers"), dict) else {}
+
+    def supplied_layer(key: str, absent_marker: str) -> Dict[str, Any]:
+        layer = layers.get(key)
+        if not isinstance(layer, dict):
+            return {}
+        text = str(layer.get("jd_text_zh") or "")
+        return layer if text and absent_marker not in text else {}
+
+    # Older hand-authored legacy reports can carry evidence only in their layers.
+    # Preserve that text, without inventing risk, countermeasure, or KPI details.
+    skill_layer = supplied_layer("layer_2", "未识别明确技能")
+    if not skills and skill_layer:
+        skills.append(CoreSkill(str(skill_layer["jd_text_zh"]), "other", SkillImportance.MUST_HAVE.value, "general"))
     signals = [ImplicitSignal(**item) for item in decoded.get("detected_signals", []) if isinstance(item, dict) and "original_text" in item]
+    signal_layer = supplied_layer("layer_4", "未识别隐性信号")
+    if not signals and signal_layer:
+        signals.append(ImplicitSignal(
+            original_text=str(signal_layer["jd_text_zh"]),
+            translated_meaning=str(signal_layer.get("reality_zh") or ""),
+            underlying_risk=str(signal_layer.get("underlying_risk") or ""),
+            candidate_countermeasure=str(signal_layer.get("candidate_countermeasure") or ""),
+        ))
+    pain_points = []
+    pain_layer = supplied_layer("layer_5", "未从 JD 直接识别业务痛点")
+    if pain_layer:
+        pain_points.append(BusinessPainPoint(
+            aspect=str(pain_layer["jd_text_zh"]),
+            description=str(pain_layer.get("reality_zh") or ""),
+            evaluation_metric=str(pain_layer.get("evaluation_metric") or ""),
+        ))
     return DecodedJD(
         raw_text=raw_text,
         job_title=job_title,
@@ -248,7 +296,7 @@ def _legacy_to_canonical(decoded: Dict[str, Any]) -> DecodedJD:
         core_responsibilities=responsibilities,
         core_skills=skills,
         implicit_signals=signals,
-        business_pain_points=[],
+        business_pain_points=pain_points,
         clean_text=str(decoded.get("clean_text", raw_text)),
     )
 
