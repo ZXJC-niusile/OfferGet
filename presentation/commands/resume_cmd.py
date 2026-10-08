@@ -52,8 +52,11 @@ def cmd_resume_build(args_list=None):
         default="output/resumes",
         help="Output directory to save generated resumes (default: output/resumes)",
     )
-    build_parser.add_argument("--no-photo", action="store_true", help="Do not reserve photo slot")
-    build_parser.add_argument("--photo-path", default=None, help="Path to candidate photo image (jpg/png/webp)")
+    photo_group = build_parser.add_mutually_exclusive_group()
+    photo_group.add_argument("--no-photo", action="store_true", help="Exclude all photos and photo slots, including photos in the profile")
+    photo_group.add_argument("--photo-mode", choices=["photo", "no-photo", "placeholder"], default=None,
+                             help="photo: require a real image; no-photo: no image or slot (default); placeholder: explicit layout preview only")
+    build_parser.add_argument("--photo-path", default=None, help="Validated local PNG/JPEG/WebP/GIF still image; implies photo mode unless no-photo is selected")
     build_parser.add_argument(
         "--anonymize",
         default=None,
@@ -107,15 +110,27 @@ def cmd_resume_build(args_list=None):
         from core.cli_helpers import load_json
         baseline_data = load_json(str(b_path))
 
-    builder = ResumeBuilder(
-        profile_path,
-        photo_path=parsed.photo_path,
-        anonymize=parsed.anonymize,
-    )
+    photo_mode = ("no-photo" if parsed.no_photo else
+                  getattr(parsed, "photo_mode", None) or ("photo" if parsed.photo_path else "no-photo"))
+    try:
+        if parsed.theme == "ats-docx" and photo_mode != "no-photo":
+            raise ValueError("ats-docx supports no-photo only; select an HTML or academic theme for a photo variant")
+        builder = ResumeBuilder(
+            profile_path,
+            photo_path=parsed.photo_path,
+            anonymize=parsed.anonymize,
+            photo_mode=photo_mode,
+        )
+        # Resolve before rendering: a missing or invalid real photo is an error,
+        # never an implicit placeholder or a silently omitted portrait.
+        builder.view_model
+    except (ValueError, OSError) as exc:
+        emit_stderr(f"[-] Error: {exc}")
+        sys.exit(1)
     cand_name = builder.profile["candidate"].get("name", "候选人")
-    target_role = builder.profile["candidate"].get("title", "运营岗")
-
-    photo_status = 'Disabled' if parsed.no_photo else ('Custom image' if parsed.photo_path else 'Reserved placeholder')
+    target_role = builder.profile["candidate"].get("title", "")
+    photo_status = {"no-photo": "No photo or reserved slot", "photo": "Validated image",
+                    "placeholder": "Placeholder (layout preview only)"}[photo_mode]
 
     print("=" * 68)
     print("             OfferGet · Multi-Template Resume Builder            ")
@@ -131,7 +146,7 @@ def cmd_resume_build(args_list=None):
     print(f"[*] Diff Ledger: {'Enabled' if parsed.diff_ledger else 'Disabled'}")
     print("-" * 68)
 
-    photo = not parsed.no_photo
+    photo = photo_mode != "no-photo"
     autofit = not parsed.no_autofit
     adaptive_fill = bool(parsed.adaptive_fill)
     diff_ledger = bool(parsed.diff_ledger)
@@ -175,7 +190,7 @@ def cmd_resume_build(args_list=None):
             else:
                 artifact_name = artifact.name if artifact else "generated"
                 print(f"  ✓ [{parsed.theme:<16}] -> {artifact_name}")
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError, OSError) as exc:
         emit_stderr(f"[-] Error: Resume build failed: {exc}")
         sys.exit(1)
 

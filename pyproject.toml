@@ -16,6 +16,7 @@ test = [
     "pytest>=7.0.0",
 ]
 render = [
+    "pillow>=9.0.0",
     "pymupdf>=1.20.0",
     "pypdf>=3.0.0",
 ]

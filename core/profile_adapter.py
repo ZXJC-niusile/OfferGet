@@ -267,6 +267,7 @@ class ProfileContext:
         self,
         photo_path: Optional[Union[str, Path]] = None,
         reserve_photo: bool = True,
+        photo_mode: Optional[str] = None,
     ) -> Any:
         """Constructs a sanitized ResumeViewModel from this ProfileContext SSOT."""
         from core.resume_view_model import ResumeViewModel
@@ -275,6 +276,7 @@ class ProfileContext:
             self,
             photo_path=photo_path,
             reserve_photo=reserve_photo,
+            photo_mode=photo_mode,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -767,6 +769,9 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
         "education_grid": grid,
         "reserve_photo": True,
     }
+    for key in ("photo", "photo_path", "photo_mode", "reserve_photo"):
+        if key in raw_profile_copy:
+            cand_dict[key] = raw_profile_copy[key]
     yoe = raw_profile_copy.get("years_of_experience")
     if yoe is None:
         yoe = raw_profile_copy.get("experience_years")

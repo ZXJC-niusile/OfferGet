@@ -28,11 +28,12 @@ class ResumeService:
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
         anonymize: Optional[str] = None,
+        photo_mode: Optional[str] = None,
     ) -> Dict[str, Path]:
         """Builds a single resume theme."""
         from core.resume_builder import ResumeBuilder
 
-        builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize)
+        builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize, photo_mode=photo_mode)
         return builder.build_theme(
             theme=theme,
             output_dir=output_dir,
@@ -49,11 +50,12 @@ class ResumeService:
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
         anonymize: Optional[str] = None,
+        photo_mode: Optional[str] = None,
     ) -> Dict[str, Dict[str, Path]]:
         """Builds all supported resume variants."""
         from core.resume_builder import ResumeBuilder
 
-        builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize)
+        builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize, photo_mode=photo_mode)
         return builder.build_all(
             output_dir=output_dir,
             photo=photo,
