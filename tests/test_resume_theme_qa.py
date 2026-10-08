@@ -85,3 +85,11 @@ def test_academic_exam_fixtures_cover_every_field_and_long_subjects():
         assert set(exam) == {"target_school", "target_major", "direction", "scores", "total_score"}
         assert sum(int(score) for score in exam["scores"].values()) == int(exam["total_score"])
     assert max(len(label) for case in cases for label in case["profile"]["postgraduate_exam"]["scores"]) > 70
+
+
+def test_git_paths_are_matched_portably_on_windows(monkeypatch):
+    from pathlib import PureWindowsPath
+    monkeypatch.setattr("scripts.qa_modern_navy_layout.theme_path",
+                        lambda theme: PureWindowsPath("themes") / f"{theme}.html")
+    assert changed_themes(["themes/classic-tech.html"]) == ["classic-tech"]
+    assert changed_themes(["themes/modern-corporate.html"]) == ["modern-corporate"]

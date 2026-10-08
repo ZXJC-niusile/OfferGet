@@ -39,7 +39,7 @@ def changed_themes(paths):
                          "core/browser_renderer.py", "core/autofit.py", "core/layout_solver.py"}
     if paths & rendering_sources:
         return list(THEMES)
-    selected = {theme for theme in THEMES if str(theme_path(theme)) in paths}
+    selected = {theme for theme in THEMES if theme_path(theme).as_posix() in paths}
     harness_sources = {"scripts/qa_modern_navy_layout.py", "tests/test_resume_theme_qa.py",
                        "tests/test_modern_navy_layout.py", ".github/workflows/resume-visual.yml"}
     if paths & harness_sources or not selected:
