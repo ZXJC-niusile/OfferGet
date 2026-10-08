@@ -57,7 +57,11 @@ covered by the existing builder and AutoFit suites.
 Every pair gets a populated HTML file, full-page screen PNG, selectable-text PDF,
 PNG for every printed page, and `metrics.json`. The top-level `report.json`
 records source revisions where available, template hashes, text hashes,
-Playwright/Chromium versions, fixture names, page counts, and failures.
+Playwright/Chromium versions, fixture names, page counts, and failures. The
+production pair uses BrowserRenderer's normal browser discovery and records the
+selected executable path in its trace. Full child stdout/stderr and renderer
+traces are retained as artifacts; a bounded error excerpt appears in the report
+if production rendering fails or times out.
 
 The check fails on current-template text changes, horizontal text overflow,
 intersecting flex/grid siblings, missing PDF text, unloaded embedded images,

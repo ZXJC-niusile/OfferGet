@@ -65,20 +65,27 @@ class MeasuredBrowser(BrowserRenderer):
         return result
     def render_pdf(self, *args, **kwargs):
         result = super().render_pdf(*args, **kwargs)
-        trace['renders'].append({'ok': result[0], 'pages': result[1]})
+        trace['renders'].append({'ok': result[0], 'pages': result[1], 'message': result[2]})
         return result
 class MeasuredAutoFit(AutoFitEngine):
     def fit_to_single_page(self, *args, **kwargs):
         result = super().fit_to_single_page(*args, **kwargs)
         trace['autofit'].append({'success': result[0], 'details': result[2]})
         return result
-renderer = MeasuredBrowser(browser_path=request['browser_path'])
-builder = ResumeBuilder(request['profile'], template_dir=root / 'themes',
-                        renderer=renderer, autofit_engine=MeasuredAutoFit(renderer))
-result = builder.build_html_theme('modern-navy', request['output_dir'],
-    photo=request['photo'] == 'reserved', pages='auto', autofit=True,
-    adaptive_fill=True, diff_ledger=False)
-print(json.dumps({'html': str(result['html']), 'pdf': str(result['pdf']), 'trace': trace}))
+output = Path(request['output_dir'])
+output.mkdir(parents=True, exist_ok=True)
+try:
+    # Match the production CLI's browser discovery, including supported overrides.
+    renderer = MeasuredBrowser()
+    trace['browserPath'] = str(renderer.browser_path)
+    builder = ResumeBuilder(request['profile'], template_dir=root / 'themes',
+                            renderer=renderer, autofit_engine=MeasuredAutoFit(renderer))
+    result = builder.build_html_theme('modern-navy', output,
+        photo=request['photo'] == 'reserved', pages='auto', autofit=True,
+        adaptive_fill=True, diff_ledger=False)
+    print(json.dumps({'html': str(result['html']), 'pdf': str(result['pdf']), 'trace': trace}))
+finally:
+    (output / 'renderer-trace.json').write_text(json.dumps(trace, indent=2), encoding='utf-8')
 '''
 
 
@@ -256,13 +263,31 @@ def render_html(root, case):
     return result.stdout
 
 
-def render_production(root, case, output, browser_path):
-    request = dict(case, output_dir=str(output), browser_path=browser_path)
-    result = subprocess.run(
-        [sys.executable, "-I", "-B", "-X", "utf8", "-c", BUILDER_GENERATOR, str(root)],
-        input=json.dumps(request, ensure_ascii=False), capture_output=True, text=True,
-        encoding="utf-8", cwd=root, timeout=180, check=True,
-    )
+def save_child_logs(output, stdout, stderr):
+    """Keep full child diagnostics in artifacts and return only a bounded summary."""
+    def decode(value):
+        return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else (value or "")
+    stdout, stderr = decode(stdout), decode(stderr)
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "child-stdout.txt").write_text(stdout, encoding="utf-8")
+    (output / "child-stderr.txt").write_text(stderr, encoding="utf-8")
+    return (stderr.strip() or stdout.strip() or "No child output was captured.")[-2000:]
+
+
+def render_production(root, case, output):
+    request = dict(case, output_dir=str(output))
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", "-X", "utf8", "-c", BUILDER_GENERATOR, str(root)],
+            input=json.dumps(request, ensure_ascii=False), capture_output=True, text=True,
+            encoding="utf-8", cwd=root, timeout=180, check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        detail = save_child_logs(output, exc.stdout, exc.stderr)
+        raise RuntimeError(f"Production renderer timed out; logs: {output}\n{detail}") from None
+    detail = save_child_logs(output, result.stdout, result.stderr)
+    if result.returncode:
+        raise RuntimeError(f"Production renderer exited {result.returncode}; logs: {output}\n{detail}")
     returned = json.loads(result.stdout)
     for kind in ("html", "pdf"):
         path = Path(returned[kind]).resolve()
@@ -377,7 +402,7 @@ def run(baseline, output):
                     target.mkdir(parents=True)
                     if case["mode"] == "builder":
                         html[phase], production[phase] = render_production(
-                            root, case, target / "production", playwright.chromium.executable_path)
+                            root, case, target / "production")
                     else:
                         html[phase] = render_html(root, case)
                 unchanged = text_content(html["before"]) == text_content(html["after"])

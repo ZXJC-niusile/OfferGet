@@ -2,7 +2,10 @@
 
 import base64
 import copy
+import json
 import re
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,10 +13,12 @@ from core.autofit import TUNING_LADDER, AutoFitEngine
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import (
+    BUILDER_GENERATOR,
     ROOT,
     final_failures,
     fixtures,
     render_html,
+    render_production,
     revision,
     synthetic_photo,
     text_content,
@@ -173,3 +178,49 @@ def test_production_fixture_cannot_silently_use_the_raw_renderer():
     case = next(case for case in fixtures() if case["mode"] == "builder")
     with pytest.raises(ValueError, match="real browser"):
         render_html(ROOT, case)
+
+
+@pytest.mark.parametrize("timeout", [False, True])
+def test_production_failure_preserves_full_child_diagnostics(tmp_path, monkeypatch, timeout):
+    output = tmp_path / "production"
+    stdout = "builder output 示例\n"
+    stderr = "x" * 5000 + "\nExact browser startup failure 示例"
+
+    def failed_child(*args, **kwargs):
+        assert kwargs["check"] is False
+        if timeout:
+            raise subprocess.TimeoutExpired(args[0], 180, output=stdout.encode(), stderr=stderr.encode())
+        return SimpleNamespace(returncode=7, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr("scripts.qa_modern_navy_layout.subprocess.run", failed_child)
+    with pytest.raises(RuntimeError) as raised:
+        render_production(ROOT, {"mode": "builder"}, output)
+    assert "Exact browser startup failure 示例" in str(raised.value)
+    assert len(str(raised.value)) < 2500
+    assert (output / "child-stdout.txt").read_text(encoding="utf-8") == stdout
+    assert (output / "child-stderr.txt").read_text(encoding="utf-8") == stderr
+
+
+def test_production_uses_default_browser_selection_and_records_its_path(tmp_path, monkeypatch):
+    assert "renderer = MeasuredBrowser()" in BUILDER_GENERATOR
+    assert "trace['browserPath'] = str(renderer.browser_path)" in BUILDER_GENERATOR
+    output = tmp_path / "production"
+
+    def successful_child(*args, **kwargs):
+        request = json.loads(kwargs["input"])
+        assert "browser_path" not in request
+        output.mkdir()
+        html_path, pdf_path = output / "resume.html", output / "resume.pdf"
+        html_path.write_text("<html><body>synthetic</body></html>", encoding="utf-8")
+        pdf_path.write_bytes(b"%PDF-unit-test-output")
+        returned = {"html": str(html_path), "pdf": str(pdf_path), "trace": {
+            "browserPath": "/test/default-browser", "measurements": [[800, 0]],
+            "renders": [{"ok": True, "pages": 1}], "autofit": [{"success": True}],
+        }}
+        return SimpleNamespace(returncode=0, stdout=json.dumps(returned), stderr="")
+
+    monkeypatch.setattr("scripts.qa_modern_navy_layout.subprocess.run", successful_child)
+    html, returned = render_production(ROOT, {"mode": "builder"}, output)
+    assert "synthetic" in html
+    assert returned["trace"]["browserPath"] == "/test/default-browser"
+    assert (output / "child-stdout.txt").is_file()
