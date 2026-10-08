@@ -1,0 +1,50 @@
+name: Academic Typst visual QA
+on:
+  pull_request:
+    paths:
+      - 'core/academic_exporter.py'
+      - 'core/resume_view_model.py'
+      - 'core/profile_adapter.py'
+      - 'scripts/qa_academic_typst_layout.py'
+      - 'scripts/qa_ats_docx_layout.py'
+      - 'scripts/qa_modern_navy_layout.py'
+      - 'tests/test_academic_typst_design.py'
+      - '.github/workflows/academic-typst-layout.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  typst-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native compiler, browser and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-liberation
+          python -m pip install -e '.[all]' 'typst==0.15.0' 'playwright==1.62.0'
+          python -m playwright install --with-deps chromium
+      - name: Check source and markup contracts
+        run: python -m pytest tests/test_academic_typst_design.py -v
+      - name: Render native, fallback and real builder branches separately
+        run: python scripts/qa_academic_typst_layout.py --output artifacts/academic-typst
+      - name: Preserve source, native and fallback PDF pages and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: academic-typst-${{ github.sha }}
+          # Quote-named synthetic input photos exercise the compiler, but
+          # GitHub artifacts reject those filenames. Keep all rendered evidence.
+          path: |
+            artifacts/academic-typst/**/*.pdf
+            artifacts/academic-typst/**/page-*.png
+            artifacts/academic-typst/**/*.typ
+            artifacts/academic-typst/**/*.html
+            artifacts/academic-typst/**/*.json
+            artifacts/academic-typst/**/*.log
+          if-no-files-found: error
+          retention-days: 14
