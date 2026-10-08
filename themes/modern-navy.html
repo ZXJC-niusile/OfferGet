@@ -38,7 +38,8 @@
 
     @page {
       size: A4 portrait;
-      margin: 0;
+      /* Repeat the vertical gutter on every printed page. */
+      margin: var(--page-padding-y) 0;
     }
 
     * {
@@ -107,13 +108,27 @@
       margin-bottom: 8px;
     }
 
+    /* The shared renderer supplies inline flex styles; these rules also cover
+       that generated markup without changing other themes. */
+    header > div:first-child {
+      min-width: 0;
+    }
+
     .header-top {
       display: flex;
+      flex-wrap: wrap;
+      gap: 4px 16px;
       justify-content: space-between;
       align-items: flex-end;
       border-bottom: 1.5px solid var(--color-primary);
       padding-bottom: 4px;
       margin-bottom: 5px;
+    }
+
+    .header-top > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
 
     h1 {
@@ -129,13 +144,22 @@
       font-size: 11px;
       color: var(--color-muted);
       display: flex;
-      gap: 9px;
-      align-items: center;
+      gap: 4px 9px;
+      flex-wrap: wrap;
+      align-items: baseline;
     }
 
     .contacts span {
       display: inline-flex;
-      align-items: center;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      align-items: baseline;
+    }
+
+    .contacts a {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     .headline {
@@ -201,6 +225,8 @@
        ========================================================================== */
     .org-bar {
       display: flex;
+      flex-wrap: wrap;
+      gap: 3px 12px;
       justify-content: space-between;
       align-items: baseline;
       background-color: var(--color-bg-bar);
@@ -217,8 +243,18 @@
 
     .org-left {
       display: flex;
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      min-width: 0;
       align-items: baseline;
       gap: 8px;
+    }
+
+    .org-left > *,
+    .project-header > div:first-child > * {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
 
     .org-title {
@@ -250,10 +286,37 @@
        ========================================================================== */
     .project-header {
       display: flex;
+      flex-wrap: wrap;
+      gap: 3px 12px;
       justify-content: space-between;
       align-items: baseline;
       margin-top: 4px;
       margin-bottom: 2px;
+    }
+
+    .project-header > div:first-child {
+      flex: 1 1 24em;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+
+    .org-right,
+    .project-header > div:last-child {
+      flex: 0 0 auto;
+      max-width: 100%;
+      margin-left: auto;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .edu-grid {
+      column-gap: 10px;
+    }
+
+    .edu-grid > div,
+    #skills li > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
     }
 
     h3 {
@@ -285,7 +348,8 @@
       position: relative;
       padding-left: 14px;
       margin-bottom: var(--item-gap);
-      text-align: justify;
+      text-align: start;
+      overflow-wrap: anywhere;
     }
 
     li::before {
@@ -322,6 +386,26 @@
       border-radius: 2px;
       border: 1px dashed var(--color-todo-text);
       font-weight: 600;
+    }
+    @media print {
+      .page {
+        /* Keep the A4 width and horizontal gutter used by AutoFit. Page margins
+           now own vertical padding, including continuation pages. */
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+
+      header, .section-header, .org-bar, .project-header {
+        break-inside: avoid;
+        break-after: avoid;
+      }
+
+      li {
+        break-inside: avoid;
+        orphans: 2;
+        widows: 2;
+      }
     }
   </style>
 </head>
