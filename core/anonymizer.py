@@ -9,7 +9,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
@@ -307,6 +306,48 @@ class PrivacyAnonymizer:
 
         return mapping
 
+    @staticmethod
+    def _replace_once(data: Any, mapping: Dict[str, str]) -> Any:
+        """Replace original matches only; never scan replacement text again."""
+        if not mapping:
+            return copy.deepcopy(data)
+        keys = sorted(mapping, key=lambda key: (-len(key), key))
+        pattern = re.compile("|".join(re.escape(key) for key in keys))
+
+        def visit(value: Any) -> Any:
+            if isinstance(value, str):
+                return pattern.sub(lambda match: mapping[match.group(0)], value)
+            if isinstance(value, dict):
+                return {key: visit(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [visit(item) for item in value]
+            return copy.deepcopy(value)
+
+        return visit(data)
+
+    @staticmethod
+    def _unique_aliases(
+        mapping: Dict[str, str], source: str, *, opaque: bool = False
+    ) -> Dict[str, str]:
+        """Reserve aliases absent from the source, resolving collisions stably."""
+        if any(not isinstance(k, str) or not k or not isinstance(v, str) or not v for k, v in mapping.items()):
+            raise ValueError("Anonymization mappings require non-empty string keys and values")
+        result: Dict[str, str] = {}
+        used = set()
+        for real in sorted(mapping):
+            alias = mapping[real]
+            if opaque or alias.startswith("__") or alias == "alias_to_real" or alias in used or alias in source:
+                nonce = 0
+                while True:
+                    digest = hashlib.sha256(f"{real}\0{nonce}".encode("utf-8")).hexdigest()
+                    alias = f"[OFFERGET_{digest}]"
+                    if alias not in used and alias not in source:
+                        break
+                    nonce += 1
+            result[real] = alias
+            used.add(alias)
+        return result
+
     def anonymize(
         self, data: Union[dict, str], level: str = "strict"
     ) -> Tuple[Union[dict, str], dict]:
@@ -351,35 +392,21 @@ class PrivacyAnonymizer:
             strict_keys = set(PREDEFINED_STRICT_MAPPINGS.keys())
             real_to_alias = {k: v for k, v in real_to_alias.items() if k not in strict_keys}
 
-        # Build deanon_map (alias -> real)
-        # Note: Ensure aliases are unique so mapping is strictly reversible
-        deanon_map: Dict[str, str] = {}
-        for real, alias in real_to_alias.items():
-            deanon_map[alias] = real
+        # Distinct originals must have distinct aliases. Existing alias-like input
+        # must also survive restoration unchanged.
+        source = json.dumps(data, ensure_ascii=False) if isinstance(data, dict) else data
+        real_to_alias = self._unique_aliases(real_to_alias, source)
+        anonymized_data = self._replace_once(data, real_to_alias)
+        deanon_map = {alias: real for real, alias in real_to_alias.items()}
 
-        # Perform replacement: Sort real entities by descending length to prevent partial replacement
-        sorted_real_items = sorted(real_to_alias.items(), key=lambda item: len(item[0]), reverse=True)
-
-        def _replace_text(text: str) -> str:
-            result = text
-            for real, alias in sorted_real_items:
-                if real in result:
-                    result = result.replace(real, alias)
-            return result
-
-        def _anonymize_obj(obj: Any) -> Any:
-            if isinstance(obj, str):
-                return _replace_text(obj)
-            elif isinstance(obj, dict):
-                return {k: _anonymize_obj(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_anonymize_obj(elem) for elem in obj]
-            return obj
-
-        if isinstance(data, dict):
-            anonymized_data = _anonymize_obj(copy.deepcopy(data))
-        else:
-            anonymized_data = _replace_text(data)
+        # Readable aliases can overlap each other or adjacent source text. Use a
+        # reserved opaque token set if the readable set cannot round-trip exactly.
+        if self.deanonymize(anonymized_data, deanon_map) != data:
+            real_to_alias = self._unique_aliases(real_to_alias, source, opaque=True)
+            anonymized_data = self._replace_once(data, real_to_alias)
+            deanon_map = {alias: real for real, alias in real_to_alias.items()}
+            if self.deanonymize(anonymized_data, deanon_map) != data:
+                raise ValueError("Unable to create a reversible anonymization mapping")
 
         return anonymized_data, deanon_map
 
@@ -397,38 +424,20 @@ class PrivacyAnonymizer:
             Restored dictionary or text string.
         """
         # Support both direct {alias: real} or structured {"alias_to_real": {...}}
+        if not isinstance(deanon_map, dict):
+            raise TypeError("deanon_map must be a dictionary")
         mapping = deanon_map.get("alias_to_real", deanon_map)
         if not isinstance(mapping, dict):
             raise TypeError("deanon_map must be a dictionary")
 
         # Filter out any internal metadata keys
-        clean_map = {k: v for k, v in mapping.items() if not k.startswith("__")}
+        clean_map = {k: v for k, v in mapping.items() if not isinstance(k, str) or not k.startswith("__")}
 
-        # Sort aliases by descending length to prevent partial replacement
-        sorted_alias_items = sorted(clean_map.items(), key=lambda item: len(item[0]), reverse=True)
-
-        def _restore_text(text: str) -> str:
-            result = text
-            for alias, real in sorted_alias_items:
-                if alias in result:
-                    result = result.replace(alias, real)
-            return result
-
-        def _deanonymize_obj(obj: Any) -> Any:
-            if isinstance(obj, str):
-                return _restore_text(obj)
-            elif isinstance(obj, dict):
-                return {k: _deanonymize_obj(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [_deanonymize_obj(elem) for elem in obj]
-            return obj
-
-        if isinstance(data, dict):
-            return _deanonymize_obj(copy.deepcopy(data))
-        elif isinstance(data, str):
-            return _restore_text(data)
-        else:
+        if not isinstance(data, (dict, str)):
             raise TypeError(f"Expected dict or str, got {type(data).__name__}")
+        if any(not isinstance(k, str) or not k or not isinstance(v, str) for k, v in clean_map.items()):
+            raise ValueError("De-anonymization mappings require non-empty string aliases and string values")
+        return self._replace_once(data, clean_map)
 
     def save_map(self, deanon_map: dict, filepath: Union[str, Path]) -> None:
         """
