@@ -36,6 +36,42 @@ from core.security_gate import (
 from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
 
 
+PUBLICATION_FIELDS = (
+    "title", "authors", "venue", "conference", "year", "status",
+    "author_role", "highlight", "summary", "individual_contribution",
+)
+PUBLICATION_LABELS = {
+    "status": "状态：", "author_role": "作者角色：", "individual_contribution": "个人贡献：",
+}
+
+
+def _publication_text(value: Any) -> str:
+    """Preserve source strings and ordered string-list fields without Python repr."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return "; ".join(str(item) for item in value if item is not None and str(item).strip())
+    return str(value)
+
+
+def publication_facts(publication: Dict[str, Any]) -> List[tuple[str, str]]:
+    """Return supplied facts only, decoding legacy HTML projections exactly once."""
+    from html import unescape
+    facts = []
+    for key in PUBLICATION_FIELDS:
+        raw_key = f"raw_{key}"
+        value = (_publication_text(publication[raw_key]) if raw_key in publication
+                 else unescape(_publication_text(publication.get(key))))
+        if value.strip():
+            facts.append((key, value))
+    return facts
+
+
+def publication_text_parts(publication: Dict[str, Any]) -> List[str]:
+    """Label supplied qualifications without inferring publication or author status."""
+    return [PUBLICATION_LABELS.get(key, "") + value for key, value in publication_facts(publication)]
+
+
 @dataclass
 class ResumeViewModel:
     """Unified, pre-escaped View Model for cross-template resume rendering."""
@@ -267,13 +303,13 @@ class ResumeViewModel:
         # Publications
         publications: List[Dict[str, Any]] = []
         for pub in prof.get("publications", []):
+            if isinstance(pub, str):
+                pub = {"title": pub}
             if not isinstance(pub, dict):
                 continue
-            fields = ("title", "authors", "venue", "conference", "year", "status",
-                      "author_role", "highlight", "summary", "individual_contribution")
             publication = {}
-            for key in fields:
-                raw_value = "" if pub.get(key) is None else str(pub[key])
+            for key in PUBLICATION_FIELDS:
+                raw_value = _publication_text(pub.get(key))
                 publication[key] = escape_html_text(raw_value)
                 publication[f"raw_{key}"] = raw_value
             publications.append(publication)
@@ -628,13 +664,10 @@ class HtmlThemeRenderer:
         entries = []
         for index, publication in enumerate(vm.publications):
             fields = []
-            for key in ("title", "authors", "venue", "conference", "year", "status",
-                        "author_role", "highlight", "summary", "individual_contribution"):
-                if publication.get(key):
-                    value = f'<span class="publication-{key}" data-field="publications.{index}.{key}">{publication[key]}</span>'
-                    label = {"status": "状态：", "author_role": "作者角色：",
-                             "individual_contribution": "个人贡献："}.get(key, "")
-                    fields.append(f'<span class="publication-fact">{label}{value}</span>')
+            for key, text in publication_facts(publication):
+                value = f'<span class="publication-{key}" data-field="publications.{index}.{key}">{escape_html_text(text)}</span>'
+                label = PUBLICATION_LABELS.get(key, "")
+                fields.append(f'<span class="publication-fact">{label}{value}</span>')
             if fields:
                 entries.append(f'<li class="publication-entry" data-entry="publications.{index}">{" · ".join(fields)}</li>')
         if not entries:
@@ -721,7 +754,7 @@ class HtmlThemeRenderer:
             "experience": self.render_experience(vm, theme_name),
             "projects": self.render_projects(vm, theme_name),
             "skills": self.render_skills(vm, theme_name),
-            "publications": self.render_publications(vm, theme_name) if theme_name in self.SEMANTIC_THEMES else "",
+            "publications": self.render_publications(vm, theme_name),
         }
         if theme_name == "silicon-clean" and theme_name in self.SEMANTIC_THEMES:
             opening = "\n".join(sections[key] for key in ("postgraduate-exam", "education") if sections[key])
@@ -893,6 +926,12 @@ class AtsPlainRenderer:
                 md_lines.append(f"- **{k}：**{val}")
             md_lines.append("")
 
+        publications = [publication_text_parts(pub) for pub in vm.publications]
+        publications = [parts for parts in publications if parts]
+        if publications:
+            md_lines.extend(["", "---", "", "## 学术成果"])
+            md_lines.extend("- " + " · ".join(parts).replace("\n", "\n  ") for parts in publications)
+
         return "\n".join(md_lines)
 
     def render_html(self, vm: ResumeViewModel) -> str:
@@ -1043,6 +1082,13 @@ class AtsPlainRenderer:
                 key_html = escape_html_text(str(key))
                 text = ", ".join(str(item) for item in value) if isinstance(value, list) else str(value)
                 ats_html += f"<li><b>{key_html}：</b>{escape_html_text(text)}</li>"
+            ats_html += "</ul>\n    </section>\n"
+
+        publications = [publication_text_parts(pub) for pub in vm.publications]
+        publications = [parts for parts in publications if parts]
+        if publications:
+            ats_html += "    <section><h2>学术成果</h2>\n      <ul>"
+            ats_html += "".join("<li>" + escape_html_text(" · ".join(parts)) + "</li>" for parts in publications)
             ats_html += "</ul>\n    </section>\n"
 
         ats_html += "  </main>\n</body>\n</html>"
