@@ -186,7 +186,8 @@
     }
     li::marker { color: var(--color-text); font-size: 0.85em; }
     li.sub { margin-left: 14px; list-style-type: circle; }
-    #skills li { padding-left: 0; font-size: 1em !important; }
+    #skills li { padding-left: 0; font-size: 1em !important; flex-wrap: wrap; }
+    #skills li > span:first-child { white-space: normal !important; flex-shrink: 1 !important; }
     b, strong { color: var(--color-text); font-weight: 700; }
 
     /* Unresolved facts must remain visibly marked; this is not a resume badge. */

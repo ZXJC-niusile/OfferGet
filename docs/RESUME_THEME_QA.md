@@ -27,7 +27,7 @@ returned by the builder. Each source tree is imported in a separate interpreter.
 
 ## Coverage and artifacts
 
-The twelve common fixtures cover short and pathological long bilingual input,
+The sixteen common fixtures cover short and pathological long bilingual input,
 photo slots and embedded synthetic images, the most compact AutoFit profile,
 dense two-page solver output, a short production build, and realistic bilingual
 production builds with two work entries and two projects, with/without a photo.
@@ -60,13 +60,13 @@ on failure. Theme authors should limit their PR to their theme, independent
 contract tests and documentation. The dedicated QA owner maintains this script
 and workflow to avoid concurrent infrastructure edits.
 
-## Known coverage gap
+## Long skill categories
 
-The common long fixture currently stresses contacts, organizations, education and
-projects, but not pathological skill-category labels. Very long unbroken skill
-labels can expose shared inline `white-space: nowrap` defaults. A separate
-regression-fixture and narrowly scoped Navy correction will verify this case;
-the twelve-case pass must not be read as coverage of every arbitrary skill label.
+Four common cases explicitly exercise long bilingual and unbroken skill labels
+and values through both raw rendering and the actual production builder, with
+and without a photo slot. This closes the earlier documented coverage gap.
+Skill sibling overlap checks use actual text-range rectangles so harmless
+multi-line inline-span bounding boxes are not mistaken for overlapping text.
 
 ## Modern Corporate design
 
