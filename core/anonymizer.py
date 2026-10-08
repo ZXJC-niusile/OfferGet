@@ -10,6 +10,7 @@ import copy
 import hashlib
 import json
 import re
+import warnings
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -94,6 +95,10 @@ PREDEFINED_STRICT_MAPPINGS: Dict[str, str] = {
 }
 
 
+class PrivacyCoverageWarning(UserWarning):
+    """The input contains privacy-bearing content outside supported discovery."""
+
+
 # ---------------------------------------------------------------------------
 # PrivacyAnonymizer Class
 # ---------------------------------------------------------------------------
@@ -148,100 +153,113 @@ class PrivacyAnonymizer:
     def _extract_entities_from_profile_dict(
         self, profile_dict: Dict[str, Any], level: str
     ) -> Dict[str, str]:
-        """
-        Extracts known entities and their mapped aliases from a structured candidate profile.
+        """Discover entities in supported schemas without normalizing away fields.
+
+        Covers flat, candidate, and basics profiles, dict/list education, and
+        experience/project aliases. Unknown privacy-bearing fields warn rather
+        than silently implying that arbitrary free-form content is safe.
         """
         mapping: Dict[str, str] = {}
+        standard_fields = {
+            "name": "name", "candidate_name": "name", "full_name": "name",
+            "en_name": "name", "name_en": "name", "english_name": "name",
+            "phone": "phone", "mobile": "phone", "telephone": "phone",
+            "email": "email", "email_address": "email",
+            "github": "github", "github_handle": "github",
+            "linkedin": "linkedin", "linkedin_handle": "linkedin",
+            "wechat": "contact", "address": "address", "location": "location",
+            "city": "location", "website": "url", "homepage": "url",
+            "portfolio": "url", "url": "url",
+        }
+        strict_fields = {
+            "school": "university", "institution": "university",
+            "university": "university", "undergraduate_school": "university",
+            "degree_school": "university", "school_name": "university",
+            "company": "company", "company_en": "company", "org": "company",
+            "organization": "company", "employer": "company", "lab": "company",
+        }
+        identity_containers = {"candidate", "basics", "contact", "personal_info"}
+        project_containers = {"projects", "campus_experience"}
+        sensitive_unknown = re.compile(
+            r"(?:^|_)(?:name|phone|email|address|school|university|institution|"
+            r"company|employer|contact|ssn|passport|birth|dob|photo|avatar|"
+            r"national_id|id_card)(?:_|$)"
+        )
 
-        # 1. Standard Level Entities (Candidate PII)
-        candidate = profile_dict.get("candidate", {})
-        if isinstance(candidate, dict):
-            # Name
-            if candidate.get("name"):
-                name = str(candidate["name"]).strip()
-                mapping[name] = PREDEFINED_STANDARD_MAPPINGS.get(name) or "Dr. Alex Chen"
-            if candidate.get("en_name"):
-                en_name = str(candidate["en_name"]).strip()
-                mapping[en_name] = PREDEFINED_STANDARD_MAPPINGS.get(en_name) or "Dr. Alexander Chen"
-
-            # Phone
-            if candidate.get("phone"):
-                phone = str(candidate["phone"]).strip()
-                mapping[phone] = PREDEFINED_STANDARD_MAPPINGS.get(phone) or "+86 138-0000-0000"
-
-            # Email
-            if candidate.get("email"):
-                email = str(candidate["email"]).strip()
-                mapping[email] = PREDEFINED_STANDARD_MAPPINGS.get(email) or "candidate.ai@example.com"
-
-            # GitHub
-            if candidate.get("github"):
-                gh = str(candidate["github"]).strip()
-                mapping[gh] = PREDEFINED_STANDARD_MAPPINGS.get(gh) or "https://github.com/candidate-ai"
-                # Also map the handle itself if identifiable
-                m = re.search(r"github\.com/([\w.-]+)", gh)
-                if m:
-                    handle = m.group(1)
-                    if handle not in mapping:
-                        mapping[handle] = "candidate-ai"
-
-            # LinkedIn
-            if candidate.get("linkedin"):
-                li = str(candidate["linkedin"]).strip()
-                mapping[li] = PREDEFINED_STANDARD_MAPPINGS.get(li) or "https://linkedin.com/in/candidate-ai"
-                m = re.search(r"linkedin\.com/in/([\w.-]+)", li)
-                if m:
-                    slug = m.group(1)
-                    if slug not in mapping:
-                        mapping[slug] = "candidate-ai"
-
-        # 2. Strict Level Entities (Universities, Companies, Confidential Projects/Hardware)
-        if level == "strict":
-            # University / Institution
-            if isinstance(candidate, dict) and candidate.get("institution"):
-                inst = str(candidate["institution"]).strip()
-                if inst in PREDEFINED_STRICT_MAPPINGS:
-                    mapping[inst] = PREDEFINED_STRICT_MAPPINGS[inst]
+        def add(value: Any, category: str, path: str, field: str) -> None:
+            if value is None or value == "":
+                return
+            if not isinstance(value, str):
+                raise ValueError(f"Unsupported privacy field type at {path}; expected a string")
+            real = value.strip()
+            if not real:
+                return
+            if real in mapping:
+                return
+            predefined = PREDEFINED_STANDARD_MAPPINGS if category in standard_fields.values() else PREDEFINED_STRICT_MAPPINGS
+            alias = predefined.get(real)
+            if not alias:
+                # Preserve the established readable primary-name aliases.
+                if category == "name" and field == "name":
+                    alias = "Dr. Alex Chen"
+                elif category == "name" and field == "en_name":
+                    alias = "Dr. Alexander Chen"
                 else:
-                    mapping[inst] = self._get_deterministic_alias(inst, "university")
+                    alias = self._get_deterministic_alias(real, category)
+            mapping[real] = alias
+            if category == "project":
+                base_name = re.split(r"[（(]", real, maxsplit=1)[0].strip()
+                if base_name and base_name != real:
+                    mapping.setdefault(base_name, PREDEFINED_STRICT_MAPPINGS.get(base_name)
+                                       or self._get_deterministic_alias(base_name, "project"))
+            if category in ("github", "linkedin"):
+                pattern = r"github\.com/([\w.-]+)" if category == "github" else r"linkedin\.com/in/([\w.-]+)"
+                match = re.search(pattern, real)
+                if match:
+                    handle = match.group(1)
+                    mapping.setdefault(handle, self._get_deterministic_alias(handle, "handle"))
 
-            # Experience Companies
-            for exp in profile_dict.get("experience", []):
-                if isinstance(exp, dict):
-                    for field in ["company", "company_en"]:
-                        c = exp.get(field)
-                        if c:
-                            c_str = str(c).strip()
-                            if c_str in PREDEFINED_STRICT_MAPPINGS:
-                                mapping[c_str] = PREDEFINED_STRICT_MAPPINGS[c_str]
-                            else:
-                                mapping[c_str] = self._get_deterministic_alias(c_str, "company")
+        def visit(value: Any, path: str = "", context: str = "root") -> None:
+            if isinstance(value, list):
+                for index, item in enumerate(value):
+                    visit(item, f"{path}[{index}]", context)
+                return
+            if not isinstance(value, dict):
+                return
+            for key, item in value.items():
+                field = str(key)
+                child_path = f"{path}.{field}" if path else field
+                category = None
+                if context in identity_containers | {"root"}:
+                    category = standard_fields.get(field)
+                if context in project_containers and field in ("github", "url", "website"):
+                    category = standard_fields[field]
+                if level == "strict":
+                    category = category or strict_fields.get(field)
+                    if context in project_containers and field in ("name", "title"):
+                        category = "project"
+                if category:
+                    add(item, category, child_path, field)
+                elif field in ("author", "authors", "advisor", "supervisor"):
+                    values = item if isinstance(item, list) else [item]
+                    for index, author in enumerate(values):
+                        add(author, "name", f"{child_path}[{index}]", field)
+                elif item and field not in {"photo_mode", "reserve_photo"}:
+                    # Standard mode intentionally retains organization identities.
+                    covered_strict = field in strict_fields or (
+                        context in project_containers and field in ("name", "title")
+                    )
+                    if sensitive_unknown.search(field) and not covered_strict and field not in identity_containers:
+                        warnings.warn(
+                            f"Privacy coverage is incomplete for field {child_path}; "
+                            "review or remove it before sharing. Photos and free-form identities are not automatically anonymized.",
+                            PrivacyCoverageWarning, stacklevel=3,
+                        )
+                # Only direct container members inherit identity/project semantics;
+                # nested prose/highlight records are not candidate names or titles.
+                visit(item, child_path, field)
 
-            # Project names & GitHub links
-            for proj in profile_dict.get("projects", []):
-                if isinstance(proj, dict):
-                    p_name = proj.get("name")
-                    if p_name:
-                        p_str = str(p_name).strip()
-                        if p_str in PREDEFINED_STRICT_MAPPINGS:
-                            mapping[p_str] = PREDEFINED_STRICT_MAPPINGS[p_str]
-                        else:
-                            # Strip parentheses if present to map base name too
-                            base_match = re.match(r"^([^\(\（]+)", p_str)
-                            base_name = base_match.group(1).strip() if base_match else p_str
-                            alias = self._get_deterministic_alias(base_name, "project")
-                            mapping[p_str] = alias
-                            if base_name != p_str and base_name not in mapping:
-                                mapping[base_name] = alias
-
-                    p_gh = proj.get("github")
-                    if p_gh:
-                        p_gh_str = str(p_gh).strip()
-                        if p_gh_str in PREDEFINED_STANDARD_MAPPINGS:
-                            mapping[p_gh_str] = PREDEFINED_STANDARD_MAPPINGS[p_gh_str]
-                        else:
-                            mapping[p_gh_str] = "https://github.com/candidate-ai/proprietary-repo"
-
+        visit(profile_dict)
         return mapping
 
     def _discover_entities_in_text(self, text: str, level: str) -> Dict[str, str]:
@@ -334,14 +352,40 @@ class PrivacyAnonymizer:
             raise ValueError("Anonymization mappings require non-empty string keys and values")
         result: Dict[str, str] = {}
         used = set()
+        originals = tuple(mapping)
+        reserved_chars = None
+
+        def available(alias: str) -> bool:
+            return (alias not in used and alias not in source
+                    and not alias.startswith("__") and alias != "alias_to_real"
+                    and not any(real in alias for real in originals))
+
         for real in sorted(mapping):
             alias = mapping[real]
-            if opaque or alias.startswith("__") or alias == "alias_to_real" or alias in used or alias in source:
+            if opaque or not available(alias):
                 nonce = 0
                 while True:
                     digest = hashlib.sha256(f"{real}\0{nonce}".encode("utf-8")).hexdigest()
                     alias = f"[OFFERGET_{digest}]"
-                    if alias not in used and alias not in source:
+                    if nonce >= 8:
+                        # A short identity can occur in every ASCII token (for
+                        # example "OFFERGET" or all hex digits). Reserve a small
+                        # alphabet absent from both input and originals instead.
+                        if reserved_chars is None:
+                            occupied = set(source + "".join(originals))
+                            reserved_chars = []
+                            for codepoint in range(0xE000, 0xF900):
+                                char = chr(codepoint)
+                                if char not in occupied:
+                                    reserved_chars.append(char)
+                                    if len(reserved_chars) == 18:
+                                        break
+                            if len(reserved_chars) < 18:
+                                raise ValueError("Unable to reserve privacy-safe alias characters")
+                        alias = (reserved_chars[16]
+                                 + "".join(reserved_chars[int(char, 16)] for char in digest)
+                                 + reserved_chars[17])
+                    if available(alias):
                         break
                     nonce += 1
             result[real] = alias
@@ -382,6 +426,11 @@ class PrivacyAnonymizer:
                 if k not in real_to_alias:
                     real_to_alias[k] = v
         elif isinstance(data, str):
+            warnings.warn(
+                "Text anonymization uses limited patterns; unfamiliar names, schools, "
+                "companies, and other free-form identities require manual review.",
+                PrivacyCoverageWarning, stacklevel=2,
+            )
             text_mappings = self._discover_entities_in_text(data, level)
             real_to_alias.update(text_mappings)
         else:
