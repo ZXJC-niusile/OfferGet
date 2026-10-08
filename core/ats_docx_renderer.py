@@ -16,6 +16,8 @@ Produces deterministic, single-column Word (.docx) documents optimized for ATS p
 from __future__ import annotations
 
 import re
+from html import unescape
+from unicodedata import east_asian_width
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -23,10 +25,10 @@ from typing import Any, Dict, List, Optional, Union
 try:
     import docx
     from docx import Document
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
-    from docx.shared import Inches, Pt, RGBColor
+    from docx.shared import Inches, Mm, Pt, RGBColor
     _DOCX_AVAILABLE = True
 except ImportError:
     _DOCX_AVAILABLE = False
@@ -38,17 +40,17 @@ from core.registry import QualityRuleRegistry
 @dataclass
 class DocxRenderConfig:
     """Configurable styling knobs for DOCX rendering."""
-    font_name: str = "Calibri"
-    font_name_cjk: str = "Microsoft YaHei"
-    font_size_name: float = 20.0
-    font_size_title: float = 12.0
-    font_size_section: float = 13.0
+    font_name: str = "Arial"
+    font_name_cjk: str = "Noto Sans CJK SC"
+    font_size_name: float = 22.0
+    font_size_title: float = 11.0
+    font_size_section: float = 11.5
     font_size_item_header: float = 11.0
     font_size_body: float = 10.5
     margin_inches: float = 0.75
-    primary_color_hex: str = "1F3864"  # Classic Navy
-    body_color_hex: str = "333333"     # Charcoal
-    divider_line_size: int = 8          # 1pt divider
+    primary_color_hex: str = "202B3A"  # Restrained ink
+    body_color_hex: str = "252525"     # High-contrast body text
+    divider_line_size: int = 0          # Optional; whitespace separates sections by default
 
 
 class AtsDocxRenderer:
@@ -75,14 +77,17 @@ class AtsDocxRenderer:
 
         doc = Document()
         self._apply_page_margins(doc)
+        self._apply_document_styles(doc)
 
         # 1. Header (Name & Contact info)
         self._render_header(doc, vm)
 
         # 2. Professional Summary (if available)
-        if vm.raw_profile and vm.raw_profile.get("narrative", {}).get("summary_zh"):
+        narrative = (vm.raw_profile or {}).get("narrative", {})
+        summary = narrative.get("summary_zh") or narrative.get("summary_en")
+        if summary:
             self._render_section_heading(doc, "个人总结 / Professional Summary")
-            self._render_paragraph(doc, vm.raw_profile["narrative"]["summary_zh"])
+            self._render_paragraph(doc, str(summary))
 
         # 3. Work Experience
         if vm.experiences:
@@ -101,6 +106,10 @@ class AtsDocxRenderer:
             self._render_section_heading(doc, "教育背景 / Education")
             self._render_education(doc, vm)
 
+        if vm.postgraduate_exam:
+            self._render_section_heading(doc, "考研成绩 / Postgraduate Exam")
+            self._render_exam(doc, vm.postgraduate_exam)
+
         # 6. Technical Skills & Competencies
         if vm.competencies:
             self._render_section_heading(doc, "专业技能 / Technical Skills")
@@ -110,11 +119,8 @@ class AtsDocxRenderer:
         if vm.publications:
             self._render_section_heading(doc, "学术成果与论文 / Publications")
             for pub in vm.publications:
-                title = pub.get("title", "")
-                venue = pub.get("venue", "")
-                year = pub.get("year", "")
-                text = f"{title} - {venue} ({year})" if venue else title
-                self._render_bullet(doc, text)
+                fields = [self._raw(pub, key) for key in ("title", "authors", "venue", "year")]
+                self._render_bullet(doc, " · ".join(value for value in fields if value))
 
         out_file = Path(output_path).resolve()
         out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -132,201 +138,178 @@ class AtsDocxRenderer:
             tmp_docx_path.unlink(missing_ok=True)
 
     def _apply_page_margins(self, doc: Any) -> None:
-        """Applies uniform 0.75-inch margins for ATS scanning standards."""
+        """Use explicit A4 geometry instead of the Word installation's defaults."""
         for section in doc.sections:
+            section.page_width = Mm(210)
+            section.page_height = Mm(297)
             margin = Inches(self.config.margin_inches)
             section.top_margin = margin
             section.bottom_margin = margin
             section.left_margin = margin
             section.right_margin = margin
 
-    def _render_header(self, doc: Any, vm: ResumeViewModel) -> None:
-        """Renders linear, centered header block."""
-        name_text = vm.raw_name or vm.name
-        title_text = vm.raw_title or vm.title
+    @staticmethod
+    def _raw(item: Dict[str, Any], key: str, *aliases: str) -> str:
+        """Prefer source text; decode only legacy HTML-projected fallback fields."""
+        for field in (key,) + aliases:
+            if "raw_" + field in item:
+                return str(item["raw_" + field] or "")
+        for field in (key,) + aliases:
+            if item.get(field):
+                return unescape(str(item[field]))
+        return ""
 
-        # Name
-        p_name = doc.add_paragraph()
-        p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_name.paragraph_format.space_before = Pt(0)
-        p_name.paragraph_format.space_after = Pt(2)
-        run_name = p_name.add_run(name_text)
-        run_name.bold = True
-        run_name.font.size = Pt(self.config.font_size_name)
-        self._set_font(run_name)
-        self._set_color(run_name, self.config.primary_color_hex)
+    @staticmethod
+    def _bullets(item: Dict[str, Any]) -> List[str]:
+        if "raw_bullets" in item:
+            return [str(value) for value in item["raw_bullets"]]
+        # Only generated emphasis is markup. Decode afterwards so literal source
+        # text such as &lt;strong&gt; remains literal, rather than being deleted.
+        return [unescape(re.sub(r"</?strong>", "**", str(value)))
+                for value in item.get("bullets", [])]
 
-        # Title / Subtitle
-        if title_text:
-            p_title = doc.add_paragraph()
-            p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_title.paragraph_format.space_before = Pt(0)
-            p_title.paragraph_format.space_after = Pt(4)
-            run_title = p_title.add_run(title_text)
-            run_title.font.size = Pt(self.config.font_size_title)
-            self._set_font(run_title)
-            self._set_color(run_title, self.config.body_color_hex)
+    def _apply_document_styles(self, doc: Any) -> None:
+        normal = doc.styles["Normal"]
+        normal.font.name = self.config.font_name
+        normal.font.size = Pt(self.config.font_size_body)
+        normal.paragraph_format.space_after = Pt(2)
+        normal.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.28)
+        normal.paragraph_format.widow_control = True
+        # Word and LibreOffice use these explicit hanging indents consistently.
+        bullet = doc.styles["List Bullet"].paragraph_format
+        bullet.left_indent = Inches(0.16)
+        bullet.first_line_indent = Inches(-0.16)
+        bullet.tab_stops.add_tab_stop(Inches(0.16))
+        doc.core_properties.title = "Resume"
+        doc.core_properties.author = ""
+        doc.core_properties.last_modified_by = ""
 
-        # Contact Info Line: phone | email | location
-        contact_parts = []
-        if vm.raw_phone or vm.phone:
-            contact_parts.append(vm.raw_phone or vm.phone)
-        if vm.raw_email or vm.email:
-            contact_parts.append(vm.raw_email or vm.email)
-        if vm.raw_location or vm.location:
-            contact_parts.append(vm.raw_location or vm.location)
-
-        if contact_parts:
-            p_contact = doc.add_paragraph()
-            p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p_contact.paragraph_format.space_before = Pt(0)
-            p_contact.paragraph_format.space_after = Pt(12)
-            run_contact = p_contact.add_run("  |  ".join(contact_parts))
-            run_contact.font.size = Pt(self.config.font_size_body)
-            self._set_font(run_contact)
-            self._set_color(run_contact, self.config.body_color_hex)
-
-    def _render_section_heading(self, doc: Any, heading_text: str) -> None:
-        """Renders section header with divider line."""
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(12)
-        p.paragraph_format.space_after = Pt(4)
-        run = p.add_run(heading_text)
-        run.bold = True
-        run.font.size = Pt(self.config.font_size_section)
+    def _run(self, paragraph: Any, text: str, *, bold: bool = False,
+             size: Optional[float] = None, muted: bool = False) -> Any:
+        run = paragraph.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size or self.config.font_size_body)
         self._set_font(run)
-        self._set_color(run, self.config.primary_color_hex)
+        self._set_color(run, "555555" if muted else self.config.body_color_hex)
+        return run
 
-        # Add bottom divider line via XML
-        self._add_bottom_border(p, self.config.primary_color_hex, self.config.divider_line_size)
-
-    def _render_experience_item(self, doc: Any, exp: Dict[str, Any]) -> None:
-        """Renders a single work experience entry."""
-        company = exp.get("company", "")
-        role = exp.get("role", "")
-        dates = exp.get("dates", "")
-
-        # Header line: Company -- Role (Dates)
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(4)
-        p.paragraph_format.space_after = Pt(2)
-        run_comp = p.add_run(company)
-        run_comp.bold = True
-        run_comp.font.size = Pt(self.config.font_size_item_header)
-        self._set_font(run_comp)
-
-        if role:
-            run_role = p.add_run(f"  |  {role}")
-            run_role.font.size = Pt(self.config.font_size_item_header)
-            self._set_font(run_role)
-
-        if dates:
-            run_dates = p.add_run(f"  ({dates})")
-            run_dates.font.size = Pt(self.config.font_size_body)
-            self._set_font(run_dates)
-            self._set_color(run_dates, "666666")
-
-        # Bullets
-        bullets = exp.get("bullets", [])
-        for b in bullets:
-            self._render_bullet(doc, b)
-
-    def _render_project_item(self, doc: Any, proj: Dict[str, Any]) -> None:
-        """Renders a single project entry."""
-        name = proj.get("name", "")
-        role = proj.get("role", "")
-        dates = proj.get("dates", "")
-
-        p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(4)
-        p.paragraph_format.space_after = Pt(2)
-        run_name = p.add_run(name)
-        run_name.bold = True
-        run_name.font.size = Pt(self.config.font_size_item_header)
-        self._set_font(run_name)
-
-        if role:
-            run_role = p.add_run(f"  |  {role}")
-            run_role.font.size = Pt(self.config.font_size_item_header)
-            self._set_font(run_role)
-
-        if dates:
-            run_dates = p.add_run(f"  ({dates})")
-            run_dates.font.size = Pt(self.config.font_size_body)
-            self._set_font(run_dates)
-            self._set_color(run_dates, "666666")
-
-        bullets = proj.get("bullets", [])
-        for b in bullets:
-            self._render_bullet(doc, b)
-
-    def _render_education(self, doc: Any, vm: ResumeViewModel) -> None:
-        """Renders education entries."""
-        if vm.education_grid_rows:
-            for row in vm.education_grid_rows:
-                p = doc.add_paragraph()
-                p.paragraph_format.space_before = Pt(2)
-                p.paragraph_format.space_after = Pt(2)
-                line = "  |  ".join(str(c) for c in row if c)
-                run = p.add_run(line)
-                run.font.size = Pt(self.config.font_size_item_header)
-                self._set_font(run)
-        else:
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(2)
-            school = vm.raw_school or vm.edu_school
-            degree = vm.raw_degree or vm.edu_degree
-            time_str = vm.raw_edu_time or vm.edu_time
-            parts = [p for p in [school, degree, time_str] if p]
-            run = p.add_run("  |  ".join(parts))
-            run.font.size = Pt(self.config.font_size_item_header)
-            self._set_font(run)
-
-    def _render_skills(self, doc: Any, vm: ResumeViewModel) -> None:
-        """Renders technical skills categorized line-by-line."""
-        for cat_name, skill_list in vm.competencies.items():
-            if not skill_list:
+    def _render_header(self, doc: Any, vm: ResumeViewModel) -> None:
+        """Compact centered identity, still in the ordinary document body."""
+        for text, size, bold, after in (
+            (vm.raw_name or unescape(vm.name), self.config.font_size_name, True, 3),
+            (vm.raw_title or unescape(vm.title), self.config.font_size_title, False, 4),
+            ("  |  ".join(filter(None, (
+                vm.raw_phone or unescape(vm.phone),
+                vm.raw_email or unescape(vm.email),
+                vm.raw_location or unescape(vm.location)))), self.config.font_size_body, False, 5),
+        ):
+            if not text:
                 continue
             p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(2)
-            p.paragraph_format.space_after = Pt(2)
-            run_cat = p.add_run(f"• {cat_name}: ")
-            run_cat.bold = True
-            run_cat.font.size = Pt(self.config.font_size_body)
-            self._set_font(run_cat)
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_before = Pt(0)
+            p.paragraph_format.space_after = Pt(after)
+            p.paragraph_format.line_spacing = Pt(size * 1.3)
+            p.paragraph_format.keep_with_next = True
+            self._run(p, text, bold=bold, size=size)
 
-            run_skills = p.add_run(", ".join(skill_list))
-            run_skills.font.size = Pt(self.config.font_size_body)
-            self._set_font(run_skills)
+    def _render_section_heading(self, doc: Any, heading_text: str) -> None:
+        p = doc.add_paragraph(style="Heading 1")
+        p.paragraph_format.space_before = Pt(10)
+        p.paragraph_format.space_after = Pt(4)
+        p.paragraph_format.line_spacing = Pt(self.config.font_size_section * 1.3)
+        p.paragraph_format.keep_with_next = True
+        self._run(p, heading_text, bold=True, size=self.config.font_size_section)
+        if self.config.divider_line_size:
+            self._add_bottom_border(p, self.config.primary_color_hex, self.config.divider_line_size)
+
+    def _render_item_heading(self, doc: Any, label: str, dates: str, role: str = "") -> None:
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_after = Pt(1)
+        p.paragraph_format.keep_with_next = True
+        section = doc.sections[-1]
+        width = section.page_width - section.left_margin - section.right_margin
+        p.paragraph_format.tab_stops.add_tab_stop(width, WD_TAB_ALIGNMENT.RIGHT)
+        self._run(p, label, bold=True, size=self.config.font_size_item_header)
+        if dates:
+            # A tab alone can split dates after a long institution name. Give
+            # crowded headers a dedicated right-aligned date line instead.
+            units = sum(2 if east_asian_width(char) in "WF" else 1 for char in label)
+            estimated_points = (units * self.config.font_size_item_header
+                                + len(dates) * self.config.font_size_body) * 0.55
+            if estimated_points > width / 12700 * 0.9:
+                date_p = doc.add_paragraph()
+                date_p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                date_p.paragraph_format.space_after = Pt(1)
+                date_p.paragraph_format.keep_with_next = True
+                self._run(date_p, dates, muted=True)
+            else:
+                self._run(p, "\t" + dates, muted=True)
+        if role:
+            role_p = doc.add_paragraph()
+            role_p.paragraph_format.space_after = Pt(2)
+            role_p.paragraph_format.keep_with_next = True
+            self._run(role_p, role, muted=True)
+
+    def _render_experience_item(self, doc: Any, exp: Dict[str, Any]) -> None:
+        self._render_item_heading(doc, self._raw(exp, "org", "company"),
+                                  self._raw(exp, "time", "dates"),
+                                  self._raw(exp, "role_label", "role"))
+        for text in self._bullets(exp):
+            self._render_bullet(doc, text)
+
+    def _render_project_item(self, doc: Any, proj: Dict[str, Any]) -> None:
+        self._render_item_heading(doc, self._raw(proj, "name"),
+                                  self._raw(proj, "time", "dates"), self._raw(proj, "role"))
+        for text in self._bullets(proj):
+            self._render_bullet(doc, text)
+
+    def _render_education(self, doc: Any, vm: ResumeViewModel) -> None:
+        # The grid contains supplementary badges, not a replacement for school,
+        # degree and dates. Always retain the primary education identity.
+        school = vm.raw_school or unescape(vm.edu_school)
+        degree = vm.raw_degree or unescape(vm.edu_degree)
+        dates = vm.raw_edu_time or unescape(vm.edu_time)
+        if school or degree or dates:
+            self._render_item_heading(doc, school, dates, degree)
+        for row in vm.education_grid_rows:
+            self._render_paragraph(doc, "  |  ".join(unescape(str(cell)) for cell in row if cell))
+
+    def _render_exam(self, doc: Any, exam: Dict[str, Any]) -> None:
+        target = [self._raw(exam, key) for key in ("target_school", "target_major", "direction")]
+        if any(target):
+            self._render_paragraph(doc, "  |  ".join(filter(None, target)))
+        scores = [f"{self._raw(subject, 'name')}: {self._raw(subject, 'score')}"
+                  for subject in exam.get("subjects", [])]
+        total = self._raw(exam, "total_score")
+        if total:
+            scores.append(f"总分 / Total: {total}")
+        if scores:
+            self._render_paragraph(doc, "  |  ".join(scores))
+
+    def _render_skills(self, doc: Any, vm: ResumeViewModel) -> None:
+        # Competencies deliberately remain raw in ResumeViewModel.
+        for category, skills in vm.competencies.items():
+            if skills:
+                p = doc.add_paragraph()
+                self._run(p, f"{category}: ", bold=True)
+                self._run(p, ", ".join(skills))
 
     def _render_bullet(self, doc: Any, bullet_text: str) -> None:
-        """Renders a single bullet point with bold emphasis."""
         p = doc.add_paragraph(style="List Bullet")
-        p.paragraph_format.space_before = Pt(1)
-        p.paragraph_format.space_after = Pt(1)
-        p.paragraph_format.line_spacing = 1.15
-
-        # Split markdown bold **text** if present
-        parts = re.split(r"(\*\*.*?\*\*)", bullet_text)
-        for part in parts:
-            if part.startswith("**") and part.endswith("**") and len(part) >= 4:
-                run = p.add_run(part[2:-2])
-                run.bold = True
-            else:
-                run = p.add_run(part)
-            run.font.size = Pt(self.config.font_size_body)
-            self._set_font(run)
-            self._set_color(run, self.config.body_color_hex)
+        p.paragraph_format.space_before = Pt(0)
+        p.paragraph_format.space_after = Pt(2)
+        p.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.28)
+        # A bullet may span pages when necessary; do not keep entire jobs together.
+        p.paragraph_format.keep_with_next = False
+        for part in re.split(r"(\*\*.*?\*\*)", bullet_text):
+            bold = part.startswith("**") and part.endswith("**") and len(part) >= 4
+            self._run(p, part[2:-2] if bold else part, bold=bold)
 
     def _render_paragraph(self, doc: Any, text: str) -> None:
         p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(2)
-        p.paragraph_format.space_after = Pt(4)
-        run = p.add_run(text)
-        run.font.size = Pt(self.config.font_size_body)
-        self._set_font(run)
-        self._set_color(run, self.config.body_color_hex)
+        self._run(p, text)
 
     def _set_font(self, run: Any) -> None:
         run.font.name = self.config.font_name
