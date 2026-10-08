@@ -1,19 +1,19 @@
 """
 OfferGet Doctor Environment Diagnostic Command Handler.
 Performs pre-flight checks on Python runtime, headless browser, optional PDF toolkits,
-and example assets with actionable cross-platform repair guidance.
+and installed diagnostic resources with actionable cross-platform repair guidance.
 """
 
 from __future__ import annotations
 
 import sys
-from typing import Dict, Any
+from typing import Any
 
-from core.paths import get_project_root
 from core.browser_renderer import BrowserRenderer
+from presentation.diagnostic_data import missing_resources
 
 
-def check_python_environment() -> Dict[str, Any]:
+def check_python_environment() -> dict[str, Any]:
     version_tuple = sys.version_info
     valid = version_tuple >= (3, 9)
     return {
@@ -24,10 +24,10 @@ def check_python_environment() -> Dict[str, Any]:
     }
 
 
-def check_headless_browser() -> Dict[str, Any]:
+def check_headless_browser() -> dict[str, Any]:
     diag = BrowserRenderer.diagnose_browser()
     return {
-        "name": "Headless Browser (PDF Rasterization)",
+        "name": "Headless Browser (optional PDF rendering)",
         "valid": diag["found"],
         "detail": diag["browser_path"] if diag["found"] else "Not Found",
         "guidance": diag["installation_guide"] if not diag["found"] else "",
@@ -35,7 +35,7 @@ def check_headless_browser() -> Dict[str, Any]:
     }
 
 
-def check_optional_toolkits() -> Dict[str, Any]:
+def check_optional_toolkits() -> dict[str, Any]:
     tools = []
     
     # Check PyMuPDF (fitz)
@@ -54,7 +54,7 @@ def check_optional_toolkits() -> Dict[str, Any]:
 
     # Check python-docx
     try:
-        import docx  # type: ignore
+        import docx  # type: ignore  # noqa: F401
         tools.append(("python-docx", True, "Installed"))
     except ImportError:
         tools.append(("python-docx", False, "Optional — pip install python-docx (enables ATS docx output)"))
@@ -66,19 +66,14 @@ def check_optional_toolkits() -> Dict[str, Any]:
     }
 
 
-def check_sample_assets() -> Dict[str, Any]:
-    root = get_project_root()
-    required = [
-        root / "examples" / "sample_ai_jd.txt",
-        root / "examples" / "candidate_profile.json",
-    ]
-    missing = [str(p.name) for p in required if not p.exists()]
-    valid = len(missing) == 0
+def check_sample_assets() -> dict[str, Any]:
+    missing = missing_resources()
+    valid = not missing
     return {
-        "name": "Example Datasets",
+        "name": "Installed Diagnostic Resources",
         "valid": valid,
-        "detail": "Verified (sample_ai_jd.txt, candidate_profile.json)" if valid else f"Missing: {', '.join(missing)}",
-        "guidance": "Please ensure the examples/ folder is present in your OfferGet clone." if not valid else "",
+        "detail": "Verified (synthetic fixtures and report template)" if valid else f"Missing: {', '.join(missing)}",
+        "guidance": "Reinstall OfferGet; its installed diagnostic resources are incomplete." if not valid else "",
     }
 
 
@@ -113,8 +108,8 @@ def cmd_doctor(args=None) -> int:
 
     print("-" * 68)
     if all_passed:
-        print("🎉 ENVIRONMENT HEALTHY: OfferGet core and PDF rasterizer are ready for production.")
+        print("Core resources and browser executable found. Rendering has not been tested.")
         return 0
     else:
-        print("⚠️ ENVIRONMENT INCOMPLETE: Please review the actionable guides above to resolve missing dependencies.")
+        print("ENVIRONMENT INCOMPLETE: Review the missing components above. A missing optional browser affects PDF rendering, not core smoke checks.")
         return 1

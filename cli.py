@@ -398,7 +398,7 @@ Examples:
     subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")
 
     # `offerget selftest`
-    subparsers.add_parser("selftest", help="Run comprehensive OfferGet & ApexResume tests")
+    subparsers.add_parser("selftest", help="Run installed-runtime core smoke checks (not the developer test suite)")
 
     # `offerget doctor`
     subparsers.add_parser("doctor", help="Inspect Python runtime, headless browser, and optional toolkits")
