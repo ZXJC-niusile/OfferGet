@@ -29,8 +29,18 @@ class ResumeService:
         autofit: bool = True,
         anonymize: Optional[str] = None,
         photo_mode: Optional[str] = None,
+        *,
+        pages: str = "auto",
+        adaptive_fill: bool = True,
+        diff_ledger: bool = True,
+        baseline_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Path]:
-        """Builds a single resume theme."""
+        """Build a theme, forwarding layout/evidence controls to ResumeBuilder.
+
+        Preserve the service defaults (modern-navy, dist/resume, photo=True).
+        Theme-specific support and privacy restrictions remain with the builder.
+        baseline_profile is already-loaded data; only the CLI loads --baseline.
+        """
         from core.resume_builder import ResumeBuilder
 
         builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize, photo_mode=photo_mode)
@@ -40,6 +50,10 @@ class ResumeService:
             photo=photo,
             autofit=autofit,
             anonymize=anonymize,
+            pages=pages,
+            adaptive_fill=adaptive_fill,
+            diff_ledger=diff_ledger,
+            baseline_profile=baseline_profile,
         )
 
     def build_all(
@@ -51,8 +65,18 @@ class ResumeService:
         autofit: bool = True,
         anonymize: Optional[str] = None,
         photo_mode: Optional[str] = None,
+        *,
+        pages: str = "auto",
+        adaptive_fill: bool = True,
+        diff_ledger: bool = True,
+        baseline_profile: Optional[Dict[str, Any]] = None,
+        include_docx: bool = False,
     ) -> Dict[str, Dict[str, Path]]:
-        """Builds all supported resume variants."""
+        """Build the standard variants, optionally including DOCX.
+
+        Existing output/photo defaults are unchanged. Layout/evidence controls
+        follow build_resume; include_docx matches the builder's opt-in default.
+        """
         from core.resume_builder import ResumeBuilder
 
         builder = ResumeBuilder(profile_or_path, photo_path=photo_path, anonymize=anonymize, photo_mode=photo_mode)
@@ -62,6 +86,11 @@ class ResumeService:
             photo_path=photo_path,
             autofit=autofit,
             anonymize=anonymize,
+            pages=pages,
+            adaptive_fill=adaptive_fill,
+            diff_ledger=diff_ledger,
+            baseline_profile=baseline_profile,
+            include_docx=include_docx,
         )
 
     def audit_resume(self, html_path: Union[str, Path]) -> Dict[str, Any]:
