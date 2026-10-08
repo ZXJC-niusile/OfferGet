@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import hashlib
 import re
 import shutil
 import subprocess
@@ -81,6 +82,14 @@ def main():
         raise RuntimeError("Real LibreOffice is required; no mock rendering is accepted")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    sources = ["core/ats_docx_renderer.py", "core/resume_view_model.py", "core/profile_adapter.py",
+               "scripts/qa_ats_docx_layout.py", "scripts/qa_modern_navy_layout.py"]
+    manifest = {}
+    for source in sources:
+        data = (ROOT / source).read_bytes()
+        manifest[source] = {"sha256": hashlib.sha256(data).hexdigest(),
+                            "git_blob_sha1": hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()}
+    (output / "source-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     report = []
     for case in cases():
         folder = output / case["name"]
@@ -108,7 +117,7 @@ def main():
             page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(folder / f"page-{index + 1}.png")
         entry = {"case": case["name"], "pages": len(pdf), "source_anchors": len(source),
                  "missing_pdf": missing, "missing_docx": missing_docx, "overflow": overflow,
-                 "max_pages": 2 if case["name"] in {"dense-none", "exam-publications"} else 1}
+                 "max_pages": 2 if case["name"] == "dense-none" else 1}
         report.append(entry)
     (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))

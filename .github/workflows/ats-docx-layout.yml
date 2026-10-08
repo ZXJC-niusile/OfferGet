@@ -44,4 +44,5 @@ jobs:
             artifacts/ats-docx-layout/**/*.png
             artifacts/ats-docx-layout/**/render.log
             artifacts/ats-docx-layout/report.json
+            artifacts/ats-docx-layout/source-manifest.json
           if-no-files-found: error

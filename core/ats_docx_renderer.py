@@ -173,7 +173,7 @@ class AtsDocxRenderer:
         normal.font.name = self.config.font_name
         normal.font.size = Pt(self.config.font_size_body)
         normal.paragraph_format.space_after = Pt(2)
-        normal.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.28)
+        normal.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.25)
         normal.paragraph_format.widow_control = True
         # Word and LibreOffice use these explicit hanging indents consistently.
         bullet = doc.styles["List Bullet"].paragraph_format
@@ -196,12 +196,12 @@ class AtsDocxRenderer:
     def _render_header(self, doc: Any, vm: ResumeViewModel) -> None:
         """Compact centered identity, still in the ordinary document body."""
         for text, size, bold, after in (
-            (vm.raw_name or unescape(vm.name), self.config.font_size_name, True, 3),
-            (vm.raw_title or unescape(vm.title), self.config.font_size_title, False, 4),
+            (vm.raw_name or unescape(vm.name), self.config.font_size_name, True, 2),
+            (vm.raw_title or unescape(vm.title), self.config.font_size_title, False, 3),
             ("  |  ".join(filter(None, (
                 vm.raw_phone or unescape(vm.phone),
                 vm.raw_email or unescape(vm.email),
-                vm.raw_location or unescape(vm.location)))), self.config.font_size_body, False, 5),
+                vm.raw_location or unescape(vm.location)))), self.config.font_size_body, False, 4),
         ):
             if not text:
                 continue
@@ -215,8 +215,8 @@ class AtsDocxRenderer:
 
     def _render_section_heading(self, doc: Any, heading_text: str) -> None:
         p = doc.add_paragraph(style="Heading 1")
-        p.paragraph_format.space_before = Pt(10)
-        p.paragraph_format.space_after = Pt(4)
+        p.paragraph_format.space_before = Pt(7)
+        p.paragraph_format.space_after = Pt(3)
         p.paragraph_format.line_spacing = Pt(self.config.font_size_section * 1.3)
         p.paragraph_format.keep_with_next = True
         self._run(p, heading_text, bold=True, size=self.config.font_size_section)
@@ -225,7 +225,7 @@ class AtsDocxRenderer:
 
     def _render_item_heading(self, doc: Any, label: str, dates: str, role: str = "") -> None:
         p = doc.add_paragraph()
-        p.paragraph_format.space_before = Pt(4)
+        p.paragraph_format.space_before = Pt(3)
         p.paragraph_format.space_after = Pt(1)
         p.paragraph_format.keep_with_next = True
         section = doc.sections[-1]
@@ -248,7 +248,7 @@ class AtsDocxRenderer:
                 self._run(p, "\t" + dates, muted=True)
         if role:
             role_p = doc.add_paragraph()
-            role_p.paragraph_format.space_after = Pt(2)
+            role_p.paragraph_format.space_after = Pt(1.5)
             role_p.paragraph_format.keep_with_next = True
             self._run(role_p, role, muted=True)
 
@@ -299,8 +299,8 @@ class AtsDocxRenderer:
     def _render_bullet(self, doc: Any, bullet_text: str) -> None:
         p = doc.add_paragraph(style="List Bullet")
         p.paragraph_format.space_before = Pt(0)
-        p.paragraph_format.space_after = Pt(2)
-        p.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.28)
+        p.paragraph_format.space_after = Pt(1.5)
+        p.paragraph_format.line_spacing = Pt(self.config.font_size_body * 1.25)
         # A bullet may span pages when necessary; do not keep entire jobs together.
         p.paragraph_format.keep_with_next = False
         for part in re.split(r"(\*\*.*?\*\*)", bullet_text):

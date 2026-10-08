@@ -34,9 +34,10 @@ actual DOCX files through LibreOffice, saves every page as PNG, and compares sou
 facts independently with both Word paragraphs and selectable PDF text. Missing
 renderers, missing facts, out-of-margin text, non-A4 output, and excessive pages fail.
 The dedicated workflow uploads the DOCX/PDF/PNG/log/report artifacts for review.
+A source hash manifest links each run to the exact renderer and fixture code.
 Inspect every rendered page; programmatic geometry checks cannot prove aesthetics.
 
 Expected page budgets: one page for the professional, photo-preference, and long-field
-fixtures; two pages for dense experience and the extended exam/publication fixture.
+and extended exam/publication fixtures; two pages for dense experience.
 The renderer never removes facts to meet a page target. Arbitrary larger user profiles
 are allowed to run longer.
