@@ -6,7 +6,9 @@ to prevent AI hallucination, metric inflation, and ungrounded claims.
 
 from __future__ import annotations
 
+import copy
 import json
+import unicodedata
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
@@ -19,6 +21,7 @@ from core.cli_helpers import load_json
 from core.profile_adapter import (
     ProfileEvidenceIndex,
     build_profile_evidence_index,
+    extract_education_grid,
 )
 from core.registry import (
     AliasRegistry,
@@ -307,6 +310,7 @@ class FactVerificationGuard:
                 claim_id = h.get("claim_id", f"EXP-{exp_idx}")
                 claim_zh = h.get("claim_zh", "")
                 claim_en = h.get("claim_en", "")
+                claim_text = h.get("text", "")
                 verified_metrics = h.get("verified_metrics", {})
 
                 self._claim_id_to_scope[claim_id] = f"experience[{exp_idx}]"
@@ -315,7 +319,9 @@ class FactVerificationGuard:
                 if claim_en:
                     exp_text_parts.append(claim_en)
 
-                context_words = base_kw | self._extract_keywords(f"{claim_zh} {claim_en}")
+                if isinstance(claim_text, str) and claim_text:
+                    exp_text_parts.append(claim_text)
+                context_words = base_kw | self._extract_keywords(f"{claim_zh} {claim_en} {claim_text}")
 
                 # Index explicit verified_metrics dict
                 if isinstance(verified_metrics, dict):
@@ -326,12 +332,13 @@ class FactVerificationGuard:
                     self._extract_and_index_text_metrics(claim_zh, f"{claim_id}:claim_zh", context_words)
                 if claim_en:
                     self._extract_and_index_text_metrics(claim_en, f"{claim_id}:claim_en", context_words)
+                if isinstance(claim_text, str) and claim_text:
+                    self._extract_and_index_text_metrics(claim_text, f"{claim_id}:text", context_words)
 
             for b_idx, b in enumerate(exp.get("bullets", [])):
-                b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
                 b_cid = f"experience[{exp_idx}].bullets[{b_idx}]"
                 self._claim_id_to_scope[b_cid] = f"experience[{exp_idx}]"
-                if b_text:
+                for b_text in self._claim_texts(b):
                     exp_text_parts.append(b_text)
                     b_kw = base_kw | self._extract_keywords(b_text)
                     self._extract_and_index_text_metrics(b_text, b_cid, b_kw)
@@ -380,10 +387,9 @@ class FactVerificationGuard:
                     self._extract_and_index_text_metrics(d_text, f"{proj_name}:{desc_k}", p_kw)
 
             for b_idx, b in enumerate(proj.get("bullets", [])):
-                b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
                 b_cid = f"projects[{p_idx}].bullets[{b_idx}]"
                 self._claim_id_to_scope[b_cid] = f"projects[{p_idx}]"
-                if b_text:
+                for b_text in self._claim_texts(b):
                     p_text_parts.append(b_text)
                     self._extract_and_index_text_metrics(b_text, b_cid, p_kw | self._extract_keywords(b_text))
 
@@ -825,7 +831,318 @@ class FactVerificationGuard:
 
         return not has_positive
 
+    @staticmethod
+    def _claim_texts(value: Any) -> List[str]:
+        if isinstance(value, str):
+            return [value] if value.strip() else []
+        if isinstance(value, dict):
+            return list(dict.fromkeys(value[key] for key in ("text", "claim_zh", "claim_en") if isinstance(value.get(key), str) and value[key].strip()))
+        return []
+
+    @staticmethod
+    def _canonical_value(value: Any) -> Any:
+        """Normalize typography, not meaning, for deterministic source comparison."""
+        if isinstance(value, str):
+            text = unicodedata.normalize("NFKC", value).casefold()
+            text = text.translate(str.maketrans({"–": "-", "—": "-", "−": "-"}))
+            return re.sub(r"\s*-\s*", "-", re.sub(r"\s+", " ", text).strip())
+        if isinstance(value, list):
+            return [FactVerificationGuard._canonical_value(item) for item in value]
+        if isinstance(value, dict):
+            return {key: FactVerificationGuard._canonical_value(item) for key, item in value.items()}
+        return value
+
+    @classmethod
+    def _metadata_fields(cls, profile: dict) -> Dict[str, Dict[str, Any]]:
+        """Canonicalize supplied facts while retaining their exact source paths.
+
+        Omitted values make no assertion. Textual claims are checked separately by
+        the existing metric/technology heuristics. Unknown metadata is still
+        compared, so a new field cannot silently bypass source checks.
+        """
+        fields: Dict[str, Dict[str, Any]] = {}
+        presentation = {"photo", "photo_path", "photo_mode", "reserve_photo", "layout", "theme"}
+        education_keys = {"school", "institution", "undergraduate_school", "degree", "education_level", "major", "edu_time", "education_badges", "education_grid", "education_rows"}
+        candidate_keys = {"name", "candidate_name", "phone", "email", "city", "location", "years_of_experience", "experience_years", "title", "title_zh", "title_en", "intent", "target_role"}
+        edu_aliases = {"institution": "school", "undergraduate_school": "school", "education_level": "degree", "edu_time": "time", "period": "time", "dates": "time"}
+        shared_aliases = {"papers": "publications", "publications": "publications", "awards": "awards", "honors": "awards", "honors_awards": "awards", "exam_score": "postgraduate_exam", "postgraduate_exam": "postgraduate_exam"}
+        row_aliases = {"org": "organization", "company": "organization", "employer": "organization", "title": "role", "period": "time", "dates": "time"}
+
+        def put(path: str, value: Any, source: str, comparison_value: Any = None) -> None:
+            if value is None or value == "" or value == [] or value == {}:
+                return
+            if path in fields:
+                previous = fields[path]
+                before_value = previous.get("comparison_value", previous["value"])
+                after_value = value if comparison_value is None else comparison_value
+                if type(before_value) is type(after_value) and cls._canonical_value(before_value) == cls._canonical_value(after_value):
+                    return
+                # Conflicting aliases are separate assertions, never discarded.
+                path = f"{path}@{source}"
+            fields[path] = {"value": value, "source_path": source}
+            if comparison_value is not None:
+                fields[path]["comparison_value"] = comparison_value
+
+        def walk(value: Any, path: str, source: str) -> None:
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    walk(child, f"{path}.{key}", f"{source}.{key}")
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    walk(child, f"{path}[{index}]", f"{source}[{index}]")
+            else:
+                put(path, value, source)
+
+        def skills(value: Any, source: str) -> None:
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    skills(child, f"{source}.{key}")
+            elif isinstance(value, list):
+                for index, child in enumerate(value):
+                    skills(child, f"{source}[{index}]")
+            elif isinstance(value, str):
+                term = cls._canonical_value(value)
+                aliases = AliasRegistry.get_canonical_terms(term)
+                canonical = min(aliases) if aliases else term
+                put(f"skills[{json.dumps(canonical, ensure_ascii=False)}]", value, source)
+            else:
+                put(f"skills@{source}", value, source)
+
+        def degree(value: Any, major: Any, path: str, source: str) -> None:
+            put(path, value, source)
+            # The shared normalizer joins a separate major and degree for display.
+            # Remove only that exact redundant prefix from the comparison value.
+            if path in fields and isinstance(value, str) and isinstance(major, str):
+                prefix = cls._canonical_value(major) + " "
+                normalized = cls._canonical_value(value)
+                if prefix.strip() and normalized.startswith(prefix):
+                    fields[path]["comparison_value"] = normalized[len(prefix):]
+
+        def education_grid(value: Any, source: str, path: str = "education[0].education_badges") -> None:
+            cells = []
+
+            def collect(item: Any, item_source: str) -> None:
+                if isinstance(item, list):
+                    for index, child in enumerate(item):
+                        collect(child, f"{item_source}[{index}]")
+                elif isinstance(item, str):
+                    # Reuse the renderer's supported pipe/tab/space row grammar.
+                    for row in extract_education_grid({"education_rows": [item]}):
+                        cells.extend((part, item_source, item) for part in row)
+                else:
+                    cells.append((item, item_source, item))
+
+            collect(value, source)
+            for index, (item, item_source, source_value) in enumerate(cells):
+                put(f"{path}[{index}]", source_value, item_source, comparison_value=item)
+
+        def education(value: Any, source: str) -> None:
+            records = value if isinstance(value, list) else [value]
+            for index, record in enumerate(records):
+                record_source = f"{source}[{index}]" if isinstance(value, list) else source
+                if not isinstance(record, dict):
+                    walk(record, f"education[{index}]", record_source)
+                    continue
+                for key, child in record.items():
+                    path = f"education[{index}].{edu_aliases.get(key, key)}"
+                    child_source = f"{record_source}.{key}"
+                    if key in {"degree", "education_level"}:
+                        degree(child, record.get("major"), path, child_source)
+                    elif key in {"education_rows", "education_grid"}:
+                        education_grid(child, child_source, f"education[{index}].education_badges")
+                    else:
+                        walk(child, path, child_source)
+
+        def claim_metadata(value: Any, path: str, source: str) -> None:
+            if not isinstance(value, list):
+                walk(value, path, source)
+                return
+            for index, item in enumerate(value):
+                if isinstance(item, dict):
+                    for key, child in item.items():
+                        if key == "claim_id" or (key in {"text", "claim_zh", "claim_en"} and isinstance(child, str)):
+                            continue
+                        walk(child, f"{path}[{index}].{key}", f"{source}[{index}].{key}")
+                elif not isinstance(item, str):
+                    walk(item, f"{path}[{index}]", f"{source}[{index}]")
+
+        def records(section: str, value: Any, source: str) -> None:
+            if not isinstance(value, list):
+                walk(value, section, source)
+                return
+            identities = []
+            for record in value:
+                if isinstance(record, dict):
+                    identity = (record.get("org") or record.get("company") or record.get("organization") or record.get("employer")) if section == "experience" else (record.get("name") or record.get("title"))
+                    identities.append(str(cls._canonical_value(identity or "")))
+                else:
+                    identities.append("")
+            for index, record in enumerate(value):
+                record_source = f"{source}[{index}]"
+                if not isinstance(record, dict):
+                    walk(record, f"{section}[{index}]", record_source)
+                    continue
+                identity = identities[index]
+                if identity and identities.count(identity) == 1:
+                    scope = f"{section}[{json.dumps(identity, ensure_ascii=False)}]"
+                else:
+                    # Do not guess which of several similarly named records matches.
+                    scope = f"{section}[{index}]"
+                for key, child in record.items():
+                    checked_prose = {"bullets", "highlights"} if section == "experience" else {"bullets", "description", "description_zh", "description_en"}
+                    if key in presentation:
+                        continue
+                    if key in checked_prose:
+                        if key in {"bullets", "highlights"}:
+                            claim_metadata(child, f"{scope}.{key}", f"{record_source}.{key}")
+                        elif not isinstance(child, str):
+                            walk(child, f"{scope}.{key}", f"{record_source}.{key}")
+                        continue
+                    canonical_key = row_aliases.get(key, key)
+                    if section == "projects" and key == "title":
+                        canonical_key = "name"
+                    walk(child, f"{scope}.{canonical_key}", f"{record_source}.{key}")
+
+        def candidate(value: dict, source: str) -> None:
+            for key, child in value.items():
+                child_source = f"{source}.{key}" if source else key
+                if key in presentation:
+                    continue
+                if key in shared_aliases:
+                    walk(child, shared_aliases[key], child_source)
+                elif key in {"skills", "competencies"}:
+                    skills(child, child_source)
+                elif key == "education":
+                    education(child, child_source)
+                elif key in {"education_rows", "education_grid"}:
+                    # Deduplicate only equal aliases. Conflicting grid/row facts
+                    # remain assertions even when badges are also present.
+                    education_grid(child, child_source)
+                elif key in {"degree", "education_level"}:
+                    degree(child, value.get("major"), "education[0].degree", child_source)
+                elif key in education_keys:
+                    walk(child, f"education[0].{edu_aliases.get(key, key)}", child_source)
+                else:
+                    canonical_key = {"candidate_name": "name", "city": "location", "experience_years": "years_of_experience", "title_zh": "title", "title_en": "title", "intent": "title", "target_role": "title"}.get(key, key)
+                    walk(child, f"candidate.{canonical_key}", child_source)
+
+        for key, value in profile.items():
+            if key in presentation:
+                continue
+            if key == "narrative" and isinstance(value, dict):
+                for narrative_key, text in value.items():
+                    if narrative_key not in {"summary_zh", "summary_en"} or not isinstance(text, str):
+                        walk(text, f"narrative.{narrative_key}", f"narrative.{narrative_key}")
+            elif key == "candidate" and isinstance(value, dict):
+                candidate(value, key)
+            elif key in shared_aliases:
+                walk(value, shared_aliases[key], key)
+            elif key in {"skills", "competencies"}:
+                skills(value, key)
+            elif key == "education":
+                education(value, key)
+            elif key in {"experience", "internships", "projects", "campus_experience"}:
+                section = {"internships": "experience", "campus_experience": "projects"}.get(key, key)
+                records(section, value, key)
+            elif key in candidate_keys | education_keys:
+                candidate({key: value}, "")
+            else:
+                walk(value, key, key)
+        return fields
+
     def verify_facts(
+        self,
+        tailored_text_or_dict: Union[str, dict, list],
+        master_profile: Optional[dict] = None,
+        target_scope: Optional[Union[str, dict, int]] = None,
+        target_claim_id: Optional[str] = None,
+        target_excerpt: Optional[str] = None,
+    ) -> dict:
+        """Check supplied metadata and skills plus bounded bullet heuristics.
+
+        A source change needs verification; it is not proof of fabrication.
+        Omitted source fields are reported without treating them as new claims.
+        """
+        if master_profile is not None:
+            self.load_profile(master_profile)
+        structured = isinstance(tailored_text_or_dict, dict) and all(
+            value is None for value in (target_scope, target_claim_id, target_excerpt)
+        )
+        data = tailored_text_or_dict
+        if structured:
+            # Support structural aliases without inventing duplicate bullets.
+            data = copy.deepcopy(tailored_text_or_dict)
+            for alias, section in (("internships", "experience"), ("campus_experience", "projects")):
+                if section not in data and alias in data:
+                    data[section] = data[alias]
+            for section in ("experience", "projects"):
+                if section in data and not isinstance(data[section], list):
+                    data[section] = []
+                for record in data.get(section, []):
+                    if not isinstance(record, dict):
+                        continue
+                    if section == "experience":
+                        record.setdefault("org", record.get("company") or record.get("organization") or record.get("employer") or "")
+                        record.setdefault("role", record.get("title", ""))
+                    else:
+                        record.setdefault("name", record.get("title", ""))
+        result = self._verify_facts_heuristic(data, target_scope=target_scope, target_claim_id=target_claim_id, target_excerpt=target_excerpt)
+        result["coverage"] = {
+            "scope": "structured_profile" if structured else "bullet_metrics_and_technology_only",
+            "status": "limited",
+            "limitation": "Source consistency is not independent factual authentication. Bullet prose uses metric, technology and role heuristics, not complete semantic verification.",
+            "bullet_checks": "metric, technology and role heuristics only",
+            "checked_fields": [],
+            "omitted_fields": [],
+            "unverified_fields": [],
+        }
+        if not structured:
+            if not result["summary"]["total_bullets_checked"]:
+                result.update(passed=False, score=0.0, verdict="FACT_CHECK_INCOMPLETE")
+            return result
+
+        raw_baseline = self.profile_context.raw_profile if self.profile_context else self.master_profile
+        baseline = self._metadata_fields(raw_baseline)
+        tailored = self._metadata_fields(tailored_text_or_dict)
+        checks = []
+        for field in sorted(baseline.keys() | tailored.keys()):
+            before, after = baseline.get(field), tailored.get(field)
+            status = "omitted" if after is None else "needs_verification"
+            if before is not None and after is not None:
+                before_value = self._canonical_value(before.get("comparison_value", before["value"]))
+                after_value = self._canonical_value(after.get("comparison_value", after["value"]))
+                if field.startswith("skills[") and isinstance(before_value, str) and isinstance(after_value, str):
+                    before_value = AliasRegistry.get_canonical_terms(before_value)
+                    after_value = AliasRegistry.get_canonical_terms(after_value)
+                if type(before["value"]) is type(after["value"]) and before_value == after_value:
+                    status = "source_matched"
+            checks.append({
+                "field": field, "status": status,
+                "change_type": "removed" if after is None else "added" if before is None else "unchanged" if status == "source_matched" else "modified",
+                "baseline_value": before["value"] if before else None,
+                "tailored_value": after["value"] if after else None,
+                "baseline_source_path": before["source_path"] if before else None,
+                "tailored_source_path": after["source_path"] if after else None,
+            })
+        result["field_checks"] = checks
+        coverage = result["coverage"]
+        coverage["checked_fields"] = [item["field"] for item in checks if item["status"] != "omitted"]
+        coverage["omitted_fields"] = [item["field"] for item in checks if item["status"] == "omitted"]
+        coverage["unverified_fields"] = [item["field"] for item in checks if item["status"] == "needs_verification"]
+        result["summary"]["metadata_fields_checked"] = len(coverage["checked_fields"])
+        result["summary"]["metadata_fields_unverified"] = len(coverage["unverified_fields"])
+        result["summary"]["metadata_fields_omitted"] = len(coverage["omitted_fields"])
+        if coverage["unverified_fields"]:
+            coverage["status"] = "needs_verification"
+            result["passed"] = False
+            result["score"] = max(0.0, result["score"] - 15.0 * len(coverage["unverified_fields"]))
+            if result["verdict"] == "FACT_CHECK_PASSED":
+                result["verdict"] = "FACT_REVIEW_REQUIRED"
+        if not coverage["checked_fields"] and not result["summary"]["total_bullets_checked"]:
+            result.update(passed=False, score=0.0, verdict="FACT_CHECK_INCOMPLETE")
+        return result
+
+    def _verify_facts_heuristic(
         self,
         tailored_text_or_dict: Union[str, dict, list],
         master_profile: Optional[dict] = None,
@@ -884,18 +1201,10 @@ class FactVerificationGuard:
                         role_inflations.append(r_esc)
 
                 exp_bullets: List[Tuple[str, Optional[str]]] = []
-                for h in exp.get("highlights", []):
-                    if isinstance(h, dict):
-                        if h.get("claim_zh"):
-                            exp_bullets.append((h["claim_zh"], h.get("claim_id")))
-                        if h.get("claim_en"):
-                            exp_bullets.append((h["claim_en"], h.get("claim_id")))
-                    elif isinstance(h, str):
-                        exp_bullets.append((h, None))
-                for b in exp.get("bullets", []):
-                    b_text = b.get("text") or b.get("claim_zh") or b.get("claim_en") if isinstance(b, dict) else str(b)
-                    if b_text:
-                        exp_bullets.append((b_text, None))
+                for key in ("highlights", "bullets"):
+                    for claim in exp.get(key, []):
+                        cid = claim.get("claim_id") if isinstance(claim, dict) else None
+                        exp_bullets.extend((text, cid) for text in self._claim_texts(claim))
 
                 for b_text, cid in exp_bullets:
                     b_clean = b_text.strip()
@@ -937,9 +1246,7 @@ class FactVerificationGuard:
                     if proj.get(k):
                         p_bullets.append(proj[k])
                 for b in proj.get("bullets", []):
-                    b_text = b.get("text") or b.get("claim_zh") if isinstance(b, dict) else str(b)
-                    if b_text:
-                        p_bullets.append(b_text)
+                    p_bullets.extend(self._claim_texts(b))
 
                 for b_text in p_bullets:
                     b_clean = b_text.strip()
@@ -1594,28 +1901,25 @@ class FactVerificationGuard:
             if "bullets" in tailored_text_or_dict and isinstance(tailored_text_or_dict["bullets"], list):
                 return self._extract_bullets(tailored_text_or_dict["bullets"])
 
+            if any(key in tailored_text_or_dict for key in ("text", "claim_zh", "claim_en")):
+                return self._claim_texts(tailored_text_or_dict)
             for exp in tailored_text_or_dict.get("experience", []):
                 if isinstance(exp, dict):
-                    for h in exp.get("highlights", []):
-                        if isinstance(h, dict):
-                            if h.get("claim_zh"):
-                                bullets.append(h["claim_zh"])
-                            if h.get("claim_en"):
-                                bullets.append(h["claim_en"])
-                        elif isinstance(h, str):
-                            bullets.append(h)
-
+                    for key in ("highlights", "bullets"):
+                        for claim in exp.get(key, []):
+                            bullets.extend(self._claim_texts(claim))
             narrative = tailored_text_or_dict.get("narrative", {})
             if isinstance(narrative, dict):
-                for k in ["summary_zh", "summary_en"]:
-                    if narrative.get(k):
-                        bullets.append(narrative[k])
-
-            for p in tailored_text_or_dict.get("projects", []):
-                if isinstance(p, dict):
-                    for k in ["description_zh", "description_en"]:
-                        if p.get(k):
-                            bullets.append(p[k])
+                for key in ("summary_zh", "summary_en"):
+                    if isinstance(narrative.get(key), str):
+                        bullets.append(narrative[key])
+            for project in tailored_text_or_dict.get("projects", []):
+                if isinstance(project, dict):
+                    for key in ("description", "description_zh", "description_en"):
+                        if isinstance(project.get(key), str):
+                            bullets.append(project[key])
+                    for claim in project.get("bullets", []):
+                        bullets.extend(self._claim_texts(claim))
 
             return bullets
 

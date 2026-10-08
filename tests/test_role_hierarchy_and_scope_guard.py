@@ -332,8 +332,12 @@ def test_fact_guard_end_to_end_role_and_scope():
     }
 
     result_grounded = guard.verify_facts(grounded_tailored)
-    assert result_grounded["passed"] is True
-    assert result_grounded["verdict"] == "FACT_CHECK_PASSED"
+    # These translations do not trigger escalation rules, but exact role
+    # equivalence is not established by those rules alone.
+    assert result_grounded["passed"] is False
+    assert result_grounded["verdict"] == "FACT_REVIEW_REQUIRED"
     assert len(result_grounded["role_inflations"]) == 0
     assert len(result_grounded["drifts"]) == 0
-    assert result_grounded["score"] == 100.0
+    assert result_grounded["score"] < 100.0
+    assert result_grounded["coverage"]["unverified_fields"]
+    assert all(item["status"] != "fabricated" for item in result_grounded["field_checks"])
