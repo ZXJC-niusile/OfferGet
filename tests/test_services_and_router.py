@@ -97,10 +97,12 @@ class TestInputRouter(unittest.TestCase):
 
         self.assertEqual(decision.mode, InputMode.MULTI_JD_AND_PROFILE.value)
         self.assertTrue(decision.is_valid)
-        self.assertTrue(decision.can_execute("multi_jd_decode"))
-        self.assertTrue(decision.can_execute("batch_match"))
-        self.assertTrue(decision.can_execute("cross_jd_gap_matrix"))
-        self.assertEqual(len(decision.blocked_stages), 0)
+        for stage in ("multi_jd_decode", "batch_match", "cross_jd_gap_matrix", "career_review"):
+            self.assertFalse(decision.can_execute(stage))
+            self.assertTrue(decision.is_blocked(stage))
+        self.assertTrue(decision.can_execute("profile_audit"))
+        self.assertTrue(decision.can_execute("resume_build"))
+        self.assertIn("unsupported", " ".join(decision.next_steps))
         self.assertEqual(len(decision.missing_inputs), 0)
 
     def test_state_invalid_and_fail_fast(self):
