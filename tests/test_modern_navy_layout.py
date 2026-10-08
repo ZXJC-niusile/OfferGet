@@ -15,6 +15,7 @@ from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import (
     BUILDER_GENERATOR,
     ROOT,
+    SemanticDocument,
     final_failures,
     fixtures,
     render_html,
@@ -37,8 +38,8 @@ def test_synthetic_fixtures_render_without_changing_facts(case):
     assert case["profile"]["name"] in actual
     assert case["profile"]["email"] in actual
     assert validate_output_security(actual, format_type="html") == []
-    assert ("photo-placeholder" in actual) == (case["photo"] != "none")
-    assert ('<img src="data:image/png;base64,' in actual) == (case["photo"] == "embedded")
+    assert (SemanticDocument(actual).photos == 1) == (case["photo"] != "none")
+    assert SemanticDocument(actual).images == int(case["photo"] == "embedded")
 
 
 def test_style_only_change_preserves_rendered_body_text():
@@ -69,18 +70,15 @@ def test_autofit_tokens_remain_applicable(profile):
 
 
 def test_layout_rules_cover_generated_flex_and_grid_markup():
-    for selector in ("header > div:first-child", ".header-top > *", ".contacts span",
-                     ".contacts a", ".org-left", ".project-header > div:first-child"):
+    for selector in (".resume-identity", ".header-top > *", ".entry-identity",
+                     ".entry-date", ".edu-grid > div"):
         rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
         assert rule, selector
         assert "min-width: 0;" in rule.group(1), selector
-    for selector in (".header-top", ".contacts", ".org-bar", ".org-left", ".project-header"):
-        rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
-        assert "flex-wrap: wrap;" in rule.group(1), selector
-    assert "text-overflow: ellipsis" not in TEMPLATE
-    assert "overflow: hidden" not in TEMPLATE
-    assert "@import" not in TEMPLATE
-    assert "url(" not in TEMPLATE
+    assert "flex-wrap: wrap;" in TEMPLATE
+    for forbidden in ("text-overflow: ellipsis", "overflow: hidden", "@import", "url("):
+        assert forbidden not in TEMPLATE
+    assert TEMPLATE.count("!important") == 4  # Only shared-solver compatibility rules
 
 
 def test_fixture_matrix_includes_page_and_photo_variants():
@@ -231,21 +229,15 @@ def test_conventional_resume_presentation_replaces_decorative_blocks():
     assert "li::before" not in TEMPLATE
     assert "linear-gradient" not in TEMPLATE
     assert "border-left:" not in TEMPLATE
-    for selector in (".org-bar", ".project-tag", "code, .cli"):
-        rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
-        assert rule, selector
-        assert "border-radius" not in rule.group(1)
-        assert "background:" not in rule.group(1) or "background: transparent;" in rule.group(1)
     assert "list-style: disc;" in TEMPLATE
-    for selector in (".org-left", ".project-header > div:first-child"):
-        rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
-        assert "flex-direction: column;" in rule.group(1)
+    assert "grid-template-columns: minmax(0, 18fr) minmax(0, 82fr);" in TEMPLATE
+    assert ".resume-sections > section > .resume-section-body" in TEMPLATE
     assert "--body-font-size: 13.333px;" in TEMPLATE
 
 
 def test_fixture_matrix_has_realistic_production_resumes():
     cases = [case for case in fixtures() if case["name"].startswith("professional-")]
-    assert {case["photo"] for case in cases} == {"none", "reserved"}
+    assert {case["photo"] for case in cases} == {"none", "reserved", "embedded"}
     for case in cases:
         assert case["mode"] == "builder"
         assert len(case["profile"]["experience"]) == 2

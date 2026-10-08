@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from core.autofit import AutoFitEngine, TUNING_LADDER
+from core.autofit import TUNING_LADDER, AutoFitEngine
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import fixtures, text_content
@@ -54,37 +54,26 @@ def test_autofit_tokens_and_repeatable_print_gutters(profile):
 
 
 def test_generated_markup_receives_wrapping_and_unboxed_hierarchy():
-    for selector in ("header > div:first-child", ".header-top > *", ".contacts span", ".contacts a",
-                     ".org-left, .project-header > div:first-child", ".edu-grid > div",
-                     "#skills li > span"):
+    for selector in (".resume-identity", ".header-top > *", ".entry-identity", ".entry-date", ".edu-grid > div"):
         rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
-        assert rule, selector
-        assert "min-width: 0;" in rule.group(1), selector
-    for selector in (".header-top", ".contacts", ".org-bar, .project-header",
-                     ".org-left, .project-header > div:first-child", "#skills li"):
-        rule = re.search(re.escape(selector) + r"\s*\{([^}]+)\}", TEMPLATE)
-        assert "flex-wrap: wrap;" in rule.group(1), selector
-    assert "background: transparent;" in TEMPLATE
-    assert "text-align: justify" not in TEMPLATE
-    assert "border-left:" not in TEMPLATE
-    assert "text-overflow: ellipsis" not in TEMPLATE
-    assert "overflow: hidden" not in TEMPLATE
-    assert "@import" not in TEMPLATE
-    assert "url(" not in TEMPLATE
+        assert rule and "min-width: 0;" in rule.group(1), selector
+    assert "grid-template-columns: minmax(0, 17fr) minmax(0, 83fr);" in TEMPLATE
+    assert ".resume-entry > .entry-date" in TEMPLATE
+    for forbidden in ("text-align: justify", "border-left:", "text-overflow: ellipsis", "overflow: hidden", "@import", "url("):
+        assert forbidden not in TEMPLATE
 
 
 def test_renderer_inline_styles_cannot_restore_colored_role_or_skill_chips():
-    role = re.search(r"\.org-role, \.project-header > div:first-child > span \+ span\s*\{([^}]+)\}", TEMPLATE)
-    assert "color: var(--color-text) !important;" in role.group(1)
-    assert "font-weight: 400 !important;" in role.group(1)
-    assert "white-space: normal !important;" in TEMPLATE
-    assert "#skills li::before { content: none; }" in TEMPLATE
-    assert "font-size: 25px !important;" in TEMPLATE
+    html = HtmlThemeRenderer().render(ResumeViewModel.from_profile(fixtures()[0]["profile"], reserve_photo=False), "classic-tech")
+    assert not re.search(r'class="(?:org-role entry-role|skill-row|skill-label)"[^>]*style=', html)
+    assert TEMPLATE.count("!important") == 4  # Only scoped shared-solver compatibility rules
+    assert "font-size: 28px;" in TEMPLATE
+    assert "font-family: Georgia" in TEMPLATE
 
 
 def test_heading_hierarchy_scales_with_production_body_type():
-    assert "font-size: 1.08em;" in TEMPLATE
-    assert "font-size: 1em !important;" in TEMPLATE
+    assert "font-size: 1.05em;" in TEMPLATE
+    assert "font-size: 1em;" in TEMPLATE
 
 
 @pytest.mark.parametrize("label", [
@@ -96,14 +85,13 @@ def test_unbroken_skill_labels_and_long_dates_preserve_all_text(label):
     profile["skills"] = {label: "Synthetic Python, SQL, Linux capability list"}
     long_date = "2020.07 – present / " + "SyntheticDateQualifier" * 5
     profile["experience"][0]["time"] = long_date
-    vm = ResumeViewModel.from_profile(profile)
-    rendered = HtmlThemeRenderer().render(vm, "classic-tech", template_content=TEMPLATE)
+    rendered = HtmlThemeRenderer().render(ResumeViewModel.from_profile(profile), "classic-tech")
     assert label in text_content(rendered)
     assert long_date in text_content(rendered)
-    assert "white-space: normal !important;" in TEMPLATE
-    date_rule = re.search(r"\.org-right, \.project-header > div:last-child\s*\{([^}]+)\}", TEMPLATE)
+    date_rule = re.search(r"\.entry-date\s*\{([^}]+)\}", TEMPLATE)
     assert "overflow-wrap: anywhere;" in date_rule.group(1)
     assert "max-width: 100%;" in date_rule.group(1)
+    assert "white-space: nowrap" not in TEMPLATE
 
 
 def test_default_type_and_gutters_are_readable_before_autofit():

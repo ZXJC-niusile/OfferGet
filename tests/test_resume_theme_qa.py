@@ -7,7 +7,7 @@ import pytest
 
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from scripts.qa_modern_navy_layout import (
-    BUILDER_GENERATOR, DEFAULT_THEME, ROOT, THEMES, changed_themes, fixtures,
+    BUILDER_GENERATOR, DEFAULT_THEME, ROOT, THEMES, STRUCTURAL_LAYOUTS, changed_themes, fixtures,
     render_html, text_content, theme_path, validate_paths,
 )
 
@@ -30,7 +30,7 @@ def test_explicit_theme_uses_its_actual_template_and_preserves_facts(theme):
 
 def test_default_fixture_matrix_remains_compatible_with_modern_navy():
     assert all(case["theme"] == DEFAULT_THEME for case in fixtures())
-    assert len(fixtures()) == 16
+    assert len(fixtures()) == 26
     assert "request.get('theme', 'modern-navy')" in BUILDER_GENERATOR
 
 
@@ -78,9 +78,9 @@ def test_corporate_presentation_has_plain_entries_and_keeps_wrapping_contracts()
 @pytest.mark.parametrize("theme", ["academic-postgraduate", "sidebar-clean"])
 def test_academic_exam_fixtures_cover_every_field_and_long_subjects(theme):
     cases = [case for case in fixtures(theme) if case["name"].startswith("exam-")]
-    assert len(fixtures(theme)) == 20
-    assert len(cases) == 4
-    assert {case["photo"] for case in cases} == {"none", "reserved"}
+    assert len(fixtures(theme)) == 30
+    assert len(cases) == 6
+    assert {case["photo"] for case in cases} == {"none", "reserved", "embedded"}
     assert all(case["mode"] == "builder" for case in cases)
     for case in cases:
         exam = case["profile"]["postgraduate_exam"]
@@ -92,17 +92,20 @@ def test_academic_exam_fixtures_cover_every_field_and_long_subjects(theme):
 def test_long_skills_are_checked_for_every_theme_through_raw_and_builder_paths():
     for theme in THEMES:
         cases = [case for case in fixtures(theme) if case["name"].startswith("skills-long-")]
-        assert len(cases) == 4
+        assert len(cases) == 6
         assert {case["mode"] for case in cases} == {"raw", "builder"}
-        assert {case["photo"] for case in cases} == {"none", "reserved"}
+        assert {case["photo"] for case in cases} == {"none", "reserved", "embedded"}
         assert all(max(len(label) for label in case["profile"]["skills"]) > 100 for case in cases)
 
 
-def test_navy_long_skill_category_can_wrap_despite_shared_inline_defaults():
+def test_navy_long_skill_category_wraps_with_stylesheet_owned_fields():
     template = (ROOT / theme_path("modern-navy")).read_text(encoding="utf-8")
-    rule = re.search(r"#skills li > span:first-child\s*\{([^}]+)\}", template)
-    assert "white-space: normal !important;" in rule.group(1)
-    assert "flex-shrink: 1 !important;" in rule.group(1)
+    rule = re.search(r"\.skill-value, \.skill-label\s*\{([^}]+)\}", template)
+    assert "min-width: 0;" in rule.group(1)
+    assert "overflow-wrap: anywhere;" in rule.group(1)
+    case = next(case for case in fixtures() if case["name"] == "skills-long-raw-none")
+    html = render_html(ROOT, case)
+    assert not re.search(r'class="skill-label"[^>]*white-space:nowrap', html)
 
 
 def test_git_paths_are_matched_portably_on_windows(monkeypatch):
@@ -148,5 +151,6 @@ def test_sidebar_exam_coverage_does_not_expand_unrelated_themes():
     for theme in THEMES:
         cases = fixtures(theme)
         has_exam = theme in {"academic-postgraduate", "sidebar-clean"}
-        assert len(cases) == (20 if has_exam else 16)
+        assert len(cases) == (30 if has_exam else 26 if theme in STRUCTURAL_LAYOUTS else 24)
         assert any(case["name"].startswith("exam-") for case in cases) == has_exam
+
