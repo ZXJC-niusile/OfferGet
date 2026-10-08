@@ -170,8 +170,8 @@ class AcademicExporter:
             if photo and Path(photo).is_file():
                 # \detokenize keeps spaces and underscores in ordinary filenames literal.
                 path = Path(photo).resolve().as_posix()
-                if "{" in path or "}" in path:
-                    raise ValueError("LaTeX photo filenames cannot contain braces")
+                if any(char in path for char in "{}%\n\r"):
+                    raise ValueError("LaTeX photo filenames cannot contain braces, percent signs or line breaks")
                 lines.append(r"\includegraphics[width=54pt,height=72pt,keepaspectratio]{\detokenize{" + path + "}}")
             else:
                 label = r"Photo\\(3:4)" if is_en else r"预留证件照\\一寸 / 二寸"
@@ -201,8 +201,11 @@ class AcademicExporter:
                       r"\begin{tabularx}{\linewidth}{@{}Xr@{}}\textbf{" + esc(school) + "}&" + esc(time) + r"\end{tabularx}\par\nopagebreak[4]"]
             if degree:
                 lines.append(esc(degree) + r"\par")
-            for row in vm.education_grid_rows:
-                lines.append(r" \enspace | \enspace ".join(esc(unescape(str(cell))) for cell in row if cell) + r"\par")
+            if vm.education_grid_rows:
+                lines.append(r"\begin{tabular}{@{}p{\linewidth}@{}}")
+                for row in vm.education_grid_rows:
+                    lines.append(r" \enspace \enspace ".join(esc(unescape(str(cell))) for cell in row if cell) + r" \\")
+                lines.append(r"\end{tabular}\par")
             metadata = (vm.raw_profile or {}).get("candidate", {})
             courses = metadata.get("courses") or metadata.get("core_courses")
             if courses:
@@ -244,7 +247,8 @@ class AcademicExporter:
             lines.append(r"\end{itemize}")
         if vm.competencies:
             section("skills", "SKILLS", "专业技能")
-            for category, values in vm.competencies.items():
+            competencies = vm.competencies if isinstance(vm.competencies, dict) else {"专业技能": vm.competencies}
+            for category, values in competencies.items():
                 value = ", ".join(str(v) for v in values) if isinstance(values, list) else str(values)
                 lines.append(r"\textbf{" + esc(category) + "}: " + esc(value) + r"\par")
         lines.append(r"\end{document}")
@@ -606,15 +610,30 @@ strong {{ font-weight: 700; }}
             parts.append("</ul>")
         if vm.competencies:
             section("skills", "SKILLS", "专业技能")
-            for category, values in vm.competencies.items():
+            competencies = vm.competencies if isinstance(vm.competencies, dict) else {"专业技能": vm.competencies}
+            for category, values in competencies.items():
                 value = ", ".join(str(v) for v in values) if isinstance(values, list) else str(values)
                 parts.append("<p><strong>" + esc(category) + ": </strong>" + esc(value) + "</p>")
         parts.append("</main></body></html>")
         html = "\n".join(parts)
-        if layout_config is not None:
-            from core.layout_solver import inject_micro_typography
-            html = inject_micro_typography(html, config=layout_config)
-        return html
+        from core.layout_solver import LayoutConfig, inject_micro_typography
+        config = layout_config or LayoutConfig(
+            target_body_font_pt=10.5, min_line_height=1.30, target_line_height=1.30,
+            min_section_margin_pt=8, target_section_margin_pt=8,
+            min_item_gap_pt=1.5, target_item_gap_pt=1.5,
+            target_page_padding_y_mm=18, max_page_padding_y_mm=18,
+            target_letter_spacing_em=0, page_mode="auto",
+        )
+        html = inject_micro_typography(html, config=config)
+        # Keep the academic page geometry and free-flowing long lists after the
+        # shared micro-typography rules (which otherwise zero horizontal margins).
+        vertical_margin = config.target_page_padding_y_mm
+        overrides = f"""<style id="academic-print-flow">
+@page {{ margin: {vertical_margin}mm 18mm; }}
+@media print {{ .page {{ min-height: 0 !important; }}
+ul {{ break-inside: auto !important; page-break-inside: auto !important; }} }}
+</style>"""
+        return html.replace("</head>", overrides + "</head>")
 
     def compile_typst(self, typ_path: str | Path, pdf_path: str | Path) -> bool:
         """Compiles Typst file to PDF using Python package or CLI."""

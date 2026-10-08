@@ -24,11 +24,14 @@ The second command requires working XeLaTeX with xeCJK/standard LaTeX packages,
 Noto CJK fonts, PyMuPDF and Playwright Chromium. It compiles real native PDFs and
 renders the HTML fallback independently for six entirely fabricated bilingual,
 long-field, dense, photo-preference, exam/publication fixtures. Each mode gets
-separate PDFs, page PNGs and source-fact/margin checks. Native missing glyphs,
+separate PDFs, page PNGs and source-fact/margin checks. Two additional traced production
+builds inspect ResumeBuilder's returned PDF: real native compilation and an intentionally
+forced fallback using the real BrowserRenderer. Native missing glyphs,
 compiler errors and overfull horizontal boxes fail. A source hash manifest ties
 artifacts to the exact exporter and fixture revisions. Inspect all page images
 before approval; the checks alone do not establish visual quality.
 
 Compilation failures are not treated as native success merely because a partial
 or stale PDF exists. XeLaTeX runs with shell escape disabled and halts on errors.
-Photo filenames containing braces produce a clear error rather than ambiguous TeX.
+Photo filenames containing braces, percent signs or line breaks produce a clear error
+rather than ambiguous TeX.

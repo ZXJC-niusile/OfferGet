@@ -97,6 +97,44 @@ def main():
                                    "overflow": overflow, "overlaps": overlaps if mode == "fallback" else [],
                                    "overfull_boxes": len(re.findall(r"Overfull \\hbox", log)) if mode == "native" else 0,
                                    "max_pages": 3 if case["name"] == "dense-none" else 2})
+            # Verify the actual builder return path in both modes, not only the
+            # generator. The native result must not silently be a browser PDF.
+            from core.resume_builder import ResumeBuilder
+            from core.browser_renderer import BrowserRenderer
+            production = next(case for case in cases() if case["name"] == "professional-none")
+            for mode in ("native", "forced-fallback"):
+                trace = {"mode": mode, "compile": [], "browser": []}
+                class TracedExporter(AcademicExporter):
+                    def compile_latex(self, source, target):
+                        success = False if mode == "forced-fallback" else super().compile_latex(source, target)
+                        trace["compile"].append({"success": success, "forced_unavailable": mode == "forced-fallback"})
+                        return success
+                class TracedBrowser(BrowserRenderer):
+                    def render_pdf(self, *values, **kwargs):
+                        result = super().render_pdf(*values, **kwargs)
+                        trace["browser"].append({"ok": result[0], "pages": result[1], "message": result[2]})
+                        return result
+                folder = output / ("production-" + mode); folder.mkdir(exist_ok=True)
+                builder = ResumeBuilder(production["profile"], renderer=TracedBrowser(browser_path=playwright.chromium.executable_path))
+                builder.academic_exporter = TracedExporter()
+                result = builder.build_academic_latex(folder, photo=False)
+                trace["returned_pdf"] = str(result["pdf"])
+                (folder / "builder-trace.json").write_text(json.dumps(trace, indent=2), encoding="utf-8")
+                assert len(trace["compile"]) == 1
+                assert trace["compile"][0]["success"] == (mode == "native")
+                assert len(trace["browser"]) == (0 if mode == "native" else 1)
+                pdf = fitz.open(result["pdf"])
+                text = squash("".join(page.get_text() for page in pdf))
+                missing = [anchor for anchor in expected_text(production["profile"]) if squash(anchor) not in text]
+                overflow = []
+                for index, pdf_page in enumerate(pdf):
+                    assert abs(pdf_page.rect.width - 595.28) < 1 and abs(pdf_page.rect.height - 841.89) < 1
+                    for word in pdf_page.get_text("words"):
+                        if word[0] < 47 or word[2] > pdf_page.rect.width - 47 or word[1] < 45 or word[3] > pdf_page.rect.height - 45:
+                            overflow.append({"page": index + 1, "text": word[4], "bbox": word[:4]})
+                    pdf_page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(folder / f"page-{index + 1}.png")
+                report.append({"case": "production-professional", "mode": mode, "pages": len(pdf), "missing": missing,
+                               "overflow": overflow, "overlaps": [], "overfull_boxes": 0, "max_pages": 2})
         finally:
             browser.close()
     (output / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")

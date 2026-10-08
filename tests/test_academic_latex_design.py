@@ -51,7 +51,7 @@ def test_native_latex_uses_raw_fields_and_escapes_once():
 def test_html_fallback_preserves_all_fields_and_literal_markup():
     source = AcademicExporter().generate_latex_html_preview(fixture(), reserve_photo=False)
     parser = Text(); parser.feed(source)
-    text = " ".join(parser.parts)
+    text = " ".join(parser.parts).replace("\u00a0", " ")
     for expected in ("Research & Systems <Group>", "R&D · Engineer <Lead>", "Used ", "C++ & SQL",
                      "Literal &amp; and <strong>text</strong>.", "GPA > 3.8", "Award & Merit",
                      "Evidence & Safety <Review>", "A. Lin & B. Example", "Synthetic Journal", "2025",
@@ -93,3 +93,12 @@ def test_latex_compile_rejects_failed_partial_and_stale_pdf(tmp_path):
         assert not AcademicExporter().compile_latex(source, target)
     assert not target.exists()
     assert source.with_suffix(".pdf").read_bytes() == b"%PDF-stale"
+
+
+def test_photo_percent_and_brace_filenames_fail_clearly(tmp_path):
+    import pytest
+    exporter = AcademicExporter()
+    for name in ("photo%example.png", "photo{example}.png"):
+        path = tmp_path / name; path.write_bytes(b"synthetic placeholder")
+        with pytest.raises(ValueError, match="photo filenames"):
+            exporter.generate_latex(fixture(), photo_path=path)
