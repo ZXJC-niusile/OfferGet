@@ -183,7 +183,7 @@ class ProposalService:
                 label=f"Proposal {proposal.proposal_id}",
             )
             self.store.save_resume_version(version)
-            version_dict = version.to_dict()
+            version_dict = self.store.get_resume_version(version.version_id).to_dict()
 
         # Mark completed ONLY after artifacts inspection AND version registration succeed
         proposal.applied_phase = "completed"

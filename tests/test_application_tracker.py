@@ -601,6 +601,37 @@ class TestResumeVersions(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "collision"):
                     store.save_resume_version(forged)
 
+    def test_version_retry_preserves_original_timestamp_and_content(self):
+        for application_id in (None, "APP-1"):
+            with self.subTest(application_id=application_id), tempfile.TemporaryDirectory() as tmp:
+                with ApplicationStore(Path(tmp) / "versions.db") as store:
+                    if application_id:
+                        store.save(ApplicationRecord(application_id, "Example Co", "Engineer"))
+                    version = ResumeVersion(
+                        application_id=application_id,
+                        proposal_id="PROP-1",
+                        profile_hash="profile-hash",
+                        artifact_hashes={"profile": "artifact-hash"},
+                        created_at="2026-10-09 08:00:00",
+                    )
+                    store.save_resume_version(version)
+                    retry = ResumeVersion.from_dict({
+                        **version.to_dict(), "created_at": "2026-10-09 08:00:02", "version_id": "",
+                    })
+                    self.assertEqual(retry.version_id, version.version_id)
+                    store.save_resume_version(retry)
+                    for field_name, changed in (
+                        ("profile_hash", "changed"),
+                        ("artifact_hashes", {"profile": "changed"}),
+                        ("label", "changed"),
+                    ):
+                        with self.subTest(field=field_name):
+                            forged = ResumeVersion.from_dict({**retry.to_dict(), field_name: changed})
+                            with self.assertRaisesRegex(ValueError, "collision"):
+                                store.save_resume_version(forged)
+                    self.assertEqual(len(store.list_resume_versions()), 1)
+                    self.assertEqual(store.get_resume_version(version.version_id).to_dict(), version.to_dict())
+
     def test_version_requires_existing_application_when_linked(self):
         with tempfile.TemporaryDirectory() as tmp:
             with ApplicationStore(Path(tmp) / "versions.db") as store:
@@ -1078,6 +1109,33 @@ class TestProposalService(unittest.TestCase):
                     service.accept("MISSING", self.profile, self.jd, output)
                 with self.assertRaises(KeyError):
                     service.reject("MISSING")
+
+    def test_service_accept_retry_preserves_completed_version(self):
+        from unittest.mock import patch
+        from core.services import ProposalService
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "svc.db"
+            output = Path(tmp) / "out.json"
+            with ProposalService(db_path) as service:
+                service.store.save(ApplicationRecord("APP-SVC", "Example Co", "Engineer"))
+                service.save(self._proposal())
+                with patch("core.application_tracker.datetime") as clock:
+                    clock.now.return_value.strftime.return_value = "2026-10-09 08:00:00"
+                    first = service.accept("PROP-SVC", self.profile, self.jd, output)
+                original_output = output.read_bytes()
+            with ProposalService(db_path) as service:
+                with patch("core.application_tracker.datetime") as clock:
+                    clock.now.return_value.strftime.return_value = "2026-10-09 08:00:02"
+                    retry = service.accept("PROP-SVC", self.profile, self.jd, output)
+                self.assertEqual(retry, first)
+                self.assertEqual(output.read_bytes(), original_output)
+                self.assertEqual(retry["accept_phase"], "completed")
+                self.assertEqual(service.get("PROP-SVC").applied_phase, "completed")
+                versions = service.store.list_resume_versions("APP-SVC")
+                self.assertEqual(len(versions), 1)
+                self.assertEqual(versions[0].to_dict(), first["resume_version"])
+                self.assertEqual(versions[0].created_at, "2026-10-09 08:00:00")
 
     def test_service_accept_failure_persists_conflict(self):
         from core.material_proposal import MaterialProposalStatus
