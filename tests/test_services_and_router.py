@@ -774,3 +774,47 @@ if __name__ == "__main__":
     unittest.main()
 
 
+
+def test_proposal_export_defaults_and_actual_paths(tmp_path, monkeypatch, capsys):
+    import json
+    from cli import build_parser
+    from core.material_proposal import MaterialProposal, profile_fingerprint, jd_fingerprint
+    from presentation.commands.proposal_cmd import cmd_proposal_accept
+    from services.offer_service import ProposalService
+
+    profile = {"candidate": {"name": "Synthetic Candidate"},
+               "experience": [{"bullets": ["Developed API"]}]}
+    jd = "Backend engineer"
+    source, job, db = tmp_path / "profile.json", tmp_path / "jd.txt", tmp_path / "proposals.db"
+    source.write_text(json.dumps(profile))
+    job.write_text(jd)
+    artifact = tmp_path / "actual-shadow.docx"
+    artifact.write_bytes(b"synthetic renderer result")
+    def render(profile, *, theme, output_dir):
+        assert theme == "modern-navy"
+        return {"docx": artifact}
+    monkeypatch.setattr(ResumeService, "build_resume", staticmethod(render))
+    for mode in ("service", "text", "json", "legacy"):
+        with ProposalService(db) as service:
+            service.save(MaterialProposal(
+                proposal_id=mode, source_profile_hash=profile_fingerprint(profile),
+                source_jd_hash=jd_fingerprint(jd), patches=[{
+                    "target_path": "experience[0].bullets[0]", "before": "Developed API",
+                    "after": "Developed API and error handling", "validation_status": "applied"}]))
+            output = tmp_path / f"{mode}.json"
+            if mode == "service":
+                result = service.accept(mode, profile, jd, output, build_resume=True)
+                assert result["generated_resumes"]["docx"] == str(artifact)
+                continue
+        args = build_parser().parse_args([
+            "proposal", "accept", mode, "--profile", str(source), "--jd", str(job),
+            "--db", str(db), "--output", str(output), "--build-resume"]
+            + (["--json"] if mode == "json" else []))
+        if mode == "legacy":
+            del args.resume_theme
+        cmd_proposal_accept(args)
+        stdout = capsys.readouterr().out
+        if mode == "json":
+            assert json.loads(stdout)["generated_resumes"]["docx"] == str(artifact)
+        else:
+            assert str(output) in stdout and f"docx: {artifact}" in stdout

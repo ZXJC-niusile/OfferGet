@@ -130,7 +130,7 @@ class ProposalService:
         output_path: Union[str, Path],
         patch_ids: Optional[List[int]] = None,
         build_resume: bool = False,
-        resume_theme: str = "classic-tech",
+        resume_theme: str = "modern-navy",
         resume_output_dir: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
         from core.artifacts import inspect_artifacts, write_json_atomic
