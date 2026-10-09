@@ -1,15 +1,81 @@
 """Theme routing contracts for the shared, real-browser visual harness."""
 
+import base64
 import copy
 import re
 
 import pytest
 
+from core.autofit import TUNING_LADDER, AutoFitEngine
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
+from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import (
-    BUILDER_GENERATOR, DEFAULT_THEME, ROOT, THEMES, STRUCTURAL_LAYOUTS, changed_themes, fixtures,
-    render_html, text_content, theme_path, validate_paths,
+    BUILDER_GENERATOR,
+    DEFAULT_THEME,
+    ROOT,
+    STRUCTURAL_LAYOUTS,
+    THEMES,
+    changed_themes,
+    fixtures,
+    render_html,
+    text_content,
+    theme_path,
+    validate_paths,
 )
+
+# ASu historically uses the default matrix, including its two all-fields cases.
+SOURCE_THEMES = ("asu-dense", "classic-tech", "engineering-sb2nov", "modern-navy",
+                 "sidebar-clean", "silicon-clean")
+SOURCE_CASES = [(theme, case) for theme in SOURCE_THEMES
+                for case in fixtures(DEFAULT_THEME if theme == "asu-dense" else theme)]
+
+
+@pytest.mark.parametrize("theme,case", SOURCE_CASES,
+                         ids=[f"{theme}-{case['name']}" for theme, case in SOURCE_CASES])
+def test_theme_source_preserves_facts_styles_and_photo_modes(theme, case, tmp_path):
+    original = copy.deepcopy(case)
+    template = (ROOT / theme_path(theme)).read_text(encoding="utf-8")
+    mode = {"none": "no-photo", "reserved": "placeholder", "embedded": "photo"}[case["photo"]]
+    photo_path = tmp_path / "portrait.png" if mode == "photo" else None
+    if photo_path:
+        photo_path.write_bytes(base64.b64decode(case["photo_data_uri"].split(",", 1)[1]))
+    vm = ResumeViewModel.from_profile(case["profile"], photo_mode=mode, photo_path=photo_path)
+    renderer = HtmlThemeRenderer()
+    html = renderer.render(vm, theme, template_content=template)
+    bare = renderer.render(vm, theme, template_content=re.sub(
+        r"<style>.*?</style>", "", template, flags=re.DOTALL))
+    assert case == original
+    assert text_content(html) == text_content(bare)
+    assert case["profile"]["name"] in html
+    assert case["profile"]["email"] in html
+    assert "{{" not in html
+    assert validate_output_security(html, format_type="html") == []
+    marker = 'class="photo-placeholder"' if theme == "engineering-sb2nov" else "photo-placeholder"
+    assert (marker in html) == (case["photo"] != "none")
+    assert ('<img src="data:image/png;base64,' in html) == (case["photo"] == "embedded")
+    if theme == "asu-dense":
+        assert '<body class="resume-dense">' in html
+
+
+@pytest.mark.parametrize("theme", SOURCE_THEMES + ("academic-postgraduate",))
+@pytest.mark.parametrize("profile", TUNING_LADDER, ids=lambda profile: profile.name)
+def test_theme_autofit_tokens_and_repeatable_print_gutters(theme, profile):
+    template = (ROOT / theme_path(theme)).read_text(encoding="utf-8")
+    tuned = AutoFitEngine(renderer=object()).apply_profile_to_html(template, profile)
+    expected = {
+        "--body-line-height": str(profile.line_height),
+        "--page-padding-y": f"{profile.padding_y_mm}mm",
+        "--page-padding-x": f"{profile.padding_x_mm}mm",
+        "--body-font-size": f"{profile.font_size_px}px",
+        "--item-gap": f"{profile.item_gap_px}px",
+        "--section-gap": f"{profile.section_gap_px}px",
+    }
+    for name, value in expected.items():
+        assert re.findall(re.escape(name) + r":\s*([^;]+);", tuned) == [value]
+    assert "margin: var(--page-padding-y) 0;" in tuned
+    assert "min-height: calc(297mm - 2 * var(--page-padding-y));" in tuned
+    if theme in {"classic-tech", "silicon-clean"}:
+        assert "break-after: avoid;" in tuned
 
 
 @pytest.mark.parametrize("theme", THEMES)
@@ -121,6 +187,7 @@ def test_stress_builder_can_report_real_multi_page_branch_without_single_page_au
         tmp_path, monkeypatch, require_autofit):
     import json
     from types import SimpleNamespace
+
     from scripts.qa_modern_navy_layout import render_production
     output = tmp_path / "production"
 

@@ -9,8 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from core.autofit import TUNING_LADDER, AutoFitEngine
-from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import (
     BUILDER_GENERATOR,
@@ -40,33 +38,6 @@ def test_synthetic_fixtures_render_without_changing_facts(case):
     assert validate_output_security(actual, format_type="html") == []
     assert (SemanticDocument(actual).photos == 1) == (case["photo"] != "none")
     assert SemanticDocument(actual).images == int(case["photo"] == "embedded")
-
-
-def test_style_only_change_preserves_rendered_body_text():
-    renderer = HtmlThemeRenderer()
-    unstyled_template = re.sub(r"<style>.*?</style>", "", TEMPLATE, flags=re.DOTALL)
-    for case in fixtures():
-        vm = ResumeViewModel.from_profile(case["profile"], reserve_photo=case["photo"] == "reserved")
-        styled = renderer.render(vm, template_content=TEMPLATE)
-        unstyled = renderer.render(vm, template_content=unstyled_template)
-        assert text_content(styled) == text_content(unstyled)
-
-
-@pytest.mark.parametrize("profile", TUNING_LADDER, ids=lambda profile: profile.name)
-def test_autofit_tokens_remain_applicable(profile):
-    tuned = AutoFitEngine(renderer=object()).apply_profile_to_html(TEMPLATE, profile)
-    expected = {
-        "--body-line-height": str(profile.line_height),
-        "--page-padding-y": f"{profile.padding_y_mm}mm",
-        "--page-padding-x": f"{profile.padding_x_mm}mm",
-        "--body-font-size": f"{profile.font_size_px}px",
-        "--item-gap": f"{profile.item_gap_px}px",
-        "--section-gap": f"{profile.section_gap_px}px",
-    }
-    for name, value in expected.items():
-        assert re.findall(re.escape(name) + r":\s*([^;]+);", tuned) == [value]
-    assert "margin: var(--page-padding-y) 0;" in tuned
-    assert "min-height: calc(297mm - 2 * var(--page-padding-y));" in tuned
 
 
 def test_layout_rules_cover_generated_flex_and_grid_markup():

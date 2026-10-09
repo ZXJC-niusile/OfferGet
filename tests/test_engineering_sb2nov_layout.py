@@ -4,50 +4,11 @@ import copy
 import re
 from pathlib import Path
 
-import pytest
-
-from core.autofit import AutoFitEngine, TUNING_LADDER
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
-from core.security_gate import validate_output_security
-from scripts.qa_modern_navy_layout import fixtures, text_content
+from scripts.qa_modern_navy_layout import fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "themes/engineering-sb2nov.html").read_text(encoding="utf-8")
-
-
-@pytest.mark.parametrize("case", fixtures("engineering-sb2nov"), ids=lambda case: case["name"])
-def test_engineering_markup_preserves_every_fixture_and_photo_state(case):
-    original = copy.deepcopy(case)
-    vm = ResumeViewModel.from_profile(case["profile"], reserve_photo=case["photo"] == "reserved")
-    if case["photo"] == "embedded":
-        vm.photo_data_uri = case["photo_data_uri"]
-    renderer = HtmlThemeRenderer()
-    actual = renderer.render(vm, "engineering-sb2nov", template_content=TEMPLATE)
-    unstyled = renderer.render(vm, "engineering-sb2nov", template_content=re.sub(
-        r"<style>.*?</style>", "", TEMPLATE, flags=re.DOTALL))
-    assert case == original
-    assert text_content(actual) == text_content(unstyled)
-    assert case["profile"]["name"] in actual
-    assert case["profile"]["email"] in actual
-    assert "{{" not in actual
-    assert ('class="photo-placeholder"' in actual) == (case["photo"] != "none")
-    assert ('<img src="data:image/png;base64,' in actual) == (case["photo"] == "embedded")
-    assert validate_output_security(actual, format_type="html") == []
-
-
-@pytest.mark.parametrize("profile", TUNING_LADDER, ids=lambda p: p.name)
-def test_engineering_autofit_tokens_and_continuation_gutters(profile):
-    actual = AutoFitEngine(renderer=object()).apply_profile_to_html(TEMPLATE, profile)
-    expected = {"--body-line-height": str(profile.line_height),
-                "--page-padding-y": f"{profile.padding_y_mm}mm",
-                "--page-padding-x": f"{profile.padding_x_mm}mm",
-                "--body-font-size": f"{profile.font_size_px}px",
-                "--item-gap": f"{profile.item_gap_px}px",
-                "--section-gap": f"{profile.section_gap_px}px"}
-    for name, value in expected.items():
-        assert re.findall(re.escape(name) + r":\s*([^;]+);", actual) == [value]
-    assert "margin: var(--page-padding-y) 0;" in actual
-    assert "min-height: calc(297mm - 2 * var(--page-padding-y));" in actual
 
 
 def test_generated_header_is_centered_and_roles_do_not_use_fallback_cyan():

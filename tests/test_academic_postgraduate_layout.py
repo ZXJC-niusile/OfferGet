@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from core.autofit import AutoFitEngine, TUNING_LADDER
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import fixtures, synthetic_photo, text_content
@@ -16,25 +15,9 @@ TEMPLATE = (ROOT / "themes/academic-postgraduate.html").read_text(encoding="utf-
 
 
 def academic_profile(long=False):
-    """Fabricated academic application, never a real student's biography."""
-    profile = copy.deepcopy(fixtures()[0]["profile"])
-    profile["intent"] = "计算机科学硕士 / MSc Computer Science"
-    profile["postgraduate_exam"] = {
-        "target_school": "示例大学 / Example University",
-        "target_major": "计算机科学与技术 / Computer Science",
-        "direction": "可信软件 / Reliable Software",
-        "scores": {"思想政治理论": "72", "英语（一）": "78", "数学（一）": "125", "计算机学科基础": "120"},
-        "total_score": "395",
-    }
-    if long:
-        profile["postgraduate_exam"].update({
-            "target_school": "InternationalInstituteOfAdvancedComputingAndInterdisciplinaryResearch" * 2,
-            "direction": "分布式系统的形式化验证与可信软件研究 / Formal Verification of Distributed Systems",
-            "scores": {"思想政治理论 / Political Theory": "72", "英语（一） / Academic English": "78",
-                       "AdvancedMathematicsAndStatisticalMethods" * 2: "125",
-                       "计算机学科专业基础综合 / Computer Science Foundations": "120"},
-        })
-    return profile
+    name = f"exam-{'long' if long else 'normal'}-none"
+    return copy.deepcopy(next(case["profile"] for case in fixtures("academic-postgraduate")
+                              if case["name"] == name))
 
 
 @pytest.mark.parametrize("long", [False, True])
@@ -74,21 +57,6 @@ def test_score_table_preserves_variable_subjects(scores, total):
     table = actual.split('<table class="exam-score-table"', 1)[1].split("</table>", 1)[0]
     assert len(re.findall(r"<th(?:\s|>)", table)) == len(scores) + 2
     assert f">{total}</td>" in table
-
-
-@pytest.mark.parametrize("profile", TUNING_LADDER, ids=lambda p: p.name)
-def test_academic_autofit_controls_and_repeated_print_gutters(profile):
-    actual = AutoFitEngine(renderer=object()).apply_profile_to_html(TEMPLATE, profile)
-    expected = {"--body-line-height": str(profile.line_height),
-                "--page-padding-y": f"{profile.padding_y_mm}mm",
-                "--page-padding-x": f"{profile.padding_x_mm}mm",
-                "--body-font-size": f"{profile.font_size_px}px",
-                "--item-gap": f"{profile.item_gap_px}px",
-                "--section-gap": f"{profile.section_gap_px}px"}
-    for name, value in expected.items():
-        assert re.findall(re.escape(name) + r":\s*([^;]+);", actual) == [value]
-    assert "margin: var(--page-padding-y) 0;" in actual
-    assert "min-height: calc(297mm - 2 * var(--page-padding-y));" in actual
 
 
 def test_academic_specific_markup_has_wrapping_and_plain_table_rules():
