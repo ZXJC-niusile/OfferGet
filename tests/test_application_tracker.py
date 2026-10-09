@@ -980,6 +980,75 @@ class TestMaterialProposal(unittest.TestCase):
         self.assertEqual(apply_material_proposal(accepted, self.profile, self.jd), updated)
         self.assertEqual(updated["experience"][0]["bullets"], [original, "补充错误处理"])
 
+    def test_partial_supplements_keep_source_and_proposal_order(self):
+        from core.job_flow import generate_tailored_profile_from_review
+        from core.material_proposal import (
+            apply_material_proposal,
+            create_material_proposal,
+        )
+
+        for section in ("experience", "projects"):
+            profile = {"candidate": {"name": "Synthetic"}, section: [{
+                "bullets": ["Implemented parser."],
+                "highlights": [
+                    {"claim_id": "A", "claim_zh": "Added error handling."},
+                    {"claim_id": "B", "claim_zh": "Documented the interface."},
+                ],
+            }]}
+            advice = {"resume_advice": [
+                {"action": "supplement", "safe_bullet": text,
+                 "evidence_refs": [{"claim_id": claim,
+                                    "source_path": f"{section}[0].highlights[{index}].claim_zh",
+                                    "excerpt": text}]}
+                for index, (claim, text) in enumerate([
+                    ("A", "Added error handling."), ("B", "Documented the interface."),
+                ])
+            ]}
+            tailored = generate_tailored_profile_from_review(advice, profile)
+            for selected, expected in (
+                ([1], ["Implemented parser.", "Documented the interface."]),
+                ([1, 0], ["Implemented parser.", "Added error handling.", "Documented the interface."]),
+                ([1, 1], ["Implemented parser.", "Documented the interface."]),
+            ):
+                with self.subTest(section=section, selected=selected):
+                    proposal = create_material_proposal(
+                        {"tailored_profile": tailored}, profile, self.jd, "PROP-PARTIAL",
+                    )
+                    self.assertEqual([p["target_path"] for p in proposal.patches],
+                                     [f"{section}[0].bullets[1]", f"{section}[0].bullets[2]"])
+                    updated = apply_material_proposal(proposal, profile, self.jd, selected)
+                    self.assertEqual(updated[section][0]["bullets"], expected)
+                    self.assertEqual(apply_material_proposal(proposal, profile, self.jd), updated)
+                    self.assertEqual(profile[section][0]["bullets"], ["Implemented parser."])
+
+    def test_partial_append_rejects_invalid_targets_and_preserves_legacy_noop(self):
+        from core.material_proposal import (
+            MaterialProposal,
+            apply_material_proposal,
+            jd_fingerprint,
+            profile_fingerprint,
+        )
+        base = {"target_path": "experience[0].bullets[1]", "before": "", "after": "new"}
+        def proposal(patches):
+            return MaterialProposal(
+                proposal_id="PROP-APPEND-BOUNDARY",
+                source_profile_hash=profile_fingerprint(self.profile),
+                source_jd_hash=jd_fingerprint(self.jd), patches=patches,
+            )
+        for patches in (
+            [dict(base, target_path="experience[0].bullets[0]")],
+            [dict(base, target_path="experience[0].bullets[9999999]")],
+            [base, dict(base, after="different")],
+        ):
+            with self.subTest(patches=patches), self.assertRaises(ValueError):
+                apply_material_proposal(proposal(patches), self.profile, self.jd)
+        legacy = proposal([base, dict(base, before="new", validation_status="already_applied")])
+        updated = apply_material_proposal(legacy, self.profile, self.jd, [1, 0])
+        self.assertEqual(updated["experience"][0]["bullets"], ["完成接口开发", "new"])
+        self.assertEqual(apply_material_proposal(legacy, self.profile, self.jd), updated)
+        with self.assertRaises(ValueError):
+            apply_material_proposal(proposal(legacy.patches), self.profile, self.jd, [1])
+
     def test_source_drift_conflicts_before_acceptance(self):
         from core.material_proposal import MaterialProposal, MaterialProposalStatus
         proposal = MaterialProposal(
