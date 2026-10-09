@@ -174,9 +174,11 @@ python cli.py offer counter examples/sample_offer.json --target-base 95000 --pro
 
 哪怕您不需要进行复杂的 JD 分析，仅想排版一份**高颜值、严禁多出 3 行导致尴尬空白跨页**的专业简历，OfferGet 的排版引擎也是极致利器：
 
+先按[披露检查流程](references/task-workflows.md#disclosure-preflight-before-every-export)准备 `public-profile.json`。带条件标签的母版会拒绝导出；匿名化不代表披露授权。
+
 ```bash
 # 1. 使用经典大厂工程师主题编译 (生成 HTML 与 PDF)
-python cli.py resume build examples/candidate_profile.json --theme classic-tech
+python cli.py resume build public-profile.json --theme classic-tech
 
 # 2. 编译学术推免专属 LaTeX 模版 (输出 .tex 源码并自动编译为 PDF)
 python cli.py resume build examples/academic_profile.json --theme academic-latex
@@ -185,13 +187,13 @@ python cli.py resume build examples/academic_profile.json --theme academic-latex
 python cli.py resume build examples/academic_profile.json --theme academic-typst
 
 # 4. 强制严格 1 页，DOM 像素级 AutoFit 紧凑压制
-python cli.py resume build examples/candidate_profile.json --theme modern-navy --pages 1
+python cli.py resume build public-profile.json --theme modern-navy --pages 1
 
 # 5. 内容较少时开启呼吸感自适应填充 (避免底部出现大面积空荡)
-python cli.py resume build examples/candidate_profile.json --theme modern-navy --adaptive-fill
+python cli.py resume build public-profile.json --theme modern-navy --adaptive-fill
 
 # 6. 生成脱敏版本 (隐藏真实手机、邮箱与公司名，适合开源分享或公开展示)
-python cli.py resume build examples/candidate_profile.json --anonymize strict
+python cli.py resume build public-profile.json --anonymize strict
 ```
 
 ---

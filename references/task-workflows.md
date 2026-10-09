@@ -11,8 +11,9 @@ page count, photo, language. Keep the source unchanged.
 
 ### Disclosure preflight before every export
 
-`resume build` does not enforce visibility filtering. Before the build command,
-inspect the source and any derived profile, including nested highlights and aliases:
+Profile-based exports reject any visibility value other than `always` (a string or
+nonempty list). They cannot infer variant selection or disclosure approval. Before
+building, inspect the source and derived profile, including nested fields and aliases:
 
 - `reference-only`: never put this evidence or its confidential text in the resume.
 - `on-request`: exclude unless the user explicitly requests inclusion.
@@ -22,6 +23,9 @@ inspect the source and any derived profile, including nested highlights and alia
 If restricted items exist, prepare a **separate disclosure-safe profile** containing
 only eligible entries and their permitted facts. Preserve the master unchanged,
 list exclusions for the user, and inspect the derived profile before rendering.
+Normalization keeps an unresolved source tag at the derived profile's root, so
+private analysis/proposal JSON stays restricted. Only after reviewing eligibility
+and excluding restricted facts, mark approved facts `always` or leave them untagged.
 Do not erase visibility metadata and then render the original content. Do not use
 `ats filter --tag all` as a privacy check: wildcard tags keep all items, and even a
 specific tag filter is not a complete recursive disclosure validator. Anonymization
@@ -29,9 +33,9 @@ does not authorize disclosure of restricted evidence. If a safe projection canno
 be verified, stop and ask for an approved public profile.
 
 For Markdown/text imports, inspect the parsed result for internal notes that lost
-their visibility context. Check any embedded photo separately: `--no-photo` disables
-the reserved photo slot, but is not a guarantee that an existing profile photo is
-removed. The build input below means the inspected, disclosure-safe resume profile.
+their visibility context; pre-rendered HTML also needs manual review because it has
+no profile tags to check. `--no-photo` excludes profile photos and reserved photo
+slots. The build input below means the inspected, disclosure-safe resume profile.
 
 ```bash
 python cli.py resume build "/path/to/public-profile.json" --theme classic-tech --no-photo --pages auto --output-dir "/path/to/output"

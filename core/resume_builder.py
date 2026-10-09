@@ -36,7 +36,7 @@ from core.paths import get_project_root, get_theme_dir
 
 PROJECT_ROOT = get_project_root()
 
-from core.profile_adapter import normalize_candidate_profile
+from core.profile_adapter import normalize_candidate_profile, require_public_profile
 from core.academic_exporter import AcademicExporter
 from core.security_gate import validate_output_security
 
@@ -162,6 +162,7 @@ class ResumeBuilder:
             raise TypeError("profile_or_path must be a dictionary, ProfileContext, or file path")
 
 
+        require_public_profile(raw_data, getattr(profile_or_path, "normalized_profile", None))
         self.raw_profile = raw_data
         self.anonymize = anonymize
         self.photo_mode = photo_mode
@@ -222,6 +223,7 @@ class ResumeBuilder:
         reserve_photo: bool = True,
     ) -> ResumeViewModel:
         """Retrieves cached ResumeViewModel or constructs and caches a new one."""
+        require_public_profile(profile, self.raw_profile)
         eff_photo_path = (str(photo_path) if photo_path else (str(self.photo_path) if self.photo_path else None)) if reserve_photo and self.photo_mode != "no-photo" else None
 
         # 1. If no profile passed or self.profile passed: it is ALREADY normalized by ResumeBuilder.__init__
@@ -237,6 +239,7 @@ class ResumeBuilder:
             norm_profile = normalize_candidate_profile(profile)
             raw_p = profile if isinstance(profile, dict) else getattr(self, "raw_profile", None)
 
+        require_public_profile(norm_profile, raw_p)
         profile_fp = _compute_profile_fingerprint(norm_profile)
         raw_p = self._anonymized_raw_profiles.get(profile_fp, raw_p)
         # Strict privacy excludes biometric identity even when an explicit photo
@@ -296,6 +299,7 @@ class ResumeBuilder:
 
     def _resolve_profile(self, anonymize: Optional[str] = None) -> Dict[str, Any]:
         """Resolves profile data, applying privacy anonymization if requested."""
+        require_public_profile(self.raw_profile, getattr(self, "profile", None))
         level = anonymize if anonymize is not None else self.anonymize
         if hasattr(self, "profile") and not level:
             return self.profile

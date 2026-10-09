@@ -624,16 +624,63 @@ def _normalize_projects(items: Iterable[Any]) -> List[Dict[str, Any]]:
     return norm_proj
 
 
+def _unresolved_visibility(value: Any, path: str = "profile") -> Optional[Tuple[str, Any]]:
+    """Find the first restriction without changing or exposing its content."""
+    if isinstance(value, ProfileContext):
+        return (_unresolved_visibility(value.raw_profile, path + ".raw_profile")
+                or _unresolved_visibility(value.normalized_profile, path + ".normalized_profile"))
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if str(key).strip().lower() == "visibility":
+                tags = [child] if isinstance(child, str) else child
+                if (not isinstance(tags, (list, tuple)) or not tags
+                        or any(not isinstance(tag, str) or tag.strip().lower() != "always"
+                               for tag in tags)):
+                    return child_path, child
+        for key, child in value.items():
+            found = _unresolved_visibility(child, f"{path}.{key}")
+            if found is not None:
+                return found
+    elif isinstance(value, (list, tuple)):
+        for index, child in enumerate(value):
+            found = _unresolved_visibility(child, f"{path}[{index}]")
+            if found is not None:
+                return found
+    return None
+
+
+def require_public_profile(*profiles: Any) -> None:
+    """Read-only export guard; never infer permission or silently filter facts."""
+    for profile in profiles:
+        restriction = _unresolved_visibility(profile)
+        if restriction is not None:
+            raise ValueError(
+                f"Public resume export blocked at {restriction[0]}: unresolved visibility. "
+                "Prepare a separate disclosure-safe profile with only approved public "
+                "facts (untagged or visibility: always); keep the master unchanged."
+            )
+
+
+def retain_profile_visibility(source: Any, projection: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep a derived profile restricted when mapping drops a tagged source field."""
+    restriction = _unresolved_visibility(source)
+    if restriction is not None:
+        projection["visibility"] = copy.deepcopy(restriction[1])
+    return projection
+
+
 def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContext]) -> Dict[str, Any]:
     """Normalizes candidate profile into the standard SSOT schema.
 
     Supports both full standard profiles (Track 1) and minimal/flat profiles (Track 2).
     Guarantees idempotence, copy-protection, and non-hallucination of missing fields.
     """
-    if isinstance(raw_profile, ProfileContext):
-        return copy.deepcopy(raw_profile.normalized_profile)
-    if not isinstance(raw_profile, dict):
+    if not isinstance(raw_profile, (dict, ProfileContext)):
         raise TypeError(f"Expected dict for profile, got {type(raw_profile)}")
+
+    if isinstance(raw_profile, ProfileContext):
+        return retain_profile_visibility(raw_profile, raw_profile.normalized_profile)
 
     # Deep copy ensures the caller's raw_profile dict is never mutated
     raw_profile_copy = copy.deepcopy(raw_profile)
@@ -704,7 +751,7 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
         norm_exp = _normalize_experiences(raw_profile_copy.get("experience", []), prefer_org_key=True)
         norm_proj = _normalize_projects(raw_profile_copy.get("projects", []))
 
-        return {
+        return retain_profile_visibility(raw_profile, {
             "candidate": cand,
             "competencies": raw_profile_copy.get("competencies", {}),
             "experience": norm_exp,
@@ -716,7 +763,7 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
             "honors_awards": awards_list,
             "narrative": raw_profile_copy.get("narrative", {}),
             "postgraduate_exam": pg_exam,
-        }
+        })
 
     # Case B: Minimal / Flat profile format (Track 2 / Career Review input)
     cand_name = raw_profile_copy.get("name") or raw_profile_copy.get("candidate_name") or "候选人"
@@ -813,7 +860,7 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
     if pg_exam:
         cand_dict["postgraduate_exam"] = copy.deepcopy(pg_exam)
 
-    return {
+    return retain_profile_visibility(raw_profile, {
         "candidate": cand_dict,
         "competencies": competencies,
         "experience": norm_exp,
@@ -825,7 +872,7 @@ def normalize_candidate_profile(raw_profile: Union[Dict[str, Any], ProfileContex
         "honors_awards": awards_list,
         "narrative": raw_profile_copy.get("narrative", {}),
         "postgraduate_exam": pg_exam,
-    }
+    })
 
 
 def build_profile_evidence_index(

@@ -74,6 +74,9 @@ class AtsDocxRenderer:
         Renders the resume to a .docx file at output_path.
         Returns the resolved Path to the generated document.
         """
+        from core.profile_adapter import require_public_profile
+        require_public_profile(vars(view_model_or_profile) if isinstance(view_model_or_profile, ResumeViewModel)
+                               else view_model_or_profile)
         if isinstance(view_model_or_profile, ResumeViewModel):
             vm = (ResumeViewModel.from_profile(view_model_or_profile, photo_mode=photo_mode)
                   if photo_mode is not None else view_model_or_profile)
