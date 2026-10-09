@@ -39,18 +39,6 @@ from core.validator import validate_bilingual_html
 PROJECT_ROOT = get_project_root()
 
 
-def _to_float_score(val: Any, default: float = 0.0) -> float:
-    if val is None:
-        return default
-    try:
-        f = float(val)
-        if 0.0 < f <= 1.0:
-            return round(f * 100.0, 1)
-        return round(f, 1)
-    except (TypeError, ValueError):
-        return default
-
-
 def _adapt_decoded_jd(decoded_jd: Any) -> DecodedJD:
     """Keep report ingress on the shared canonical conversion path."""
     return to_canonical(decoded_jd)

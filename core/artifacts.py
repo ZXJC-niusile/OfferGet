@@ -45,14 +45,6 @@ def write_json_atomic(data: Any, path: PathLike) -> str:
     return str(res.final_path)
 
 
-def _atomic_write(target: Path, payload: bytes) -> Path:
-    """Replace a target through atomic shadow write delegation."""
-    res = safe_save_file(target, payload)
-    if not res.success:
-        raise OSError(res.error_message or f"Failed to atomically write {target}")
-    return res.final_path
-
-
 def require_file(path: PathLike, label: str = "File") -> Path:
     """Resolve an existing regular file or raise a stable FileNotFoundError."""
     target = Path(path)
