@@ -7,12 +7,31 @@ salary consistency auditing, and high-EQ tactical counter-offer generation.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 COMPLIANCE_DISCLAIMER = (
     "提示：以上条款分析基于常见劳动人事合规实践，可能存在一定合规风险，建议结合录用协议原文咨询专业劳动法执业律师或人事合规顾问。"
 )
+
+
+def _number(data, *keys, default=0.0, maximum=None):
+    """Read the first supplied alias; only null/empty values use the default."""
+    if not isinstance(data, dict):
+        raise ValueError(f"Expected an object containing {keys[0]}")  # noqa: TRY004 - User input schema.
+    value = next((data[k] for k in keys if data.get(k) not in (None, "")), default)
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError(f"{keys[0]} must be a finite non-negative number") from None
+    if isinstance(value, bool) or not math.isfinite(number) or number < 0:
+        raise ValueError(f"{keys[0]} must be a finite non-negative number")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"{keys[0]} must be between 0 and {maximum}")
+    return number
 
 
 class OfferNegotiator:
@@ -35,9 +54,6 @@ class OfferNegotiator:
        without hallucinating technical metrics.
     """
 
-    def __init__(self):
-        pass
-
     def evaluate_offer(
         self,
         offer_data: Dict[str, Any],
@@ -57,12 +73,8 @@ class OfferNegotiator:
         )
 
         # 2. Extract Base Salary & Performance Split
-        monthly_base = float(
-            offer_data.get("base_salary_monthly")
-            or offer_data.get("monthly_base")
-            or offer_data.get("monthly_salary")
-            or offer_data.get("base_monthly")
-            or 0.0
+        monthly_base = _number(
+            offer_data, "base_salary_monthly", "monthly_base", "monthly_salary", "base_monthly"
         )
         months_per_year = float(
             offer_data.get("months_per_year")
@@ -107,20 +119,17 @@ class OfferNegotiator:
         )
 
         # 6. Employer Housing Fund (公积金)
-        housing_data = offer_data.get("housing_fund") or {}
+        housing_data = offer_data.get("housing_fund")
+        if housing_data is None:
+            housing_data = {}
         if isinstance(housing_data, (int, float)):
-            employer_housing_annual = round(float(housing_data) * 12, 2)
-        elif isinstance(housing_data, dict):
-            monthly_hf = housing_data.get("monthly_employer_amount") or housing_data.get("monthly_amount")
-            if monthly_hf is not None:
-                employer_housing_annual = round(float(monthly_hf) * 12, 2)
-            else:
-                rate = float(housing_data.get("rate") or 0.12)
-                # Cap base in tier-1 Chinese cities is approximately 35,000 RMB
-                capped_base = min(monthly_base, 35000.0) if monthly_base > 0 else 35000.0
-                employer_housing_annual = round(capped_base * rate * 12, 2)
-        else:
-            employer_housing_annual = round(min(monthly_base, 35000.0) * 0.12 * 12, 2)
+            housing_data = {"monthly_employer_amount": housing_data}
+        monthly_hf = _number(housing_data, "monthly_employer_amount", "monthly_amount", default=None)
+        if monthly_hf is None:
+            # Retain the existing estimate only when no amount/rate was supplied.
+            rate = _number(housing_data, "rate", default=0.12, maximum=1.0)
+            monthly_hf = min(monthly_base, 35000.0) * rate
+        employer_housing_annual = round(monthly_hf * 12, 2)
 
         # Total Cash and Total Package
         total_annual_cash = round(annual_base + target_bonus_annual + sign_on_bonus, 2)
@@ -213,13 +222,12 @@ class OfferNegotiator:
         Trap 1: Probation salary discount < 80% or probation duration > 6 months.
         Labor Contract Law Articles 19 & 20.
         """
-        prob_data = offer_data.get("probation", {})
-        duration = float(prob_data.get("duration_months") or prob_data.get("months") or 0.0)
-        discount_ratio = float(
-            prob_data.get("salary_discount_rate")
-            or prob_data.get("salary_ratio")
-            or prob_data.get("discount_ratio")
-            or 1.0
+        prob_data = offer_data.get("probation")
+        if prob_data is None:
+            prob_data = {}
+        duration = _number(prob_data, "duration_months", "months")
+        discount_ratio = _number(
+            prob_data, "salary_discount_rate", "salary_ratio", "discount_ratio", default=1.0
         )
         social_insurance = prob_data.get("pay_social_insurance", True)
         clause_text = str(prob_data.get("clause") or prob_data.get("description") or "")
