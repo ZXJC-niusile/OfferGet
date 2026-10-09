@@ -288,6 +288,31 @@ class ResumePatch:
         return asdict(self)
 
 
+def _rewrite_bullet_index(
+    section: str, entry_index: int, bullets: list[str], evidence_refs: list[dict[str, Any]],
+) -> int | None:
+    """Resolve one evidenced source bullet without incidental substring matches."""
+    prefix = f"{section}[{entry_index}]"
+    refs = [ref for ref in evidence_refs
+            if not ref.get("source_path") or str(ref["source_path"]).startswith(prefix + ".")]
+    anchors = []
+    for ref in refs:
+        match = re.fullmatch(re.escape(prefix) + r"\.bullets\[(\d+)\]", str(ref.get("source_path", "")))
+        if match:
+            anchors.append((int(match.group(1)), ref.get("excerpt", "")))
+    if anchors:
+        indexes = {index for index, _ in anchors}
+        if len(indexes) != 1:
+            return None
+        index = anchors[0][0]
+        if index < len(bullets) and all(excerpt and excerpt in bullets[index] for _, excerpt in anchors):
+            return index
+        return None  # A stale explicit anchor must not redirect to another bullet.
+    excerpts = {ref.get("excerpt") for ref in refs if ref.get("excerpt")}
+    matches = [index for index, bullet in enumerate(bullets) if bullet in excerpts]
+    return matches[0] if len(matches) == 1 else None
+
+
 def generate_tailored_profile_from_review(
     review_result: Dict[str, Any],
     base_profile: Union[Dict[str, Any], ProfileContext],
@@ -586,13 +611,12 @@ def generate_tailored_profile_from_review(
                 before_str = ""
                 b_target_idx = -1
                 if action == "rewrite":
-                    for b_idx, existing_b in enumerate(bullets):
-                        if any(ex and ex in existing_b for ex in excerpts):
-                            before_str = existing_b
-                            bullets[b_idx] = safe_bullet
-                            replaced = True
-                            b_target_idx = b_idx
-                            break
+                    b_idx = _rewrite_bullet_index("experience", e_idx, bullets, evidence_refs)
+                    if b_idx is not None:
+                        before_str = bullets[b_idx]
+                        bullets[b_idx] = safe_bullet
+                        replaced = True
+                        b_target_idx = b_idx
 
                 if not replaced:
                     bullets.append(safe_bullet)
@@ -651,15 +675,23 @@ def generate_tailored_profile_from_review(
                     )
                     applied_patches.append(patch.to_dict())
                     continue
-                p_bullets.append(safe_bullet)
+                b_idx = (_rewrite_bullet_index("projects", p_idx, p_bullets, evidence_refs)
+                         if action == "rewrite" else None)
+                before_str = ""
+                if b_idx is not None:
+                    before_str = p_bullets[b_idx]
+                    p_bullets[b_idx] = safe_bullet
+                else:
+                    b_idx = len(p_bullets)
+                    p_bullets.append(safe_bullet)
                 patch = ResumePatch(
                     source_claim_id=matched_claim_id or requirement,
-                    target_path=f"projects[{p_idx}].bullets[{len(p_bullets)-1}]",
-                    before="",
+                    target_path=f"projects[{p_idx}].bullets[{b_idx}]",
+                    before=before_str,
                     after=safe_bullet,
                     evidence_refs=evidence_refs,
                     validation_status="applied",
-                    reason="grounded project supplement",
+                    reason="grounded project rewrite" if before_str else "grounded project supplement",
                     unresolved_risks=risk_flags,
                 )
                 applied_patches.append(patch.to_dict())
