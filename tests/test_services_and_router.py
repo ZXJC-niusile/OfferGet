@@ -777,8 +777,13 @@ if __name__ == "__main__":
 
 def test_proposal_export_defaults_and_actual_paths(tmp_path, monkeypatch, capsys):
     import json
+
     from cli import build_parser
-    from core.material_proposal import MaterialProposal, profile_fingerprint, jd_fingerprint
+    from core.material_proposal import (
+        MaterialProposal,
+        jd_fingerprint,
+        profile_fingerprint,
+    )
     from presentation.commands.proposal_cmd import cmd_proposal_accept
     from services.offer_service import ProposalService
 
