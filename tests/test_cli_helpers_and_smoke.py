@@ -11,6 +11,7 @@ Validates:
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -230,6 +231,8 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.cli_path = PROJECT_ROOT / "cli.py"
         self.sample_jd = PROJECT_ROOT / "examples" / "sample_ai_jd.txt"
         self.sample_profile = PROJECT_ROOT / "examples" / "candidate_profile.json"
+        # Export integrations use this existing reviewed synthetic public fixture.
+        self.public_profile = PROJECT_ROOT / "examples" / "candidate_profile_minimal.json"
 
     def run_cli(self, *args) -> subprocess.CompletedProcess:
         cmd = [sys.executable, str(self.cli_path)] + list(args)
@@ -396,7 +399,7 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
 
             review_proc = self.run_cli(
                 "review", "examples/sample_ai_jd.txt",
-                "--profile", "examples/candidate_profile.json",
+                "--profile", str(self.public_profile),
                 "--proposal-db", str(db), "--application-id", "APP-SMOKE",
                 "--output", str(review), "--json",
             )
@@ -405,27 +408,36 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
 
             accepted = self.run_cli(
                 "proposal", "accept", proposal_id, "--db", str(db),
-                "--profile", "examples/candidate_profile.json",
+                "--profile", str(self.public_profile),
                 "--jd", "examples/sample_ai_jd.txt",
                 "--output", str(profile_out), "--build-resume",
                 "--resume-output-dir", str(resume_dir), "--json",
             )
-            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             self.assertTrue(profile_out.exists())
+            generated = json.loads(accepted.stdout)["generated_resumes"]
+            for kind in ("html", "pdf"):
+                self.assertGreater(Path(generated[kind]).stat().st_size, 0)
 
     def test_resume_version_records_artifact_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "applications.db"
             profile_out = Path(tmp) / "profile.json"
             resume_dir = Path(tmp) / "resume"
-            self.run_cli("application", "add", "APP-HASH", "--db", str(db), "--company", "验收公司", "--role", "工程师")
+            added = self.run_cli("application", "add", "APP-HASH", "--db", str(db), "--company", "验收公司", "--role", "工程师")
+            self.assertEqual(added.returncode, 0, added.stdout + added.stderr)
             review = Path(tmp) / "review.json"
-            self.run_cli("review", "examples/sample_ai_jd.txt", "--profile", "examples/candidate_profile.json", "--proposal-db", str(db), "--application-id", "APP-HASH", "--output", str(review), "--json")
+            reviewed = self.run_cli("review", "examples/sample_ai_jd.txt", "--profile", str(self.public_profile), "--proposal-db", str(db), "--application-id", "APP-HASH", "--output", str(review), "--json")
+            self.assertEqual(reviewed.returncode, 0, reviewed.stdout + reviewed.stderr)
             proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
-            accepted = self.run_cli("proposal", "accept", proposal_id, "--db", str(db), "--profile", "examples/candidate_profile.json", "--jd", "examples/sample_ai_jd.txt", "--output", str(profile_out), "--build-resume", "--resume-output-dir", str(resume_dir), "--json")
+            accepted = self.run_cli("proposal", "accept", proposal_id, "--db", str(db), "--profile", str(self.public_profile), "--jd", "examples/sample_ai_jd.txt", "--output", str(profile_out), "--build-resume", "--resume-output-dir", str(resume_dir), "--json")
+            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             payload = json.loads(accepted.stdout)
             self.assertEqual(payload["accept_phase"], "completed")
             self.assertEqual(set(payload["artifact_status"].values()), {"present"})
+            self.assertTrue({"profile", "html", "pdf"}.issubset(payload["artifact_hashes"]))
+            for name, path in payload["output_paths"].items():
+                self.assertEqual(payload["artifact_hashes"][name], hashlib.sha256(Path(path).read_bytes()).hexdigest())
 
     def test_runtime_contract_exports_and_annotations(self):
         """Verifies core exports, submodule attributes, and typing annotations have zero runtime contract breakages."""
