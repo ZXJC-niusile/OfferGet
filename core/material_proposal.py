@@ -180,7 +180,15 @@ def apply_material_proposal(
         profile.normalized_profile if isinstance(profile, ProfileContext)
         else build_profile_context(profile).normalized_profile
     )
-    patches_to_apply = [copy.deepcopy(proposal.patches[i]) for i in selected]
+    # Apply in proposal order even when the user selects indexes out of order.
+    patches_to_apply = [copy.deepcopy(proposal.patches[i]) for i in sorted(set(selected))]
+    source_lengths = {
+        (section, index): len(entry["bullets"])
+        for section in ("experience", "projects")
+        for index, entry in enumerate(result.get(section, []))
+        if isinstance(entry, dict) and isinstance(entry.get("bullets"), list)
+    }
+    appended_slots = {}
 
     for patch in patches_to_apply:
         target = str(patch.get("target_path", ""))
@@ -192,17 +200,31 @@ def apply_material_proposal(
         if not isinstance(entries, list) or entry_idx >= len(entries):
             raise ValueError(f"proposal target is no longer available: {target}")
         bullets = entries[entry_idx].get("bullets") if isinstance(entries[entry_idx], dict) else None
-        if not isinstance(bullets, list) or bullet_idx > len(bullets):
-            raise ValueError(f"proposal target is no longer available: {target}")
+        if not isinstance(bullets, list):
+            # Preserve the public target-validation error contract.
+            raise ValueError(f"proposal target is no longer available: {target}")  # noqa: TRY004
         expected_before = patch.get("before", "")
-        if bullet_idx == len(bullets):
-            if expected_before:
-                proposal.status = MaterialProposalStatus.CONFLICTED
-                proposal.conflict_reason = f"target_changed:{target}"
-                raise ValueError(f"proposal target changed: {target}")
+        source_length = source_lengths[(section, entry_idx)]
+        slot = (section, entry_idx, bullet_idx)
+        if bullet_idx >= source_length and slot not in appended_slots:
+            # A later approved supplement may skip earlier, unapproved additions.
+            # Still require a contiguous append plan, not an arbitrary target index.
+            planned_slots = {
+                str(item.get("target_path", "")) for item in proposal.patches
+                if item.get("before") == ""
+            }
+            if expected_before or bullet_idx - source_length >= len(planned_slots) or any(
+                f"{section}[{entry_idx}].bullets[{index}]" not in planned_slots
+                for index in range(source_length, bullet_idx + 1)
+            ):
+                raise ValueError(f"proposal target is no longer available: {target}")
+            appended_slots[slot] = len(bullets)
             bullets.append(patch.get("after", ""))
             continue
-        if expected_before and bullets[bullet_idx] != expected_before:
+        bullet_idx = appended_slots.get(slot, bullet_idx)
+        if slot in appended_slots and expected_before == "" and bullets[bullet_idx] == patch.get("after"):
+            continue
+        if bullets[bullet_idx] != expected_before:
             proposal.status = MaterialProposalStatus.CONFLICTED
             proposal.conflict_reason = f"target_changed:{target}"
             raise ValueError(f"proposal target changed: {target}")
