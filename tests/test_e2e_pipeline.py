@@ -5,7 +5,7 @@ Verifies complete user workflows from raw input files to final outputs:
 2. E2E Resume Rendering & Layout Pipeline (Profile -> Layout Solver -> HTML -> PDF -> Atomic Safe Write -> Diff Ledger)
 3. E2E Academic Baoyan Lifecycle (Academic Profile -> Integrity Audit -> 3-Tier Compression -> Advisor Match -> Package)
 4. E2E Interview Debrief & Defense Pipeline (Claims -> Fact Guard -> Defense Simulator -> Multi-turn Debrief -> Session Persistence)
-5. E2E CLI Entrypoint Execution (Doctor, Selftest, Decode, Match, ATS Audit via CLI runner)
+5. ATS Audit CLI Command Smoke Check
 """
 
 from __future__ import annotations
@@ -428,27 +428,7 @@ class TestE2EInterviewDebriefAndDefensePipeline(unittest.TestCase):
 
 
 class TestE2ECLIWorkflow(unittest.TestCase):
-    """E2E Test 5: End-to-end execution of CLI subcommands."""
-
-    def test_cli_doctor(self):
-        from presentation.commands.doctor_cmd import cmd_doctor
-        code = cmd_doctor()
-        self.assertEqual(code, 0)
-
-    def test_cli_jd_decode_and_match(self):
-        from presentation.commands.jd_cmd import cmd_jd_decode, cmd_jd_match
-        import argparse
-
-        # Decode
-        jd_path = str(PROJECT_ROOT / "examples" / "sample_ai_jd.txt")
-        args_decode = argparse.Namespace(jd_file=jd_path, json=True)
-        # Should execute without raising
-        cmd_jd_decode(args_decode)
-
-        # Match
-        prof_path = str(PROJECT_ROOT / "examples" / "candidate_profile.json")
-        args_match = argparse.Namespace(jd_file=jd_path, profile=prof_path, json=True, top=5)
-        cmd_jd_match(args_match)
+    """ATS command smoke coverage; JD CLI and diagnostics have dedicated suites."""
 
     def test_cli_ats_audit(self):
         from presentation.commands.ats_cmd import cmd_ats_audit

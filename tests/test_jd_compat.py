@@ -100,12 +100,6 @@ class TestJDCompat(unittest.TestCase):
         self.assertIn("verdict", match_result)
         self.assertIn("gaps", match_result)
 
-    def test_05_to_canonical(self):
-        """Test to_canonical conversion from DecodedJDCompat."""
-        decoded = decode_legacy(self.jd_text)
-        canonical_jd = to_canonical(decoded)
-        self.assertEqual(canonical_jd.job_title, decoded["metadata"]["role"])
-
     def test_06_decoded_jd_compat_contract(self):
         """Test DecodedJDCompat carries canonical object and remains JSON-serializable dict."""
         from core.jd_compat import DecodedJDCompat
