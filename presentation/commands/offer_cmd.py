@@ -7,13 +7,12 @@ OfferGet Offer Command Handlers:
 from __future__ import annotations
 
 import os
-import sys
 
 from core.cli_helpers import (
     load_json,
     load_profile,
     emit_json,
-    emit_stderr,
+    fail_cli,
 )
 from services.offer_service import OfferService
 
@@ -22,16 +21,14 @@ def cmd_offer_eval(args):
     """Handler for `offerget offer evaluate <offer.json> [--profile <profile.json>]`."""
     offer_path = args.offer_file
     if not os.path.exists(offer_path):
-        emit_stderr(f"[-] Error: Offer file not found: {offer_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Offer file not found: {offer_path}")
 
     offer_data = load_json(offer_path)
 
     profile_data = None
     if args.profile:
         if not os.path.exists(args.profile):
-            emit_stderr(f"[-] Error: Profile file not found: {args.profile}")
-            sys.exit(1)
+            fail_cli(args, "input_not_found", f"Profile file not found: {args.profile}")
         profile_data = load_profile(args.profile)
 
 
@@ -71,18 +68,19 @@ def cmd_offer_counter(args):
     """Handler for `offerget offer counter <offer.json> [--target-base <int>] [--competing <json>]`."""
     offer_path = args.offer_file
     if not os.path.exists(offer_path):
-        emit_stderr(f"[-] Error: Offer file not found: {offer_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Offer file not found: {offer_path}")
 
     offer_data = load_json(offer_path)
 
     profile_data = None
-    if args.profile and os.path.exists(args.profile):
+    if args.profile:
+        if not os.path.exists(args.profile):
+            fail_cli(args, "input_not_found", f"Profile file not found: {args.profile}")
         profile_data = load_profile(args.profile)
 
 
     competing = None
-    if args.competing and os.path.exists(args.competing):
+    if args.competing:
         competing = load_json(args.competing)
 
     offer_service = OfferService()

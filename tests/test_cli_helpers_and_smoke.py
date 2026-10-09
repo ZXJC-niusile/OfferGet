@@ -298,6 +298,82 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertIn("Error: JD file not found", proc.stderr)
         self.assertEqual(proc.stdout.strip(), "")
 
+    def assert_json_failure(self, args, error_type):
+        proc = self.run_cli(*args, "--json")
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertEqual(proc.stderr, "")
+        payload = json.loads(proc.stdout)
+        self.assertEqual(set(payload), {"status", "error_type", "message", "exit_code"})
+        self.assertEqual(payload["status"], "error")
+        self.assertEqual(payload["error_type"], error_type)
+        self.assertEqual(payload["exit_code"], 1)
+        self.assertTrue(payload["message"])
+
+    def test_cli_missing_jd_json_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = str(Path(tmp) / "missing.txt")
+            for command in ("decode", "match"):
+                with self.subTest(command=command):
+                    args = ["jd", command, missing]
+                    if command == "match":
+                        args += ["--profile", str(self.sample_profile)]
+                    self.assert_json_failure(args, "input_not_found")
+
+    def test_offer_counter_rejects_explicit_missing_optional_inputs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            offer = Path(tmp) / "offer.json"
+            offer.write_text('{"base_salary_monthly": 20000}', encoding="utf-8")
+            for flag in ("--profile", "--competing"):
+                with self.subTest(flag=flag):
+                    args = ["offer", "counter", str(offer), flag, str(Path(tmp) / "missing.json")]
+                    self.assert_json_failure(args, "input_not_found")
+                    proc = self.run_cli(*args)
+                    self.assertEqual(proc.returncode, 1)
+                    self.assertEqual(proc.stdout, "")
+                    self.assertIn("not found", proc.stderr)
+                    self.assertNotIn("Traceback", proc.stderr)
+            # Omitting optional inputs still uses the normal counter-offer flow.
+            proc = self.run_cli("offer", "counter", str(offer), "--json")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn("counter_offer_letter", json.loads(proc.stdout))
+
+    def test_cli_malformed_profile_json_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "profile.json"
+            bad.write_text("{invalid json", encoding="utf-8")
+            offer = Path(tmp) / "offer.json"
+            offer.write_text('{"base_salary_monthly": 20000}', encoding="utf-8")
+            commands = [
+                ["jd", "match", str(self.sample_jd)],
+                ["offer", "evaluate", str(offer)],
+                ["offer", "counter", str(offer)],
+            ]
+            for command in commands:
+                with self.subTest(command=command):
+                    self.assert_json_failure(command + ["--profile", str(bad)], "invalid_json")
+            proc = self.run_cli("jd", "match", str(self.sample_jd), "--profile", str(bad))
+            self.assertEqual(proc.returncode, 1)
+            self.assertEqual(proc.stdout, "")
+            self.assertIn("Error:", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+
+    def test_cli_expected_error_boundary(self):
+        import cli
+
+        for error, kind in ((FileNotFoundError("input vanished"), "input_not_found"),
+                            (PermissionError("unreadable input"), "io_error"),
+                            (ValueError("invalid value"), "invalid_input")):
+            with self.subTest(error=kind), patch("sys.argv", ["offerget", "jd", "decode", "input", "--json"]):
+                with patch.object(cli, "cmd_jd_decode", side_effect=error), patch("sys.stdout", io.StringIO()) as out:
+                    with self.assertRaises(SystemExit) as stopped:
+                        cli.main()
+                    self.assertEqual(stopped.exception.code, 1)
+                    self.assertEqual(json.loads(out.getvalue())["error_type"], kind)
+        with patch("sys.argv", ["offerget", "jd", "decode", "input", "--json"]):
+            with patch.object(cli, "cmd_jd_decode", side_effect=RuntimeError("unexpected defect")):
+                with self.assertRaisesRegex(RuntimeError, "unexpected defect"):
+                    cli.main()
+
     def test_application_review_accept_and_render(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

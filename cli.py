@@ -6,6 +6,7 @@ OfferGet Master CLI - Job Description Decoding, Match Scoring, Report Generation
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -22,6 +23,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from core.cli_helpers import fail_cli
 from presentation.commands import (
     cmd_advisor_match,
     cmd_anon_mask,
@@ -441,7 +443,19 @@ def main():
 
     parser = build_parser()
     args = parser.parse_args()
+    try:
+        _dispatch_command(args, parser)
+    except FileNotFoundError as exc:
+        fail_cli(args, "input_not_found", str(exc))
+    except json.JSONDecodeError as exc:
+        fail_cli(args, "invalid_json", str(exc))
+    except OSError as exc:
+        fail_cli(args, "io_error", str(exc))
+    except ValueError as exc:
+        fail_cli(args, "invalid_input", str(exc))
 
+
+def _dispatch_command(args, parser):
     if args.command == "review":
         cmd_career_review(args)
     elif args.command == "proposal":
