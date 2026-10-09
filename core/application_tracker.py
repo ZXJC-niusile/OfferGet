@@ -960,43 +960,34 @@ class ApplicationStore:
         """Persist immutable version metadata; conflicting content is rejected."""
         if not isinstance(version, ResumeVersion):
             raise TypeError("version must be a ResumeVersion")
-        if version.application_id:
-            with self._get_connection() as conn:
+        with self._get_connection() as conn:
+            if version.application_id:
                 if conn.execute("SELECT 1 FROM applications WHERE id = ?", (version.application_id,)).fetchone() is None:
                     raise ValueError(f"application_id does not exist: {version.application_id}")
-                existing = conn.execute("SELECT * FROM resume_versions WHERE version_id = ?", (version.version_id,)).fetchone()
-                if existing is not None:
-                    stored = self._row_to_resume_version(existing)
-                    if stored.to_dict() != version.to_dict():
-                        raise ValueError("version_id collision: existing version content differs")
-                    return
-                conn.execute(
-                    """
-                    INSERT INTO resume_versions (
-                        version_id, application_id, proposal_id, profile_hash, jd_hash,
-                        theme, output_paths_json, artifact_status_json, artifact_hashes_json,
-                        accept_phase, label, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        version.version_id, version.application_id, version.proposal_id,
-                        version.profile_hash, version.jd_hash, version.theme,
-                        json.dumps(version.output_paths, ensure_ascii=False, sort_keys=True),
-                        json.dumps(version.artifact_status, ensure_ascii=False, sort_keys=True),
-                        json.dumps(version.artifact_hashes, ensure_ascii=False, sort_keys=True),
-                        version.accept_phase,
-                        version.label, version.created_at,
-                    ),
-                )
-                conn.commit()
-            return
-        with self._get_connection() as conn:
             existing = conn.execute("SELECT * FROM resume_versions WHERE version_id = ?", (version.version_id,)).fetchone()
-            if existing is not None and self._row_to_resume_version(existing).to_dict() != version.to_dict():
-                raise ValueError("version_id collision: existing version content differs")
+            if existing is not None:
+                stored = self._row_to_resume_version(existing)
+                # Creation time belongs to the first save, not each retry.
+                if stored.to_dict() != {**version.to_dict(), "created_at": stored.created_at}:
+                    raise ValueError("version_id collision: existing version content differs")
+                return
             conn.execute(
-                "INSERT OR IGNORE INTO resume_versions (version_id, application_id, proposal_id, profile_hash, jd_hash, theme, output_paths_json, artifact_status_json, artifact_hashes_json, accept_phase, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (version.version_id, None, version.proposal_id, version.profile_hash, version.jd_hash, version.theme, json.dumps(version.output_paths, ensure_ascii=False, sort_keys=True), json.dumps(version.artifact_status, ensure_ascii=False, sort_keys=True), json.dumps(version.artifact_hashes, ensure_ascii=False, sort_keys=True), version.accept_phase, version.label, version.created_at),
+                """
+                INSERT INTO resume_versions (
+                    version_id, application_id, proposal_id, profile_hash, jd_hash,
+                    theme, output_paths_json, artifact_status_json, artifact_hashes_json,
+                    accept_phase, label, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    version.version_id, version.application_id or None, version.proposal_id,
+                    version.profile_hash, version.jd_hash, version.theme,
+                    json.dumps(version.output_paths, ensure_ascii=False, sort_keys=True),
+                    json.dumps(version.artifact_status, ensure_ascii=False, sort_keys=True),
+                    json.dumps(version.artifact_hashes, ensure_ascii=False, sort_keys=True),
+                    version.accept_phase,
+                    version.label, version.created_at,
+                ),
             )
             conn.commit()
 
