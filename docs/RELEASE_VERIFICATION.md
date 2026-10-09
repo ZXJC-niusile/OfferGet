@@ -16,14 +16,14 @@ logs. Provision the build tools before running the wheel-install regression:
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e ".[all]"
 python cli.py doctor
-python cli.py selftest
 python -m pytest tests/ -ra
 ```
 
 - `doctor` checks the environment and installed resources. A missing optional
   browser can produce exit code 1; browser discovery does not prove rendering.
-- `selftest` runs synthetic core smoke checks. It does not run the developer
-  suite or produce a real PDF, and explicitly reports rendering as `NOT RUN`.
+- `python cli.py selftest` is an optional quick smoke check, already exercised
+  by the pytest suite. It does not run the developer suite or produce a real
+  PDF, and explicitly reports rendering as `NOT RUN`.
 - `pytest` is the developer regression suite. Report passes, failures, skips and
   deselections separately. A constrained or filtered run is not a full pass.
 
