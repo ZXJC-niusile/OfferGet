@@ -104,3 +104,36 @@ def test_photo_percent_and_brace_filenames_fail_clearly(tmp_path):
         Image.new("RGB", (12, 16), "#336699").save(path)
         with pytest.raises(ValueError, match="photo filenames"):
             exporter.generate_latex(fixture(), photo_path=path)
+
+
+def test_latex_qa_embedded_fixture_preserves_portrait_in_both_sources(tmp_path):
+    import base64
+
+    from scripts.qa_academic_latex_layout import fixture_view_model
+    from scripts.qa_ats_docx_layout import cases
+
+    case = next(case for case in cases() if case["name"] == "professional-embedded")
+    portrait = tmp_path / "synthetic-portrait.png"
+    portrait.write_bytes(base64.b64decode(case["photo_data_uri"].split(",", 1)[1]))
+    vm = fixture_view_model(case, portrait)
+    exporter = AcademicExporter()
+    assert exporter.generate_latex(vm).count(r"\includegraphics[") == 1
+    assert exporter.generate_latex_html_preview(vm).count('<img class="photo"') == 1
+
+
+def test_latex_qa_pdf_gate_rejects_missing_portrait():
+    import fitz
+
+    from scripts.qa_academic_latex_layout import pdf_photo_metrics
+    from scripts.qa_modern_navy_layout import synthetic_portrait_png
+
+    # PDF-inspection unit data, not a rendered resume or visual QA.
+    with fitz.open() as pdf:
+        page = pdf.new_page()
+        missing = pdf_photo_metrics(pdf, "embedded")
+        assert missing["expected_images"] == 1 and missing["actual_images"] == 0
+        assert missing["photo_errors"]
+        page.insert_image(fitz.Rect(20, 20, 80, 100), stream=synthetic_portrait_png())
+        present = pdf_photo_metrics(pdf, "embedded")
+        assert present["expected_images"] == present["actual_images"] == 1
+        assert not present["photo_errors"]
