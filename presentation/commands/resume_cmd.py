@@ -80,7 +80,7 @@ def cmd_resume_build(args_list=None):
         "--pages",
         default="auto",
         choices=["auto", "1", "2"],
-        help="Target page budget: 'auto' (default: 1 page or auto-expand if needed), '1' (strict 1-page), '2' (balanced 2-page)",
+        help="PDF page budget (DOCX requires auto; pagination is not verified): 'auto' (default: 1 page or auto-expand if needed), '1' (strict 1-page), '2' (balanced 2-page)",
     )
     build_parser.add_argument(
         "--baseline",
@@ -137,7 +137,8 @@ def cmd_resume_build(args_list=None):
     print(f"[*] Target Role: {target_role}")
     print(f"[*] Output Dir:  {out_dir}")
     print(f"[*] Photo Slot:  {photo_status}")
-    print(f"[*] Page Budget: {parsed.pages}")
+    page_status = "Not verified (DOCX)" if parsed.theme == "ats-docx" else parsed.pages
+    print(f"[*] Page Budget: {page_status}")
     print(f"[*] Anonymize:   {parsed.anonymize or 'Disabled'}")
     print(f"[*] AutoFit:     {'Disabled' if parsed.no_autofit else 'Enabled'}")
     print(f"[*] Adaptive:    {'Enabled' if parsed.adaptive_fill else 'Disabled'}")

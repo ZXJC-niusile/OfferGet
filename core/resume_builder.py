@@ -694,8 +694,10 @@ class ResumeBuilder:
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds a specific theme by name."""
-        diff_ledger = self._privacy_diff_ledger(diff_ledger, output_dir, anonymize)
         theme_normalized = theme.lower().replace("_", "-")
+        if theme_normalized in ("ats-docx", "docx") and pages != "auto":
+            raise ValueError("Explicit page budgets require PDF output; use pages=auto for DOCX and check pagination in Word.")
+        diff_ledger = self._privacy_diff_ledger(diff_ledger, output_dir, anonymize)
         eff_photo_path = photo_path or self.photo_path
         if theme_normalized in self.HTML_THEMES:
             return self.build_html_theme(
@@ -844,6 +846,8 @@ class ResumeBuilder:
         **kwargs,
     ) -> Dict[str, Dict[str, Path]]:
         """Builds all 6 standard resume variants (or all 7 if include_docx=True)."""
+        if include_docx and pages != "auto":
+            raise ValueError("Explicit page budgets require PDF output; omit include_docx or use pages=auto and check DOCX pagination in Word.")
         themes = self.THEMES if include_docx else self.PDF_THEMES
         results = {}
         for t in themes:
