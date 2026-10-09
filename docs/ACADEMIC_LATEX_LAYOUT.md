@@ -31,6 +31,12 @@ compiler errors and overfull horizontal boxes fail. A source hash manifest ties
 artifacts to the exact exporter and fixture revisions. Inspect all page images
 before approval; the checks alone do not establish visual quality.
 
+Each fixture resolves an explicit photo, no-photo or placeholder mode once for
+both LaTeX and HTML sources. Both native and fallback PDFs must contain exactly
+one embedded image for the portrait case and none for the other modes, including
+the production no-photo builds. Missing or duplicate portraits fail the gate.
+Source-mode and PDF-inspection unit tests do not replace actual renderer runs.
+
 Compilation failures are not treated as native success merely because a partial
 or stale PDF exists. XeLaTeX runs with shell escape disabled and halts on errors.
 Photo filenames containing braces, percent signs or line breaks produce a clear error

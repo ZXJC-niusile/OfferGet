@@ -22,6 +22,19 @@ def squash(text):
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text)).replace("**", "")
 
 
+def fixture_view_model(case, photo=None):
+    mode = {"none": "no-photo", "reserved": "placeholder", "embedded": "photo"}[case["photo"]]
+    return ResumeViewModel.from_profile(case["profile"], photo_path=photo, photo_mode=mode)
+
+
+def pdf_photo_metrics(pdf, photo):
+    expected = int(photo == "embedded")
+    actual = sum(len(page.get_image_info()) for page in pdf)
+    return {"expected_images": expected, "actual_images": actual,
+            "photo_errors": [] if actual == expected else [
+                f"Expected {expected} portrait images, found {actual}"]}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
@@ -33,6 +46,7 @@ def main():
         raise RuntimeError("Real XeLaTeX is required for native QA")
     output = args.output.resolve(); output.mkdir(parents=True, exist_ok=True)
     sources = ["core/academic_exporter.py", "core/resume_view_model.py", "core/profile_adapter.py",
+               "core/resume_photo.py", "core/resume_builder.py",
                "scripts/qa_academic_latex_layout.py", "scripts/qa_ats_docx_layout.py", "scripts/qa_modern_navy_layout.py"]
     manifest = {}
     for source in sources:
@@ -56,11 +70,11 @@ def main():
                 if case["name"] == "exam-publications":
                     profile["experience"][0]["company"] = "Example & Research <Group>"
                     profile["experience"][0]["role"] = "R&D Engineer"
-                vm = ResumeViewModel.from_profile(profile, photo_path=photo, reserve_photo=case["photo"] == "reserved")
+                vm = fixture_view_model(case, photo)
                 tex = folder / "resume.tex"
                 tex.write_text(exporter.generate_latex(vm), encoding="utf-8")
                 html = folder / "resume.html"
-                html.write_text(exporter.generate_latex_html_preview(vm, reserve_photo=case["photo"] == "reserved"), encoding="utf-8")
+                html.write_text(exporter.generate_latex_html_preview(vm), encoding="utf-8")
                 native = folder / "native"; native.mkdir(exist_ok=True)
                 compile_result = subprocess.run([compiler, "-no-shell-escape", "-halt-on-error", "-interaction=nonstopmode",
                                                   "-output-directory=" + str(native), str(tex)],
@@ -94,6 +108,7 @@ def main():
                                 overflow.append({"page": index + 1, "text": word[4], "bbox": word[:4]})
                         pdf_page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(folder / mode / f"page-{index + 1}.png")
                     report.append({"case": case["name"], "mode": mode, "pages": len(pdf), "missing": missing,
+                                   **pdf_photo_metrics(pdf, case["photo"]),
                                    "overflow": overflow, "overlaps": overlaps if mode == "fallback" else [],
                                    "overfull_boxes": len(re.findall(r"Overfull \\hbox", log)) if mode == "native" else 0,
                                    "max_pages": 3 if case["name"] == "dense-none" else (1 if case["name"] == "exam-publications" else 2)})
@@ -136,12 +151,13 @@ def main():
                             overflow.append({"page": index + 1, "text": word[4], "bbox": word[:4]})
                     pdf_page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(folder / f"page-{index + 1}.png")
                 report.append({"case": "production-professional", "mode": mode, "pages": len(pdf), "missing": missing,
+                               **pdf_photo_metrics(pdf, production["photo"]),
                                "overflow": overflow, "overlaps": [], "overfull_boxes": 0, "max_pages": 2})
         finally:
             browser.close()
     (output / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(json.dumps(report, indent=2, ensure_ascii=False))
-    if any(r["missing"] or r["overflow"] or r["overlaps"] or r["overfull_boxes"] or r["pages"] > r["max_pages"] for r in report):
+    if any(r["missing"] or r["overflow"] or r["overlaps"] or r["overfull_boxes"] or r["photo_errors"] or r["pages"] > r["max_pages"] for r in report):
         raise SystemExit("Native/fallback layout or source checks failed; inspect report.json")
 
 
