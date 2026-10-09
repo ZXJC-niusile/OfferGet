@@ -205,3 +205,21 @@ def test_non_html_dispatch_rejects_missing_final_pdf(tmp_path, monkeypatch):
     monkeypatch.setattr(builder, "build_academic_typst", lambda *args, **kwargs: {"pdf": tmp_path / "missing.pdf"})
     with pytest.raises(RuntimeError, match="missing or empty"):
         builder.build_theme("academic-typst", tmp_path, pages="1")
+
+
+@pytest.mark.parametrize("pages", ["1", "2"])
+def test_docx_explicit_budget_rejected_before_export(tmp_path, monkeypatch, pages):
+    from services.resume_service import ResumeService
+    builder = ResumeBuilder({"name": "Synthetic Candidate"}, renderer=FinalRenderer())
+    def unexpected_export(*args, **kwargs):
+        pytest.fail("Unsupported DOCX budget must fail before exporting")
+    monkeypatch.setattr(builder, "build_ats_docx", unexpected_export)
+    for theme in ("ats-docx", "docx"):
+        with pytest.raises(ValueError, match="Explicit page budgets require PDF"):
+            builder.build_theme(theme, tmp_path, pages=pages)
+    monkeypatch.setattr(builder, "build_theme", unexpected_export)
+    with pytest.raises(ValueError, match="omit include_docx"):
+        builder.build_all(tmp_path, include_docx=True, pages=pages)
+    with pytest.raises(ValueError, match="Explicit page budgets require PDF"):
+        ResumeService().build_resume({"name": "Synthetic Candidate"}, theme="ats-docx",
+                                     output_dir=tmp_path, pages=pages)
