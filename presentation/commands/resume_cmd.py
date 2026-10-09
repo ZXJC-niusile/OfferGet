@@ -24,12 +24,12 @@ def cmd_resume_build(args_list=None):
     """Build multi-template resumes from candidate profile."""
     build_parser = argparse.ArgumentParser(
         prog="offerget resume build",
-        description="Build multi-template resumes (PDF & HTML) from candidate profile",
+        description="Build a resume (PDF & HTML) from candidate profile; use --theme all for every theme",
     )
     build_parser.add_argument("profile", help="Path to candidate profile JSON (minimal or standard)")
     build_parser.add_argument(
         "--theme",
-        default="all",
+        default="modern-navy",
         choices=[
             "all",
             "modern-navy",
@@ -45,7 +45,7 @@ def cmd_resume_build(args_list=None):
             "academic-typst",
             "ats-docx",
         ],
-        help="Resume theme to build (default: all)",
+        help="Resume theme to build (default: modern-navy; use all for the previous batch output)",
     )
     build_parser.add_argument(
         "--output-dir",

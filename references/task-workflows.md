@@ -38,7 +38,7 @@ no profile tags to check. `--no-photo` excludes profile photos and reserved phot
 slots. The build input below means the inspected, disclosure-safe resume profile.
 
 ```bash
-python cli.py resume build "/path/to/public-profile.json" --theme classic-tech --no-photo --pages auto --output-dir "/path/to/output"
+python cli.py resume build "/path/to/public-profile.json" --no-photo --pages auto --output-dir "/path/to/output"
 ```
 
 The same build command accepts `.md` and `.txt`. Inspect parsed facts before a
@@ -49,9 +49,10 @@ If a reusable JSON profile is needed, create a separate file:
 python cli.py profile parse "/path/to/resume.md" --output "/path/to/output/profile.json"
 ```
 
-Use `modern-navy` for the navy-accented layout, `ats-plain` for a plain-text companion,
-`ats-docx` for Word, or the academic formats on request. `--theme all` is deliberately
-opt-in at the skill level because the CLI's default builds every format. Use
+Omitting `--theme` builds one `modern-navy` resume, matching the service and review
+pipeline defaults. Choose another theme on request, such as `classic-tech`,
+`ats-plain` for a plain-text companion, `ats-docx` for Word, or the academic formats.
+Use `--theme all` only when the user requests a gallery/comparison. Use
 `--pages 1` only for an explicit single-page requirement. If it cannot fit readably,
 report the failure rather than trimming achievements or claiming success.
 
@@ -105,7 +106,7 @@ assumes the tailored file is already verified disclosure-safe:
 
 ```bash
 python cli.py diff audit "/path/to/profile.json" "/path/to/output/tailored.json" --output-dir "/path/to/output/diff"
-python cli.py resume build "/path/to/output/tailored.json" --theme classic-tech --no-photo --output-dir "/path/to/output/resume"
+python cli.py resume build "/path/to/output/tailored.json" --no-photo --output-dir "/path/to/output/resume"
 ```
 
 Output: draft review, approved derived profile, diff ledger, requested render files.

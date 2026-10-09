@@ -101,6 +101,7 @@ def test_existing_positional_arguments_still_bind(builder_mock, tmp_path):
 
 
 @pytest.mark.parametrize("theme,method,build_method", [
+    (None, "build_resume", "build_theme"),
     ("classic-tech", "build_resume", "build_theme"), ("all", "build_all", "build_all"),
 ])
 @pytest.mark.parametrize("explicit", [False, True])
@@ -110,7 +111,9 @@ def test_shared_cli_options_have_service_parity(builder_mock, tmp_path, theme, m
     baseline = {"candidate": {"name": "Synthetic Baseline"}}
     profile_path.write_text('{"candidate": {"name": "Synthetic Candidate"}}', encoding="utf-8")
     baseline_path.write_text(json.dumps(baseline), encoding="utf-8")
-    cli_options = [str(profile_path), "--theme", theme, "--output-dir", str(tmp_path)]
+    cli_options = [str(profile_path), "--output-dir", str(tmp_path)]
+    if theme is not None:
+        cli_options += ["--theme", theme]
     service_options = {}
     if explicit:
         cli_options += ["--pages", "2", "--no-adaptive-fill", "--no-diff-ledger",
@@ -119,13 +122,21 @@ def test_shared_cli_options_have_service_parity(builder_mock, tmp_path, theme, m
         service_options = {"pages": "2", "adaptive_fill": False, "diff_ledger": False,
                            "baseline_profile": baseline, "autofit": False,
                            "photo": False, "photo_mode": "no-photo", "anonymize": "strict"}
-    if method == "build_resume":
+    if method == "build_resume" and theme is not None:
         service_options["theme"] = theme
     resume_cmd.cmd_resume_build(cli_options)
-    cli_call = getattr(builder_mock.return_value, build_method).call_args.kwargs
+    cli_builder = getattr(builder_mock.return_value, build_method)
+    cli_builder.assert_called_once()
+    other_method = "build_all" if build_method == "build_theme" else "build_theme"
+    getattr(builder_mock.return_value, other_method).assert_not_called()
+    if method == "build_resume":
+        assert cli_builder.call_args.args[0] == (theme or "modern-navy")
+    cli_call = cli_builder.call_args.kwargs
     builder_mock.reset_mock()
     getattr(ResumeService(), method)(profile_path, output_dir=tmp_path, **service_options)
     service_call = getattr(builder_mock.return_value, build_method).call_args.kwargs
+    if method == "build_resume":
+        assert service_call["theme"] == (theme or "modern-navy")
     for key in CONTROLS + ("autofit",):
         assert service_call[key] == cli_call[key]
     if explicit:

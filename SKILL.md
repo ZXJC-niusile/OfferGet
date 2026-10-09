@@ -70,7 +70,7 @@ when rendering dependencies are unknown or a build fails, not before every read.
 Do not install dependencies or invoke external API skills without checking the
 execution environment and user authorization. No paid API is needed for local use.
 
-For rendering, choose the user's theme; otherwise start with `classic-tech` and
+For rendering, choose the user's theme; otherwise use the default `modern-navy` and
 `--no-photo` unless a photo is requested. Start with `--pages auto`; honor an explicit
 page budget. Keep AutoFit and adaptive fill enabled unless the user requests otherwise.
 Do not reduce type endlessly or delete facts to force a page count. Surface an

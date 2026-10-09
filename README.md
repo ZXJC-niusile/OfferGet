@@ -176,9 +176,12 @@ python cli.py offer counter examples/sample_offer.json --target-base 95000 --pro
 
 先按[披露检查流程](references/task-workflows.md#disclosure-preflight-before-every-export)准备 `public-profile.json`。带条件标签的母版会拒绝导出；匿名化不代表披露授权。
 
+不指定 `--theme` 时，只生成一份 `modern-navy` 主题简历，与服务层及 review 流程的默认值一致。可用 `--theme classic-tech` 等选择其他主题；需要全部主题对比时，显式使用 `--theme all`。
+旧脚本若依赖此前默认的批量输出，请补上 `--theme all`。
+
 ```bash
-# 1. 使用经典大厂工程师主题编译 (生成 HTML 与 PDF)
-python cli.py resume build public-profile.json --theme classic-tech
+# 1. 使用默认 modern-navy 主题编译一份简历 (生成 HTML 与 PDF)
+python cli.py resume build public-profile.json
 
 # 2. 编译学术推免专属 LaTeX 模版 (输出 .tex 源码并自动编译为 PDF)
 python cli.py resume build examples/academic_profile.json --theme academic-latex
@@ -319,7 +322,7 @@ OfferGet 内置 12 套生产级排版主题，完美覆盖工业求职、学术�
 ### 4. 多主题简历排版与编译 (`offerget resume`)
 | 命令 | 核心参数与选项 | 功能说明 |
 | :--- | :--- | :--- |
-| `python cli.py resume build <profile>`| `--theme <name> [--pages 1/2/auto]` | 编译指定主题的 HTML 与 PDF 简历（支持 `.md` / `.json`） |
+| `python cli.py resume build <profile>`| `--theme <name> [--pages 1/2/auto]` | 默认编译一份 `modern-navy` 简历；全部主题须显式指定 `--theme all`（支持 `.md` / `.json`） |
 | | `[--adaptive-fill] [--anonymize strict]` | 开启呼吸感间距自适应填充，或双向脱敏导出 |
 | `python cli.py resume audit` | `--claims <json> --html <html_path>` | 确定性凭证防伪核验 |
 | `python cli.py resume autofit <in>` | `<out.html> [--pdf <out.pdf>]` | 像素级单页压页紧凑化与 PDF 导出 |
