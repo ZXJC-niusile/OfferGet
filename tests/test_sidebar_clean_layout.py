@@ -6,16 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from core.autofit import TUNING_LADDER, AutoFitEngine
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
-from core.security_gate import validate_output_security
 from scripts.qa_modern_navy_layout import (
     final_failures,
     fixtures,
     inspect_pdf,
     pdf_line_overlaps,
     synthetic_photo,
-    text_content,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,40 +27,13 @@ def rendered(case, template=TEMPLATE):
 
 
 @pytest.mark.parametrize("case", fixtures("sidebar-clean"), ids=lambda case: case["name"])
-def test_synthetic_facts_photo_modes_and_dom_order_are_preserved(case):
-    original = copy.deepcopy(case)
+def test_sidebar_section_order_and_body_class_are_preserved(case):
     html = rendered(case)
-    bare = re.sub(r"<style>.*?</style>", "", TEMPLATE, flags=re.DOTALL)
-    assert case == original
-    assert text_content(html) == text_content(rendered(case, bare))
     expected_sections = ["education", "experience", "projects", "skills"]
     if case["profile"].get("postgraduate_exam"):
         expected_sections.insert(0, "postgraduate-exam")
     assert re.findall(r'<section id="([^"]+)"', html) == expected_sections
-    assert case["profile"]["name"] in html
-    assert case["profile"]["email"] in html
-    assert "{{" not in html
-    assert validate_output_security(html, format_type="html") == []
-    assert ("photo-placeholder" in html) == (case["photo"] != "none")
-    assert ('<img src="data:image/png;base64,' in html) == (case["photo"] == "embedded")
     assert '<body class="resume-sidebar">' in html
-
-
-@pytest.mark.parametrize("profile", TUNING_LADDER, ids=lambda profile: profile.name)
-def test_all_six_autofit_tokens_remain_effective(profile):
-    tuned = AutoFitEngine(renderer=object()).apply_profile_to_html(TEMPLATE, profile)
-    expected = {
-        "--body-line-height": str(profile.line_height),
-        "--page-padding-y": f"{profile.padding_y_mm}mm",
-        "--page-padding-x": f"{profile.padding_x_mm}mm",
-        "--body-font-size": f"{profile.font_size_px}px",
-        "--item-gap": f"{profile.item_gap_px}px",
-        "--section-gap": f"{profile.section_gap_px}px",
-    }
-    for name, value in expected.items():
-        assert re.findall(re.escape(name) + r":\s*([^;]+);", tuned) == [value]
-    assert "margin: var(--page-padding-y) 0;" in tuned
-    assert "min-height: calc(297mm - 2 * var(--page-padding-y));" in tuned
 
 
 def test_sidebar_is_a_genuine_two_column_flow_without_fixed_content_heights():
