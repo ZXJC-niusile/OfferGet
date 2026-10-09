@@ -2,7 +2,7 @@
 
 ## 一、 核心设计哲学与治理底线
 
-OfferGet 是一个“高确定性、零幻觉、强证据约束”的求职与学术推免战略操作系统，确立以下系统级治理准则：
+OfferGet 是一个以本地规则与证据约束为基础的求职与学术推免工具。规则检查只覆盖已实现的检查项，事实仍需对照源材料核验。系统采用以下治理准则：
 
 1. **唯一事实源 (Single Source of Truth, SSOT)**:
    - 候选人画像与底稿事实由 `core/profile_adapter.py` 的 `ProfileContext` 与 `ProfileEvidenceIndex` 唯一承载。
