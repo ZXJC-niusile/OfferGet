@@ -222,10 +222,14 @@ def create_material_proposal(
     proposal_id: str,
     application_id: Optional[str] = None,
 ) -> MaterialProposal:
+    # Keep unchanged facts in the review/audit, not in a new approval queue.
+    # Compare exact text only: whitespace and punctuation edits still need approval.
+    # Stored proposals are restored unchanged, preserving hashes and patch indexes.
     patches = [
         copy.deepcopy(patch)
         for patch in review_result.get("tailored_profile", {}).get("applied_patches", [])
         if patch.get("validation_status") in {"applied", "already_applied", "pending_user_confirmation"}
+        and not ("before" in patch and "after" in patch and patch["before"] == patch["after"])
     ]
     return MaterialProposal(
         proposal_id=proposal_id,
