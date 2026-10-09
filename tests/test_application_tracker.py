@@ -922,6 +922,64 @@ class TestMaterialProposal(unittest.TestCase):
         restored = MaterialProposal.from_dict(proposal.to_dict())
         self.assertEqual(restored.accepted_patch_ids, [1])
 
+    def test_new_proposal_filters_exact_noops_without_changing_review(self):
+        from copy import deepcopy
+
+        from core.material_proposal import create_material_proposal
+
+        patches = [
+            {"before": "same", "after": "same", "validation_status": status}
+            for status in ("applied", "already_applied", "pending_user_confirmation")
+        ] + [
+            {"before": "", "after": "new", "validation_status": "applied"},
+            {"before": "text", "after": "text ", "validation_status": "pending_user_confirmation"},
+            {"before": "old", "after": "new", "validation_status": "rejected"},
+        ]
+        review = {"tailored_profile": {"applied_patches": patches},
+                  "resume_advice": [{"action": "keep", "safe_bullet": "same"}]}
+        original = deepcopy(review)
+        proposal = create_material_proposal(review, self.profile, self.jd, "PROP-FILTER")
+        self.assertEqual(proposal.patches, patches[3:5])
+        self.assertEqual(review, original)
+        self.assertEqual(proposal.proposal_hash, proposal.compute_hash())
+        proposal.patches[0]["after"] = "changed copy"
+        self.assertEqual(review, original)
+        empty = create_material_proposal(
+            {"tailored_profile": {"applied_patches": patches[:3]}},
+            self.profile, self.jd, "PROP-EMPTY",
+        )
+        self.assertEqual(empty.patches, [])
+        self.assertEqual(empty.accept(self.profile, self.jd), [])
+
+    def test_legacy_noop_proposal_preserves_indexes_and_reacceptance(self):
+        from core.material_proposal import (
+            MaterialProposal,
+            apply_material_proposal,
+            jd_fingerprint,
+            profile_fingerprint,
+        )
+        original = "完成接口开发"
+        proposal = MaterialProposal(
+            proposal_id="PROP-LEGACY-NOOP",
+            source_profile_hash=profile_fingerprint(self.profile),
+            source_jd_hash=jd_fingerprint(self.jd),
+            patches=[
+                {"target_path": "experience[0].bullets[0]", "before": original,
+                 "after": original, "validation_status": "already_applied"},
+                {"target_path": "experience[0].bullets[1]", "before": "",
+                 "after": "补充错误处理", "validation_status": "applied"},
+            ],
+        )
+        stored = proposal.to_dict()
+        restored = MaterialProposal.from_dict(stored)
+        self.assertEqual(restored.to_dict(), stored)
+        updated = apply_material_proposal(restored, self.profile, self.jd, patch_ids=[0, 1])
+        accepted = MaterialProposal.from_dict(restored.to_dict())
+        self.assertEqual(accepted.accepted_patch_ids, [0, 1])
+        self.assertEqual(accepted.proposal_hash, stored["proposal_hash"])
+        self.assertEqual(apply_material_proposal(accepted, self.profile, self.jd), updated)
+        self.assertEqual(updated["experience"][0]["bullets"], [original, "补充错误处理"])
+
     def test_source_drift_conflicts_before_acceptance(self):
         from core.material_proposal import MaterialProposal, MaterialProposalStatus
         proposal = MaterialProposal(
