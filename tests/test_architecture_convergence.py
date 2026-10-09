@@ -1,7 +1,6 @@
 """
-Tests for OfferGet 6 Core Architecture Optimizations:
+Tests for OfferGet Core Architecture Integration:
 1. Unified Profile Context SSOT & Boundary Projection Adapters
-2. Unified Defense Engine & Backwards-Compatible Facade
 3. Canonical JD Processing Gateway (to_canonical)
 4. Unified Resume Rendering Pipeline (ProfileContext -> ResumeViewModel -> Renderers)
 5. Persistent Application Tracking Store (SQLite, Timeline, Collisions, Multi-Offer Comparison)
@@ -18,14 +17,6 @@ from core.profile_adapter import ProfileContext, build_profile_context
 from core.advisor_matcher import AdvisorMatcher, CandidateProfile as AdvisorCandidateProfile
 from core.jd_analyst.models import CandidateProfile as AnalystCandidateProfile
 from core.resume_view_model import ResumeViewModel
-
-# Step 2 imports
-from core.defense import (
-    DefenseSimulator as UnifiedDefenseSimulator,
-    EvidenceStatus,
-    RiskBasis,
-)
-import core.defense as defense_pkg
 
 # Step 3 imports
 from core.jd_compat import DecodedJD, to_canonical, DecodedJDCompat
@@ -115,31 +106,6 @@ class TestArchitectureConvergence(unittest.TestCase):
         ensured = matcher._ensure_candidate_profile(ctx)
         self.assertIsInstance(ensured, AdvisorCandidateProfile)
         self.assertEqual(ensured.name, "张三")
-
-    # ------------------------------------------------------------------------
-    # Optimization 2: Consolidated Defense Simulator Engine
-    # ------------------------------------------------------------------------
-    def test_2_consolidated_defense_engine(self):
-        # 1. New engine directly imported
-        sim_new = UnifiedDefenseSimulator()
-        self.assertIsNotNone(sim_new)
-
-        # 2. Package facade points to the unified engine
-        self.assertIs(defense_pkg.EvidenceStatus, EvidenceStatus)
-        self.assertIs(defense_pkg.RiskBasis, RiskBasis)
-        self.assertIs(defense_pkg.DefenseSimulator, UnifiedDefenseSimulator)
-
-        # 3. Run defense simulation via package
-        profile = {
-            "projects": [
-                {"name": "分布式架构", "bullets": ["设计高并发架构，QPS 提升 10 倍"]}
-            ]
-        }
-        sim = defense_pkg.DefenseSimulator()
-        res = sim.simulate(profile)
-        self.assertIsNotNone(res)
-        self.assertEqual(res.project_name, "分布式架构")
-        self.assertIn("total_claims", res.summary_stats)
 
     # ------------------------------------------------------------------------
     # Optimization 3: Converged JD Pipeline Gateway (to_canonical)

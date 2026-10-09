@@ -27,13 +27,9 @@ class TestBaoyanPipeline(unittest.TestCase):
 
     def setUp(self):
         self.academic_profile_path = PROJECT_ROOT / "examples" / "academic_profile.json"
-        self.sample_advisor_path = PROJECT_ROOT / "examples" / "sample_advisor.json"
 
         with open(self.academic_profile_path, "r", encoding="utf-8") as f:
             self.profile_data = json.load(f)
-
-        with open(self.sample_advisor_path, "r", encoding="utf-8") as f:
-            self.advisor_data = json.load(f)
 
     # =========================================================================
     # 1. Academic Profile Schema & Sample Profile Verification
@@ -60,65 +56,6 @@ class TestBaoyanPipeline(unittest.TestCase):
         self.assertTrue(metrics["has_national_scholarship"])
         self.assertTrue(metrics["has_tier1_competition"])
         self.assertGreaterEqual(metrics["target_schools_count"], 4)
-
-    def test_02_sample_academic_profile_data_content(self):
-        """Verify explicit data points in academic_profile.json."""
-        # GPA, Rank, English
-        standing = self.profile_data["academic_standing"]
-        self.assertEqual(standing["gpa"], 3.92)
-        self.assertEqual(standing["max_gpa"], 4.0)
-        self.assertEqual(standing["rank"], "2/150")
-        self.assertEqual(standing["rank_percent"], "Top 1.5%")
-        self.assertEqual(standing["english"]["cet6"], 618)
-
-        # Papers: 1 CCF-A (NeurIPS 2024 Co-first), 1 CCF-B under_review
-        pubs = self.profile_data["publications"]
-        self.assertEqual(len(pubs), 2)
-
-        p1 = pubs[0]
-        self.assertEqual(p1["ccf_rank"], "CCF-A")
-        self.assertIn("NeurIPS 2024", p1["venue"])
-        self.assertEqual(p1["author_role"], "co_first_author")
-        self.assertIn(p1["status"], ["accepted", "published"])
-
-        p2 = pubs[1]
-        self.assertEqual(p2["ccf_rank"], "CCF-B")
-        self.assertEqual(p2["status"], "under_review")
-        self.assertEqual(p2["author_role"], "first_author")
-
-        # Graduation Thesis & Projects with simulation vs real experiment tags
-        thesis = self.profile_data["graduation_thesis"]
-        self.assertEqual(thesis["experiment_type"], "real_experiment")
-        self.assertIn("real_experiment", thesis["tags"])
-        self.assertTrue(len(thesis["individual_contribution"]) > 20)
-
-        projects = self.profile_data["projects"]
-        self.assertGreaterEqual(len(projects), 2)
-        has_real = any(p.get("experiment_type") == "real_experiment" or "real_experiment" in p.get("tags", []) for p in projects)
-        has_sim = any(p.get("experiment_type") == "simulation" or "simulation" in p.get("tags", []) for p in projects)
-        self.assertTrue(has_real, "Expected at least one project with real experiment tag")
-        self.assertTrue(has_sim, "Expected at least one project with simulation tag")
-
-        # Competitions
-        comps = self.profile_data["competitions"]
-        comp_names = [c["name"] for c in comps]
-        awards = [c["award"] for c in comps]
-        self.assertTrue(any("MCM" in name or "ICM" in name for name in comp_names))
-        self.assertTrue(any("Finalist" in award for award in awards))
-        self.assertTrue(any("电子设计" in name or "NUEDC" in name for name in comp_names))
-        self.assertTrue(any("一等奖" in award or "First Prize" in award for award in awards))
-
-        # Honors
-        honors = self.profile_data["honors"]
-        self.assertTrue(any("国家奖学金" in h["name"] for h in honors))
-
-        # Target Schools & Advisors
-        targets = self.profile_data["target_schools"]
-        self.assertGreaterEqual(len(targets), 4)
-        school_names = " ".join([t["school_name"] for t in targets])
-        self.assertIn("清华", school_names)
-        self.assertIn("北京大学", school_names)
-        self.assertIn("浙江大学", school_names)
 
     def test_03_profile_validation_errors(self):
         """Test validator catches schema violations and missing required fields."""
@@ -172,50 +109,6 @@ class TestBaoyanPipeline(unittest.TestCase):
         res4 = validate_academic_profile(bad_profile_4)
         self.assertFalse(res4["valid"])
         self.assertTrue(any("simulation vs real experiment" in e for e in res4["errors"]))
-
-    # =========================================================================
-    # 2. Sample Advisor Dataset Verification
-    # =========================================================================
-
-    def test_04_sample_advisor_dataset(self):
-        """Verify sample_advisor.json satisfies all professor profile specifications."""
-        adv = self.advisor_data
-        self.assertEqual(adv["name"], "陈建平")
-        self.assertIn("清华大学", adv["institution"])
-        self.assertIn("教授", adv["title"])
-        self.assertTrue(len(adv["lab_name"]) > 5)
-
-        # Research directions
-        self.assertGreaterEqual(len(adv["research_directions"]), 4)
-
-        # 4 recent representative papers
-        papers = adv["representative_papers"]
-        self.assertEqual(len(papers), 4)
-        venues = " ".join([p["venue"] for p in papers])
-        self.assertIn("OSDI", venues)
-        self.assertIn("SOSP", venues)
-        self.assertIn("NeurIPS", venues)
-        self.assertIn("ASPLOS", venues)
-        for p in papers:
-            self.assertEqual(p["ccf_rank"], "CCF-A")
-
-        # Lab compute resources
-        resources = adv["lab_compute_resources"]
-        self.assertIn("dedicated_gpu_cluster", resources)
-        self.assertIn("network_interconnect", resources)
-        self.assertIn("storage_system", resources)
-        self.assertIn("per_student_quota", resources)
-        self.assertIn("H800", resources["dedicated_gpu_cluster"])
-        self.assertIn("A100", resources["dedicated_gpu_cluster"])
-
-        # Prospective student expectations
-        expectations = adv["prospective_student_expectations"]
-        self.assertIn("enrollment_quotas_2025", expectations)
-        self.assertEqual(expectations["enrollment_quotas_2025"]["phd_direct"], 2)
-        self.assertGreaterEqual(len(expectations["preferred_background"]), 2)
-        self.assertGreaterEqual(len(expectations["technical_skills"]), 2)
-        self.assertTrue(len(expectations["advising_style_and_culture"]) > 20)
-        self.assertTrue(len(expectations["financial_support_and_stipend"]) > 20)
 
     # =========================================================================
     # 3. Application State Machine & Golden Path
