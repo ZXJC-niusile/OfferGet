@@ -73,18 +73,21 @@ def test_docx_uses_a4_linear_flow_and_safe_pagination(tmp_path):
     section = doc.sections[0]
     assert section.page_width.mm == pytest.approx(210, abs=0.1)
     assert section.page_height.mm == pytest.approx(297, abs=0.1)
-    assert section.left_margin.inches == pytest.approx(0.75)
+    assert section.left_margin.inches == pytest.approx(0.68, abs=0.001)
     assert not doc.tables and not doc.inline_shapes
     assert not section.header.paragraphs[0].text
     assert not section.footer.paragraphs[0].text
     headings = [p for p in doc.paragraphs if p.style.name == "Heading 1"]
     assert headings and all(p.paragraph_format.keep_with_next for p in headings)
+    assert all(p._p.xpath("./w:pPr/w:pBdr/w:bottom") for p in headings)
+    assert not doc.styles["Title"].element.xpath("./w:pPr/w:pBdr")
     dates = next(p for p in doc.paragraphs if "ACME & R&D" in p.text)
     assert dates.text == "ACME & R&D\t2020 - 2024"
     assert dates.paragraph_format.keep_with_next
     assert dates._p.xpath("./w:pPr/w:tabs/w:tab")[0].get(qn("w:val")) == "right"
     bullet = next(p for p in doc.paragraphs if "latency" in p.text)
     assert not bullet.paragraph_format.keep_with_next
+    assert bullet.paragraph_format.keep_together
     assert bullet.style.paragraph_format.first_line_indent < 0
 
 
@@ -104,3 +107,36 @@ def test_long_item_labels_get_a_separate_unfragmented_date_line(tmp_path):
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     assert paragraph.alignment == WD_ALIGN_PARAGRAPH.RIGHT
     assert paragraph.paragraph_format.keep_with_next
+
+
+@pytest.mark.parametrize("source", ["中文。 English text", "**中文。 English text**",
+                                    "中文。 **English text**", "**中文。** English text"])
+def test_bilingual_break_preserves_text_and_emphasis(tmp_path, source):
+    profile = synthetic_profile()
+    profile["experience"][0]["bullets"] = [source, "Used C++ and Python. Kept original terms."]
+    doc = render(tmp_path, profile)
+    bullet = next(p for p in doc.paragraphs if "中文。" in p.text)
+    assert bullet.text == "中文。\nEnglish text"
+    english = next(r for r in bullet.runs if r.text == "English text")
+    assert bool(english.bold) == ("text**" in source)
+    assert english.font.size.pt == 10
+    assert any(p.text == "Used C++ and Python. Kept original terms." for p in doc.paragraphs)
+
+
+def test_sparse_identity_and_publications_keep_semantic_structure(tmp_path):
+    vm = ResumeViewModel(raw_email="qa@example.invalid", publications=[
+        {"title": "Literal · separator", "status": "Submitted, not accepted",
+         "individual_contribution": "Reviewed · outputs"}, {"author_role": "Supporting author"}])
+    doc = render(tmp_path, vm)
+    assert doc.paragraphs[0].text == "qa@example.invalid"
+    assert doc.paragraphs[0].style.name != "Title"
+    entry = next(p for p in doc.paragraphs if p.text.startswith("Literal · separator"))
+    assert entry.text == "Literal · separator\n状态：Submitted, not accepted\n个人贡献：Reviewed · outputs"
+    assert entry.runs[0].bold and entry.paragraph_format.keep_together
+    assert not entry.paragraph_format.keep_with_next
+    assert any(p.text == "作者角色：Supporting author" for p in doc.paragraphs)
+    oversized = ResumeViewModel(publications=[{"title": "Long entry", "summary": "Long summary 中文。 " * 500}])
+    long_doc = render(tmp_path, oversized)
+    long_entry = next(p for p in long_doc.paragraphs if p.text.startswith("Long entry"))
+    assert not long_entry.paragraph_format.keep_together
+    assert long_entry.text.count("Long summary 中文。") == 500

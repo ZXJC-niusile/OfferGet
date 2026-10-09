@@ -111,14 +111,17 @@ def main():
         text = squash("".join(page.get_text() for page in pdf))
         source = expected_text(case["profile"])
         missing = [anchor for anchor in source if anchor not in text]
-        doc_text = squash("".join(node.text or "" for node in Document(docx)._element.body.iter(
+        document = Document(docx)
+        section = document.sections[0]
+        doc_text = squash("".join(node.text or "" for node in document._element.body.iter(
             "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t")))
         missing_docx = [anchor for anchor in source if anchor not in doc_text]
         overflow = []
         for index, page in enumerate(pdf):
             assert abs(page.rect.width - 595.28) < 1 and abs(page.rect.height - 841.89) < 1
             for word in page.get_text("words"):
-                if word[0] < 52 or word[2] > page.rect.width - 52 or word[1] < 48 or word[3] > page.rect.height - 48:
+                if (word[0] < section.left_margin.pt - 2 or word[2] > page.rect.width - section.right_margin.pt + 2
+                        or word[1] < section.top_margin.pt - 6 or word[3] > page.rect.height - section.bottom_margin.pt + 6):
                     overflow.append({"page": index + 1, "word": word[4], "bbox": word[:4]})
             page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).save(folder / f"page-{index + 1}.png")
         expected_images = 1 if mode == "photo" else 0
@@ -126,7 +129,7 @@ def main():
         entry = {"case": case["name"], "pages": len(pdf), "source_anchors": len(source),
                  "expected_images": expected_images, "actual_images": actual_images,
                  "missing_pdf": missing, "missing_docx": missing_docx, "overflow": overflow,
-                 "max_pages": 2 if case["name"] == "dense-none" else 1}
+                 "max_pages": 2 if case["name"] in {"dense-none", "exam-publications"} else 1}
         report.append(entry)
     (output / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
