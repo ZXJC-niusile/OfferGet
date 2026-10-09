@@ -48,6 +48,10 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.profile_path = PROJECT_ROOT / "examples" / "candidate_profile.json"
         with open(self.profile_path, "r", encoding="utf-8") as f:
             self.profile_data = json.load(f)
+        # Reviewed synthetic public facts for export tests; keep the restricted
+        # master above unchanged for analysis and disclosure-negative coverage.
+        self.public_profile_path = PROJECT_ROOT / "examples" / "candidate_profile_minimal.json"
+        self.public_profile_data = json.loads(self.public_profile_path.read_text(encoding="utf-8"))
 
         self.jd_path = PROJECT_ROOT / "examples" / "sample_ai_jd.txt"
         with open(self.jd_path, "r", encoding="utf-8") as f:
@@ -333,7 +337,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
             out_dir = Path(tmpdir) / "resumes"
             res = run_career_review(
                 self.jd_text,
-                self.profile_data,
+                self.public_profile_data,
                 build_resume=True,
                 resume_output_dir=out_dir,
                 resume_theme="modern-navy",
@@ -510,7 +514,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             out_dir = Path(tmpdir) / "default_resumes"
-            res = run_career_review(self.jd_text, self.profile_data, build_resume=True, resume_output_dir=out_dir)
+            res = run_career_review(self.jd_text, self.public_profile_data, build_resume=True, resume_output_dir=out_dir)
             self.assertIn("generated_resumes", res)
             pdf_path = Path(res["generated_resumes"]["pdf"])
             self.assertTrue(pdf_path.exists())
