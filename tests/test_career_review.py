@@ -509,6 +509,58 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(tailored_grounded["candidate"]["school"], "上海交通大学")
         self.assertEqual(tailored_grounded["candidate"]["title"], "大模型算法工程师")
 
+    def test_grounded_rewrites_use_the_evidenced_bullet_in_both_sections(self):
+        from core.material_proposal import (
+            apply_material_proposal,
+            create_material_proposal,
+        )
+
+        source = ["Implemented parser. Then documented it.", "Implemented parser."]
+        replacement = "Implemented a parser."
+        for section in ("experience", "projects"):
+            for path, excerpt, action, bullets, expected in (
+                ("bullets[1]", source[1], "rewrite", source, [source[0], replacement]),
+                ("bullets[0]", "not in source", "rewrite", source, source + [replacement]),
+                ("highlights[0]", source[1], "rewrite", source, [source[0], replacement]),
+                ("highlights[0]", source[1], "rewrite", [source[1], source[1]],
+                 [source[1], source[1], replacement]),
+                ("bullets[1]", source[1], "supplement", source, source + [replacement]),
+            ):
+                with self.subTest(section=section, path=path, action=action, bullets=bullets):
+                    profile = {"candidate": {"name": "Synthetic"}, section: [
+                        {"bullets": ["Unrelated project fact."]}, {"bullets": list(bullets)},
+                    ]}
+                    original = copy.deepcopy(profile)
+                    advice = {"resume_advice": [{"action": action, "safe_bullet": replacement,
+                              "evidence_refs": [{"source_path": f"{section}[1].{path}",
+                                                 "excerpt": excerpt}]}]}
+                    tailored = generate_tailored_profile_from_review(advice, profile)
+                    self.assertEqual(tailored[section][1]["bullets"], expected)
+                    self.assertEqual(tailored[section][0]["bullets"], ["Unrelated project fact."])
+                    patch = tailored["applied_patches"][0]
+                    self.assertEqual(patch["before"], source[1] if len(expected) == 2 else "")
+                    proposal = create_material_proposal(
+                        {"tailored_profile": tailored}, profile, "JD", "rewrite-target",
+                    )
+                    applied = apply_material_proposal(proposal, profile, "JD")
+                    self.assertEqual(applied[section][1]["bullets"], expected)
+                    repeated = generate_tailored_profile_from_review(advice, tailored)
+                    self.assertEqual(repeated[section][1]["bullets"], expected)
+                    self.assertEqual(repeated["applied_patches"][0]["validation_status"], "already_applied")
+                    self.assertEqual(profile, original)
+
+    def test_project_rewrite_still_rejects_unsupported_metrics(self):
+        profile = {"candidate": {"name": "Synthetic"}, "projects": [
+            {"bullets": ["Implemented parser."]},
+        ]}
+        advice = {"resume_advice": [{"action": "rewrite", "safe_bullet": "Reduced latency by 50%.",
+                  "evidence_refs": [{"source_path": "projects[0].bullets[0]",
+                                     "excerpt": "Implemented parser."}]}]}
+        tailored = generate_tailored_profile_from_review(advice, profile)
+        self.assertEqual(tailored["projects"][0]["bullets"], profile["projects"][0]["bullets"])
+        self.assertEqual(tailored["applied_patches"][0]["validation_status"], "rejected")
+        self.assertIn("fact_guard_rejected", tailored["applied_patches"][0]["reason"])
+
     def test_19_career_review_default_build_resume(self):
         """Test run_career_review with default build_resume=True parameters."""
         import tempfile
