@@ -68,7 +68,7 @@ def cmd_proposal_accept(args) -> None:
             output_path=args.output,
             patch_ids=patch_ids,
             build_resume=getattr(args, "build_resume", False),
-            resume_theme=getattr(args, "resume_theme", "classic-tech"),
+            resume_theme=getattr(args, "resume_theme", "modern-navy"),
             resume_output_dir=getattr(args, "resume_output_dir", None),
         )
     except KeyError:
@@ -81,4 +81,9 @@ def cmd_proposal_accept(args) -> None:
         svc.close()
 
     actual_profile_path = payload["profile_output"]
-    emit_json(payload) if args.json else print(f"Proposal accepted; new profile written to {actual_profile_path}")
+    if args.json:
+        emit_json(payload)
+    else:
+        print(f"Proposal accepted; new profile written to {actual_profile_path}")
+        for kind, path in payload.get("generated_resumes", {}).items():
+            print(f"  {kind}: {path}")
