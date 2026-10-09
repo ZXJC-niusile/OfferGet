@@ -497,7 +497,12 @@ class TestAtsDocxRenderer(unittest.TestCase):
         import tempfile
         self.profile_path = PROJECT_ROOT / "examples" / "candidate_profile.json"
         with open(self.profile_path, "r", encoding="utf-8") as f:
-            self.profile_data = json.load(f)
+            master = json.load(f)
+        # Use an explicitly public fixture; never export the conditional project.
+        self.profile_data = filter_profile_by_visibility(master, "always")
+        for section in ("experience", "projects"):
+            for entry in self.profile_data[section]:
+                entry["visibility"] = ["always"]
         self.temp_dir = tempfile.TemporaryDirectory()
         self.output_dir = Path(self.temp_dir.name)
 

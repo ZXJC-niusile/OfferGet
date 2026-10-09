@@ -51,7 +51,7 @@ def test_visibility_boundary_remains_in_router_and_export_recipe():
         assert "reference-only" in text
         assert "on-request" in text
         assert "variant-specific" in text
-        assert "does not enforce" in text
+        assert "reject" in text
     assert "Disclosure preflight before every export" in workflow
     assert "separate disclosure-safe profile" in workflow
     assert "wildcard tags keep all items" in workflow

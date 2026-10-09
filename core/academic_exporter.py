@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 
 
+from core.profile_adapter import require_public_profile
 from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
 from core.resume_view_model import PUBLICATION_LABELS, publication_facts, publication_text_parts
 
@@ -58,6 +59,7 @@ class AcademicExporter:
         from dataclasses import replace
         from core.resume_view_model import ResumeViewModel
 
+        require_public_profile(vars(profile_or_vm) if isinstance(profile_or_vm, ResumeViewModel) else profile_or_vm)
         if isinstance(profile_or_vm, ResumeViewModel):
             if reserve_photo is False or photo_mode == "no-photo":
                 return replace(profile_or_vm, photo_path=None, photo_data_uri=None,

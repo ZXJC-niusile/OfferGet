@@ -44,7 +44,7 @@ If the request is unrelated to these workflows, do not activate this skill.
   matching variant, and `on-request` stays excluded unless requested. `reference-only`
   evidence must never appear in a public resume; use it only to check claims.
   Before rendering, follow the disclosure preflight in the workflow reference:
-  `resume build` does not enforce these visibility boundaries for you.
+  exports reject unresolved visibility tags and require a disclosure-safe profile.
 - For missing facts, ask a targeted question or omit the unsupported claim with the
   user's agreement. Do not demand invented numbers where an honest qualitative
   description is sufficient. Distinguish source-supported, claimed, and missing

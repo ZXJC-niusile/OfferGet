@@ -25,7 +25,7 @@ from core.paths import get_project_root, get_theme_path
 
 PROJECT_ROOT = get_project_root()
 
-from core.profile_adapter import extract_education_grid, normalize_candidate_profile
+from core.profile_adapter import extract_education_grid, normalize_candidate_profile, require_public_profile
 from core.security_gate import (
     escape_html_attribute,
     escape_html_text,
@@ -144,6 +144,7 @@ class ResumeViewModel:
         Ensures all HTML-rendered fields are pre-sanitized against XSS and markdown bold
         formatting (**bold**) is safely converted to <strong>bold</strong>.
         """
+        require_public_profile(vars(profile) if isinstance(profile, ResumeViewModel) else profile)
         if isinstance(profile, ResumeViewModel):
             if reserve_photo and photo_mode is None and photo_path is None:
                 return profile
@@ -179,6 +180,7 @@ class ResumeViewModel:
         Constructs a sanitized ResumeViewModel directly from an already normalized profile.
         Bypasses duplicate schema normalization when operating in an optimized pipeline.
         """
+        require_public_profile(prof, raw_profile, fallback_education)
         cand = prof.get("candidate", {})
 
         # Basic identity
@@ -785,6 +787,7 @@ class HtmlThemeRenderer:
         """
         Renders complete HTML document by combining template boilerplate, header, and sections.
         """
+        require_public_profile(vars(vm))
         theme_normalized = theme_name.lower().replace("_", "-")
         if template_content is None:
             raw_template = resolve_theme_template(theme_normalized, template_dir=template_dir)
@@ -809,6 +812,7 @@ class AtsPlainRenderer:
 
     def render_markdown(self, vm: ResumeViewModel) -> str:
         """Renders ATS-optimized structured Markdown."""
+        require_public_profile(vars(vm))
         photo_tag = ""
         if vm.photo_path:
             photo_tag = f" | 照片：{vm.photo_path}"
@@ -936,6 +940,7 @@ class AtsPlainRenderer:
 
     def render_html(self, vm: ResumeViewModel) -> str:
         """Render readable, linear HTML without changing the Markdown contract."""
+        require_public_profile(vars(vm))
         photo_box = ""
         if vm.photo_data_uri:
             src_attr = escape_html_attribute(vm.photo_data_uri)

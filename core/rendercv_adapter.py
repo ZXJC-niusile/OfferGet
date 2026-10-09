@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Union
 
 from core.artifacts import write_json_atomic
-from core.profile_adapter import normalize_candidate_profile
+from core.profile_adapter import normalize_candidate_profile, require_public_profile, retain_profile_visibility
 
 
 @dataclass
@@ -117,11 +117,12 @@ def import_rendercv(data: Union[Dict[str, Any], str, Path]) -> RenderCVImportRes
     })
     if unsupported:
         profile["rendercv_import_metadata"] = {"unsupported_sections": copy.deepcopy(unsupported)}
-    return RenderCVImportResult(profile, warnings, unsupported)
+    return RenderCVImportResult(retain_profile_visibility(payload, profile), warnings, unsupported)
 
 
 def export_rendercv(profile: Dict[str, Any]) -> Dict[str, Any]:
     """Export supported OfferGet profile facts into a RenderCV JSON document."""
+    require_public_profile(profile)
     normalized = normalize_candidate_profile(profile)
     candidate = normalized.get("candidate", {})
     cv: Dict[str, Any] = {

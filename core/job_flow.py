@@ -36,6 +36,7 @@ from core.profile_adapter import (
     build_profile_context,
     claim_ref,
     find_evidence,
+    require_public_profile,
 )
 from core.evidence.graph import EvidenceGraph, EvidenceNodeState
 from core.application_tracker import create_evidence_snapshot
@@ -955,6 +956,8 @@ def run_career_review(
     reserve_photo: bool = True,
     session_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    if build_resume:
+        require_public_profile(profile_dict)
     decoder = JDDecoder()
     decoded_jd = decoder.decode(jd_text)
 
