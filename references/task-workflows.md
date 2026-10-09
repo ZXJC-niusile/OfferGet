@@ -67,7 +67,16 @@ incomplete. First distinguish an actual application resume from a synthetic layo
 test. Ask for missing required identity or source facts; omit optional sections
 rather than inventing content. Lack of numerical impact is not itself a blocker.
 
-Prepare a source draft for review. Use specific, honest qualitative descriptions
+Before drafting, use the supplied target role (if any) and strongest supporting
+facts to choose two or three strengths worth emphasizing. A JD is optional; ask
+about direction only when it would materially change the draft. For each experience
+or project, make the context, personal contribution, and actual result clear. Put
+relevant evidence first within each entry, remove repeated background or tool lists,
+and preserve chronology, attribution, scope, and unresolved facts. Do not force a
+fixed bullet count or claim an outcome merely because work was completed.
+
+Prepare a source draft for review. Use the [sentence patterns](sentence-patterns.md)
+when useful, not as a checklist. Use specific, honest qualitative descriptions
 when a result was not measured. Ask the user to approve substantive proposed wording
 before applying it. Parse a reviewed Markdown draft or use the existing JSON schema;
 then follow the format/export route. Do not silently copy achievements, employers,
@@ -88,6 +97,9 @@ python cli.py proposal list --status draft --db "/path/to/output/proposals.db" -
 python cli.py proposal show "MP-RETURNED-ID" --db "/path/to/output/proposals.db" --json
 ```
 
+Use the JD to prioritize source-supported strengths, not to invent skills or
+promote the candidate's role. Review the draft for duplicated points and unclear
+personal contribution using the same writing guidance as a first resume.
 Show the proposed changes and their source evidence to the user. Ask for approval
 of the proposal or selected patch indexes. The command below is an **approval
 boundary**, not the next automatic step:
