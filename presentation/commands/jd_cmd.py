@@ -8,13 +8,12 @@ OfferGet JD Command Handlers:
 from __future__ import annotations
 
 import os
-import sys
 
 from core.cli_helpers import (
     read_text,
-    load_json,
     load_profile,
     emit_json,
+    fail_cli,
     emit_stderr,
 )
 
@@ -28,8 +27,7 @@ def cmd_jd_decode(args):
     """Handler for `offerget jd decode <jd.txt>`."""
     jd_path = args.jd_file
     if not os.path.exists(jd_path):
-        emit_stderr(f"[-] Error: JD file not found: {jd_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"JD file not found: {jd_path}")
 
     jd_text = read_text(jd_path)
     decoded = JDService().decode_jd(jd_text)
@@ -78,11 +76,9 @@ def cmd_jd_match(args):
     profile_path = args.profile
 
     if not os.path.exists(jd_path):
-        emit_stderr(f"[-] Error: JD file not found: {jd_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"JD file not found: {jd_path}")
     if not os.path.exists(profile_path):
-        emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Profile file not found: {profile_path}")
 
     jd_text = read_text(jd_path)
     profile_data = load_profile(profile_path)
@@ -134,11 +130,9 @@ def cmd_jd_report(args):
     template_arg = getattr(args, "template", None)
 
     if not os.path.exists(jd_path):
-        emit_stderr(f"[-] Error: JD file not found: {jd_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"JD file not found: {jd_path}")
     if not os.path.exists(profile_path):
-        emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Profile file not found: {profile_path}")
 
     print(f"[*] Decoding Job Description: {jd_path} ...")
     jd_text = read_text(jd_path)
@@ -155,8 +149,7 @@ def cmd_jd_report(args):
             decoded, match_result, template_path=template_arg, output_path=output_path
         )
     except FileNotFoundError as e:
-        emit_stderr(f"[-] Error: {e}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", str(e))
 
     print(f"[*] Validating Bilingual Twin Integrity on {out_file} ...")
     val = validate_bilingual_html(out_file)
