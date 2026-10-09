@@ -8,15 +8,13 @@ and conversion from Markdown or plain-text resumes into SSOT Profile JSON.
 from __future__ import annotations
 
 import os
-import sys
-from pathlib import Path
 from typing import Any
 
 from core.cli_helpers import (
     load_profile,
     write_json,
     emit_json,
-    emit_stderr,
+    fail_cli,
 )
 
 
@@ -24,8 +22,7 @@ def cmd_profile_parse(args: Any) -> None:
     """Handler for `offerget profile parse <resume_file> [--output <json_file>] [--json]`."""
     input_path = args.input_file
     if not os.path.exists(input_path):
-        emit_stderr(f"[-] Error: Resume file not found: {input_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Resume file not found: {input_path}")
 
     profile_data = load_profile(input_path)
 

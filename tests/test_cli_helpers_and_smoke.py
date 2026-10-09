@@ -357,6 +357,15 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
             self.assertIn("Error:", proc.stderr)
             self.assertNotIn("Traceback", proc.stderr)
 
+    def test_profile_parse_json_input_failures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "profile.json"
+            self.assert_json_failure(["profile", "parse", str(path)], "input_not_found")
+            path.write_text("{invalid json", encoding="utf-8")
+            output = Path(tmp) / "parsed.json"
+            self.assert_json_failure(["profile", "parse", str(path), "--output", str(output)], "invalid_json")
+            self.assertFalse(output.exists())
+
     def test_cli_expected_error_boundary(self):
         import cli
 
