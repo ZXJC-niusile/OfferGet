@@ -51,7 +51,7 @@ class CalculatedOfferMetrics:
 
     annual_cash_base: float
     annual_total_cash: float
-    annual_total_package: float
+    annual_total_package: float  # Gross cash + annual equity + employer housing fund
     annual_housing_fund_total: float  # Both employer and employee contributions
     annual_work_hours: float
     effective_hourly_rate: float
@@ -106,30 +106,30 @@ class OfferComparator:
         # 1. Base cash
         cash_base = offer.base_monthly_salary * offer.salary_months
         total_cash = cash_base + offer.annual_bonus_expected + offer.sign_on_bonus
-        total_pkg = total_cash + offer.equity_rsu_annual
-
-        # 2. Housing fund calculation (公积金个人+公司双边计入实际收益)
+        # 2. Assume equal employee/employer rates and 12 monthly contributions.
         fund_base = offer.base_monthly_salary
         if offer.housing_fund_base_capped:
             fund_base = min(fund_base, offer.city_housing_fund_cap_base)
-        # Double side contribution = 2 * rate * base * 12
-        annual_fund = fund_base * offer.housing_fund_rate * 2.0 * 12.0
+        employer_annual_fund = fund_base * offer.housing_fund_rate * 12.0
+        annual_fund = employer_annual_fund * 2.0  # Keep the bilateral account balance.
+        # Employee contributions are already included in gross cash.
+        total_pkg = total_cash + offer.equity_rsu_annual + employer_annual_fund
 
         # 3. Work hours calculation (包含通勤隐性成本折算)
         annual_work_hours = offer.weekly_work_hours * self.WEEKS_PER_YEAR
         annual_commute_hours = offer.daily_commute_hours * 5.0 * self.WEEKS_PER_YEAR
         total_committed_hours = max(annual_work_hours + annual_commute_hours * 0.5, 1000.0)
 
-        # 4. Net real compensation (总现金 + 公积金 - 租房/通勤溢价)
+        # 4. Pre-tax cash + employer housing fund - living premium (excludes equity).
         annual_living_premium = offer.monthly_rent_or_commute_cost * 12.0
-        net_annual_val = total_cash + annual_fund - annual_living_premium
+        net_annual_val = total_cash + employer_annual_fund - annual_living_premium
         effective_hourly = round(net_annual_val / total_committed_hours, 1)
 
         # 5. 6-Dimension scores (1-100 scale)
         d_cash = min(100.0, max(20.0, total_cash / 5000.0))
         d_pkg = min(100.0, max(20.0, total_pkg / 6000.0))
         d_hourly = min(100.0, max(20.0, effective_hourly * 0.5))
-        d_benefit = min(100.0, max(20.0, (annual_fund / 80000.0) * 100.0))
+        d_benefit = min(100.0, max(20.0, (employer_annual_fund / 80000.0) * 100.0))
         d_growth = min(100.0, offer.career_growth_score * 10.0)
         d_stability = min(100.0, offer.stability_score * 10.0)
 
