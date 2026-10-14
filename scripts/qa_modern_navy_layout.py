@@ -47,7 +47,7 @@ def changed_themes(paths):
     return [theme for theme in THEMES if theme in selected]
 
 # Run the same public rendering API in separate interpreters and source trees.
-# -I plus an explicit root avoids importing the current tree for the baseline.
+# Explicit root avoids importing the current tree for the baseline without stripping user site-packages.
 GENERATOR = r'''
 import base64, copy, inspect, json, sys, tempfile
 from pathlib import Path
@@ -731,7 +731,7 @@ def render_html(root, case):
     if case["mode"] == "builder":
         raise ValueError("Production fixture requires render_production and a real browser")
     result = subprocess.run(
-        [sys.executable, "-I", "-B", "-X", "utf8", "-c", GENERATOR, str(root)],
+        [sys.executable, "-B", "-X", "utf8", "-c", GENERATOR, str(root)],
         input=json.dumps(case, ensure_ascii=False), capture_output=True, text=True, encoding="utf-8",
         cwd=root, timeout=30, check=True,
     )
@@ -755,7 +755,7 @@ def render_production(root, case, output):
     request = dict(case, output_dir=str(output))
     try:
         result = subprocess.run(
-            [sys.executable, "-I", "-B", "-X", "utf8", "-c", BUILDER_GENERATOR, str(root)],
+            [sys.executable, "-B", "-X", "utf8", "-c", BUILDER_GENERATOR, str(root)],
             input=json.dumps(request, ensure_ascii=False), capture_output=True, text=True,
             encoding="utf-8", cwd=root, timeout=180, check=False,
         )

@@ -163,7 +163,7 @@ MEASURE = r'''() => {
 
 
 def render(root, request, target):
-    result = subprocess.run([sys.executable, "-I", "-B", "-X", "utf8", "-c", GENERATOR, str(root)],
+    result = subprocess.run([sys.executable, "-B", "-X", "utf8", "-c", GENERATOR, str(root)],
                             input=json.dumps(dict(request, output=str(target))), text=True,
                             encoding="utf-8", capture_output=True, cwd=root, timeout=180, check=False)
     target.mkdir(parents=True, exist_ok=True)
