@@ -50,7 +50,7 @@ class MisleadingAutoFit:
     def fit_to_single_page(self, **kwargs):
         html_path = Path(kwargs["output_html_path"]).with_name("autofit-shadow.html")
         pdf_path = Path(kwargs["output_pdf_path"]).with_name("autofit-shadow.pdf")
-        html_path.write_text(Path(kwargs["input_html_path"]).read_text())
+        html_path.write_text(Path(kwargs["input_html_path"]).read_text(encoding="utf-8"), encoding="utf-8")
         if self.fault != "missing":
             write_pdf(pdf_path, self.pages)
         return True, "Claims one page", {"pages": 1, "final_html_path": str(html_path), "final_pdf_path": str(pdf_path)}
@@ -63,7 +63,7 @@ def build(tmp_path, renderer, **kwargs):
 
 
 def report(tmp_path):
-    return json.loads((tmp_path / "resume_classic_tech_layout.json").read_text())
+    return json.loads((tmp_path / "resume_classic_tech_layout.json").read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("autofit", [False, True])
@@ -108,7 +108,7 @@ def test_explicit_page_argument_overrides_layout_config(tmp_path):
 def test_auto_expansion_is_reported_without_a_diff_ledger(tmp_path):
     with pytest.warns(UserWarning, match="3 pages in auto mode"):
         output = build(tmp_path, FinalRenderer(pages=3), pages="auto", diff_ledger=False)
-    data = json.loads(output["layout_report_json"].read_text())
+    data = json.loads(output["layout_report_json"].read_text(encoding="utf-8"))
     assert data["actual_page_count"] == 3
     assert data["page_budget_passed"] is True
     assert data["autofit"]["success"] is False
@@ -118,7 +118,7 @@ def test_auto_expansion_is_reported_without_a_diff_ledger(tmp_path):
 
 def test_final_ledger_records_actual_count_and_preserves_solver_status(tmp_path):
     output = build(tmp_path, FinalRenderer(pages=1), pages="1", overflow_px=10000)
-    ledger = json.loads(output["diff_ledger_json"].read_text())
+    ledger = json.loads(output["diff_ledger_json"].read_text(encoding="utf-8"))
     metadata = ledger["metadata"]["layout_metadata"]
     assert metadata["actual_page_count"] == 1
     assert metadata["solved"] is True
@@ -178,14 +178,14 @@ def test_native_or_fallback_dispatch_obeys_explicit_budget(tmp_path, monkeypatch
     monkeypatch.setattr(builder, method, lambda *args, **kwargs: {"pdf": final_pdf})
     with pytest.raises(RuntimeError, match="2 pages.*1-page budget"):
         builder.build_theme(theme, tmp_path, pages="1", diff_ledger=False)
-    data = json.loads((tmp_path / f"resume_{theme.replace('-', '_')}_layout.json").read_text())
+    data = json.loads((tmp_path / f"resume_{theme.replace('-', '_')}_layout.json").read_text(encoding="utf-8"))
     assert data["actual_page_count"] == 2
     assert data["page_budget_passed"] is False
     assert data["pdf_path"] == str(final_pdf)
     with pytest.warns(UserWarning, match="2 pages in auto mode"):
         output = builder.build_theme(theme, tmp_path, pages="auto", diff_ledger=False)
     assert output["pdf"] == final_pdf
-    assert json.loads(output["layout_report_json"].read_text())["actual_page_count"] == 2
+    assert json.loads(output["layout_report_json"].read_text(encoding="utf-8"))["actual_page_count"] == 2
 
 
 @pytest.mark.parametrize("theme", ["ats-plain", "academic-latex", "academic-typst"])
@@ -197,7 +197,7 @@ def test_real_fallback_dispatch_obeys_budget(tmp_path, monkeypatch, theme):
     with pytest.raises(RuntimeError, match="2 pages.*1-page budget"):
         builder.build_theme(theme, tmp_path, pages="1")
     output = builder.build_theme(theme, tmp_path, pages="2")
-    assert json.loads(output["layout_report_json"].read_text())["page_budget_passed"] is True
+    assert json.loads(output["layout_report_json"].read_text(encoding="utf-8"))["page_budget_passed"] is True
 
 
 def test_non_html_dispatch_rejects_missing_final_pdf(tmp_path, monkeypatch):

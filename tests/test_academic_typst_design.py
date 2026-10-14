@@ -40,7 +40,7 @@ def test_typst_legacy_view_model_decodes_once():
 def test_typst_photo_filename_is_a_quoted_code_string(tmp_path):
     from PIL import Image
     path = 'photo"name%[x].png'
-    image = tmp_path / path
+    image = tmp_path / "photo_safe_name.png"
     Image.new("RGB", (30, 40), "gray").save(image)
     source = AcademicExporter().generate_typst(fixture(), photo_path=image,
                                                photo_mode="photo", photo_reference=path)

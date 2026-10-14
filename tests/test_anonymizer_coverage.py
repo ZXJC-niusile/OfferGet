@@ -53,15 +53,15 @@ def test_flat_cli_preserves_schema_and_roundtrips(tmp_path):
     profile = {"candidate_name": "Imaginary Neris Person", "education": {"school": "Fictional Amber College"},
                "experience": [{"org": "Synthetic Violet Company"}], "counter": 7}
     source, output, mapping = (tmp_path / name for name in ("source.json", "masked.json", "map.json"))
-    source.write_text(json.dumps(profile))
+    source.write_text(json.dumps(profile), encoding="utf-8")
     root = Path(__file__).resolve().parents[1]
     command = [sys.executable, str(root / "cli.py"), "anon"]
     result = subprocess.run(command + ["mask", str(source), "--level", "strict", "--map", str(mapping), "--output", str(output)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    masked = json.loads(output.read_text())
+    masked = json.loads(output.read_text(encoding="utf-8"))
     assert masked.keys() == profile.keys()
     for original in (profile["candidate_name"], profile["education"]["school"], profile["experience"][0]["org"]):
-        assert original not in output.read_text()
+        assert original not in output.read_text(encoding="utf-8")
     restored = subprocess.run(command + ["unmask", str(output), "--map", str(mapping)], capture_output=True, text=True)
     assert restored.returncode == 0, restored.stderr
     assert json.loads(restored.stdout) == profile
@@ -152,7 +152,7 @@ def test_actual_export_entrypoints_exclude_requested_photo_sources(method, tmp_p
         outputs = getattr(builder, method)(**kwargs)
     for artifact in outputs.values():
         if isinstance(artifact, Path) and artifact.suffix in {".html", ".md", ".tex", ".typ"}:
-            text = artifact.read_text()
+            text = artifact.read_text(encoding="utf-8")
             for original in ("Synthetic Zorabel", "Fictional Qerlon", str(missing), "data:image"):
                 assert original not in text
     assert not list((tmp_path / method).glob("*.png"))
@@ -215,20 +215,20 @@ def test_default_export_does_not_write_reverse_identity_sidecars(tmp_path, level
     assert not any("diff_ledger" in key for key in outputs)
     assert not list(tmp_path.glob("*diff_ledger*"))
     if theme == "classic-tech":
-        assert "Synthetic Sidecar Person" not in outputs["html"].read_text()
+        assert "Synthetic Sidecar Person" not in outputs["html"].read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("direct", [True, False])
 def test_anonymized_export_refuses_stale_identity_sidecars(tmp_path, direct):
     stale = tmp_path / "resume_diff_ledger.json"
-    stale.write_text('{"candidate_name":"Synthetic Old Identity"}')
+    stale.write_text('{"candidate_name":"Synthetic Old Identity"}', encoding="utf-8")
     builder = ResumeBuilder({"name": "Synthetic New Identity"}, anonymize="strict")
     with pytest.raises(ValueError, match="clean output directory"):
         if direct:
             builder.build_ats_docx(tmp_path)
         else:
             builder.build_theme("ats-docx", tmp_path)
-    assert stale.read_text() == '{"candidate_name":"Synthetic Old Identity"}'
+    assert stale.read_text(encoding="utf-8") == '{"candidate_name":"Synthetic Old Identity"}'
     assert not (tmp_path / "resume_ats.docx").exists()
 
 
@@ -248,11 +248,11 @@ def test_aliases_cannot_reintroduce_other_discovered_identities(profile):
 
 def test_stale_original_output_is_preserved_with_explicit_scope_warning(tmp_path):
     stale = tmp_path / "older_resume.html"
-    stale.write_text("Synthetic Original Identity")
+    stale.write_text("Synthetic Original Identity", encoding="utf-8")
     builder = ResumeBuilder({"name": "Synthetic Current Identity"}, anonymize="strict", photo_mode="no-photo")
     with pytest.warns(PrivacyCoverageWarning, match="Existing output-directory files are not anonymized"):
         outputs = builder.build_ats_docx(tmp_path)
-    assert stale.read_text() == "Synthetic Original Identity"
+    assert stale.read_text(encoding="utf-8") == "Synthetic Original Identity"
     assert stale not in outputs.values()
     with zipfile.ZipFile(outputs["docx"]) as archive:
         assert "Synthetic Current Identity" not in archive.read("word/document.xml").decode()
