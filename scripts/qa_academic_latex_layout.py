@@ -16,10 +16,7 @@ sys.path.insert(0, str(ROOT))
 from core.academic_exporter import AcademicExporter
 from core.resume_view_model import ResumeViewModel
 from scripts.qa_ats_docx_layout import cases, expected_text
-
-
-def squash(text):
-    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text)).replace("**", "")
+from scripts.qa_common import build_source_manifest, squash
 
 
 def fixture_view_model(case, photo=None):
@@ -48,11 +45,7 @@ def main():
     sources = ["core/academic_exporter.py", "core/resume_view_model.py", "core/profile_adapter.py",
                "core/resume_photo.py", "core/resume_builder.py",
                "scripts/qa_academic_latex_layout.py", "scripts/qa_ats_docx_layout.py", "scripts/qa_modern_navy_layout.py"]
-    manifest = {}
-    for source in sources:
-        data = (ROOT / source).read_bytes()
-        manifest[source] = {"sha256": hashlib.sha256(data).hexdigest(),
-                            "git_blob_sha1": hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()}
+    manifest = build_source_manifest(ROOT, sources)
     (output / "source-manifest.json").write_text(json.dumps(manifest, indent=2))
     report = []
     exporter = AcademicExporter()

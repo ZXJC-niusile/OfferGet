@@ -20,10 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.qa_modern_navy_layout import fixtures, synthetic_photo, text_content
-
-
-def squash(value):
-    return re.sub(r"\s+", "", str(value).replace("**", ""))
+from scripts.qa_common import squash
 
 
 def source_anchors(profile):
