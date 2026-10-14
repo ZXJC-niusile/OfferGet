@@ -20,11 +20,7 @@ sys.path.insert(0, str(ROOT))
 from core.ats_docx_renderer import AtsDocxRenderer
 from core.resume_view_model import ResumeViewModel
 from scripts.qa_modern_navy_layout import fixtures, synthetic_photo
-import base64
-
-
-def squash(value):
-    return re.sub(r"\s+", "", str(value).replace("**", ""))
+from scripts.qa_common import build_source_manifest, squash
 
 
 def cases():
@@ -85,11 +81,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     sources = ["core/ats_docx_renderer.py", "core/resume_view_model.py", "core/profile_adapter.py",
                "scripts/qa_ats_docx_layout.py", "scripts/qa_modern_navy_layout.py"]
-    manifest = {}
-    for source in sources:
-        data = (ROOT / source).read_bytes()
-        manifest[source] = {"sha256": hashlib.sha256(data).hexdigest(),
-                            "git_blob_sha1": hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()}
+    manifest = build_source_manifest(ROOT, sources)
     (output / "source-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     report = []
     for case in cases():

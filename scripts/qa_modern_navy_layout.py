@@ -21,6 +21,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts.qa_common import squash
 DEFAULT_THEME = "modern-navy"
 THEMES = ("modern-navy", "modern-corporate", "classic-tech", "silicon-clean",
           "asu-dense", "sidebar-clean", "academic-postgraduate", "engineering-sb2nov")
@@ -247,8 +249,6 @@ def text_content(html):
     return " ".join("".join(parser.parts).split())
 
 
-def squash(text):
-    return re.sub(r"\s+", "", text)
 
 
 def digest(text):
