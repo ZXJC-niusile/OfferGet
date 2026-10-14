@@ -241,14 +241,20 @@ class SkillEvaluationTests(unittest.TestCase):
         outside = self.work / "outside.txt"
         outside.write_text("must not be copied")
         link = self.work / "inputs/unreferenced.txt"
-        link.symlink_to(outside)
+        try:
+            link.symlink_to(outside)
+        except OSError:
+            self.skipTest("Symlinks not supported or permitted on this platform/environment")
         with patch.object(evals.shutil, "copy2", wraps=evals.shutil.copy2) as copier:
             report = evals.smoke(local_suite)
         self.assertTrue(all(c["status"] == "pass" for c in report["checks"]))
         self.assertFalse(any(call.args[0] == outside for call in copier.call_args_list))
         escaping = self.work / "inputs/resume.md"
         escaping.unlink()
-        escaping.symlink_to(ROOT / "SKILL.md")
+        try:
+            escaping.symlink_to(ROOT / "SKILL.md")
+        except OSError:
+            self.skipTest("Symlinks not supported or permitted on this platform/environment")
         with self.assertRaises(evals.EvalError):
             evals.load_suite(local_suite)
 

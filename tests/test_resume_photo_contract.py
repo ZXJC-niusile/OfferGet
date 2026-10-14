@@ -195,11 +195,11 @@ def test_builder_does_not_read_or_copy_disabled_photo(profile, portrait, tmp_pat
         builder = ResumeBuilder(profile, photo_path=portrait, photo_mode="photo", renderer=SourceOnlyRenderer())
         with patch.object(builder.academic_exporter, "compile_typst", return_value=False):
             result = builder.build_academic_typst(tmp_path / "typst", photo=False)
-        assert "#image(" not in result["typ"].read_text()
+        assert "#image(" not in result["typ"].read_text(encoding="utf-8")
         assert not list((tmp_path / "typst").glob("*.png"))
         with patch.object(builder.academic_exporter, "compile_latex", return_value=False):
             result = builder.build_academic_latex(tmp_path / "latex", photo=False)
-        assert r"\includegraphics" not in result["tex"].read_text()
+        assert r"\includegraphics" not in result["tex"].read_text(encoding="utf-8")
         result = builder.build_theme("ats-docx", tmp_path / "docx", photo=False, diff_ledger=False)
     with zipfile.ZipFile(result["docx"]) as doc:
         assert not any(name.startswith("word/media/") for name in doc.namelist())
@@ -210,7 +210,7 @@ def test_typst_copies_only_validated_selected_image(profile, tmp_path):
     builder = ResumeBuilder(profile, photo_mode="photo", renderer=SourceOnlyRenderer())
     with patch.object(builder.academic_exporter, "compile_typst", return_value=False):
         result = builder.build_academic_typst(tmp_path / "typst")
-    assert '#image("synthetic-portrait.png"' in result["typ"].read_text()
+    assert '#image("synthetic-portrait.png"' in result["typ"].read_text(encoding="utf-8")
     assert (tmp_path / "typst/synthetic-portrait.png").read_bytes() == Path(profile["candidate"]["photo_path"]).read_bytes()
 
 
@@ -280,16 +280,16 @@ def test_cli_photo_path_implies_photo_and_explicit_placeholder_is_preview(profil
     def build_source(builder, theme, output_dir, **kwargs):
         vm = builder._get_view_model(reserve_photo=kwargs["photo"])
         html = HtmlThemeRenderer().render(vm, theme)
-        output = Path(output_dir) / "source.html"; output.write_text(html)
+        output = Path(output_dir) / "source.html"; output.write_text(html, encoding="utf-8")
         return {"html": output}
     with patch.object(ResumeBuilder, "build_theme", build_source):
         cmd_resume_build([str(source), "--theme", "modern-navy", "--photo-path", str(portrait),
                           "--output-dir", str(tmp_path / "photo"), "--no-diff-ledger"])
-        assert '<img src="data:image/png;base64,' in (tmp_path / "photo/source.html").read_text()
+        assert '<img src="data:image/png;base64,' in (tmp_path / "photo/source.html").read_text(encoding="utf-8")
         assert "Validated image" in capsys.readouterr().out
         cmd_resume_build([str(source), "--theme", "modern-navy", "--photo-mode", "placeholder",
                           "--output-dir", str(tmp_path / "preview"), "--no-diff-ledger"])
-        preview = (tmp_path / "preview/source.html").read_text()
+        preview = (tmp_path / "preview/source.html").read_text(encoding="utf-8")
         assert "预留证件照" in preview and "<img " not in preview
         assert "layout preview only" in capsys.readouterr().out
 
