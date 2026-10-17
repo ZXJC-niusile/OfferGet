@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume - Modern Career Theme</title>
+  <style>
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      --color-primary: #1E3A8A;         /* 深海蓝，沉稳专业 */
+      --color-primary-dark: #0F172A;    /* 炭黑，正文核心视觉 */
+      --color-accent: #2563EB;          /* 科技蓝高亮 */
+      --color-text: #1E293B;            /* 深灰正文，极佳可读性 */
+      --color-muted: #64748B;           /* 次要元数据灰（日期、联系方式） */
+      --color-border: #E2E8F0;          /* 细腻底部分隔线 */
+      --color-bg-subtle: #F8FAFC;       /* 浅底色 */
+      --color-tag-bg: #EFF6FF;          /* 标签底色 */
+      --color-tag-border: #DBEAFE;      /* 标签边框 */
+      --color-todo-bg: #FEF3C7;
+      --color-todo-text: #92400E;
+
+      /* 用户指定优化规范：顶部约10mm留白、正文10pt (13.333px)、行高舒适、通栏饱满 */
+      --page-padding-y: 10mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;       /* 10pt 正文字号 */
+      --body-line-height: 1.55;         /* 1.55 舒展行高 */
+      --item-gap: 5px;                  /* 条目段间距 */
+      --section-gap: 13px;              /* 模块间距 */
+    }
+
+    @page { 
+      size: A4 portrait; 
+      margin: var(--page-padding-y) 0; 
+    }
+
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+    }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--body-font-size);
+      line-height: var(--body-line-height);
+      color: var(--color-text);
+      background: #FFFFFF;
+      -webkit-font-smoothing: antialiased;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: var(--page-padding-y) var(--page-padding-x);
+      margin: 0 auto;
+      background: #FFFFFF;
+    }
+
+    a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+    a:hover { text-decoration: underline; color: var(--color-accent); }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+
+    /* ─── 顶部 Header（现代职场大厂风） ─── */
+    .resume-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid var(--color-primary);
+      margin-bottom: 2px;
+    }
+
+    .resume-identity {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .header-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .resume-name {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: var(--color-primary-dark);
+      letter-spacing: 0.8px;
+    }
+
+    .resume-title {
+      display: inline-flex;
+      align-items: center;
+      background: var(--color-tag-bg);
+      color: var(--color-primary);
+      border: 1px solid var(--color-tag-border);
+      padding: 2px 9px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      letter-spacing: 0.2px;
+    }
+
+    .resume-contacts {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px 10px;
+      font-size: 12px; /* 9pt 联系方式与日期 */
+      color: var(--color-muted);
+      line-height: 1.4;
+    }
+
+    .resume-contacts span, .resume-contacts a {
+      display: inline-flex;
+      align-items: center;
+      overflow-wrap: anywhere;
+    }
+
+    .resume-contacts span[aria-hidden="true"] {
+      color: #CBD5E1;
+      font-weight: 700;
+    }
+
+    /* ─── 模块通栏横幅（彻底告别左侧死白） ─── */
+    .resume-sections section {
+      margin-top: var(--section-gap);
+      min-width: 0;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+      padding-bottom: 0;
+    }
+
+    h2 {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--color-primary);
+      letter-spacing: 0.6px;
+      position: relative;
+      padding-left: 8px;
+      border-left: 3.5px solid var(--color-primary);
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+
+    .rule {
+      display: block !important;
+      flex: 1;
+      height: 1px;
+      background: var(--color-border);
+    }
+
+    .resume-section-body {
+      min-width: 0;
+    }
+
+    /* ─── 经历条目（黄金三段式对齐） ─── */
+    .resume-entry {
+      min-width: 0;
+    }
+
+    .resume-entry + .resume-entry {
+      margin-top: 10px;
+    }
+
+    .entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px 16px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+
+    .entry-identity {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 8px;
+      flex: 1 1 18em;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .entry-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--color-primary-dark);
+      letter-spacing: 0.2px;
+    }
+
+    .entry-role {
+      font-size: 12.8px;
+      font-weight: 600;
+      color: var(--color-accent);
+    }
+
+    .entry-date {
+      font-size: 12px; /* 9pt 日期对齐 */
+      color: var(--color-muted);
+      font-variant-numeric: tabular-nums;
+      margin-left: auto;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    /* ─── 教育背景网格 ─── */
+    .edu-grid {
+      display: grid;
+      grid-template-columns: 36% 28% 1fr;
+      gap: 4px 12px;
+      margin-top: 4px;
+      font-size: 12px;
+      color: var(--color-muted);
+    }
+
+    .edu-grid[data-columns="1"] { grid-template-columns: 1fr; }
+    .edu-grid[data-columns="2"] { grid-template-columns: 45% 1fr; }
+    .edu-grid[data-columns="3"] { grid-template-columns: 36% 28% 1fr; }
+
+    /* ─── Bullet Points 正文（清晰、舒适、高转化） ─── */
+    .entry-bullets {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 4px;
+    }
+
+    .entry-bullets li {
+      position: relative;
+      padding-left: 14px;
+      margin-bottom: var(--item-gap);
+      font-size: var(--body-font-size);
+      line-height: var(--body-line-height);
+      color: var(--color-text);
+      text-align: justify;
+      overflow-wrap: anywhere;
+    }
+
+    .entry-bullets li::before {
+      content: "•";
+      position: absolute;
+      left: 2px;
+      top: -0.5px;
+      color: var(--color-accent);
+      font-size: 14px;
+      line-height: inherit;
+    }
+
+    /* ─── 专业技能与学术成果 ─── */
+    .skills-list {
+      list-style: none;
+      padding-left: 0;
+      margin-top: 4px;
+    }
+
+    .skill-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      margin-bottom: var(--item-gap);
+      line-height: var(--body-line-height);
+      font-size: var(--body-font-size);
+    }
+
+    .skill-label {
+      font-weight: 700;
+      color: var(--color-primary-dark);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .skill-value {
+      color: var(--color-text);
+      overflow-wrap: anywhere;
+    }
+
+    b, strong {
+      font-weight: 700;
+      color: var(--color-primary-dark);
+    }
+
+    .todo {
+      background: var(--color-todo-bg);
+      color: var(--color-todo-text);
+      padding: 0 4px;
+      border-radius: 2px;
+      border: 1px dashed var(--color-todo-text);
+    }
+
+    /* ─── A4 打印与分页保护 ─── */
+    @media print {
+      .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      .resume-header, .section-header, .entry-header { 
+        break-inside: avoid; 
+        break-after: avoid; 
+      }
+      .resume-sections section, .resume-entry { 
+        break-inside: auto; 
+      }
+      .entry-bullets, .skills-list {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
+      li { 
+        break-inside: avoid; 
+        orphans: 2; 
+        widows: 2; 
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header></header>
+    {{SECTIONS_CONTENT}}
+  </div>
+</body>
+</html>

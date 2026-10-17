@@ -119,6 +119,7 @@ class ResumeBuilder:
         "academic-postgraduate",
         "engineering-sb2nov",
         "modern-corporate",
+        "modern-career",
     ]
     THEMES = HTML_THEMES + [
         "ats-plain",
