@@ -1300,10 +1300,11 @@ def run_career_review(
         from core.resume_builder import ResumeBuilder
 
         if resume_output_dir is None:
-            out_dir = PROJECT_ROOT / "output" / "resumes"
+            from core.paths import get_default_resume_output_dir
+            out_dir = get_default_resume_output_dir()
         else:
             out_dir = Path(resume_output_dir).resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
+            out_dir.mkdir(parents=True, exist_ok=True)
 
         builder = ResumeBuilder(tailored_profile)
         if resume_theme == "all":
@@ -1313,7 +1314,6 @@ def run_career_review(
                 primary_pdf = built_files["modern-navy"]["pdf"]
             elif built_files:
                 first_theme = next(iter(built_files.values()))
-                primary_pdf = first_theme.get("pdf")
             result["generated_resumes"] = {
                 "theme": resume_theme,
                 "pdf": primary_pdf,
@@ -1322,13 +1322,33 @@ def run_career_review(
             }
         else:
             built_files = builder.build_theme(resume_theme, out_dir, photo=reserve_photo)
+            primary_pdf = built_files.get("pdf")
             result["generated_resumes"] = {
                 **built_files,
                 "theme": resume_theme,
-                "pdf": built_files.get("pdf"),
+                "pdf": primary_pdf,
                 "html": built_files.get("html"),
                 "output_dir": out_dir,
             }
+
+        cand_name = tailored_profile.get("candidate", {}).get("name") or tailored_profile.get("name") or "候选人"
+        try:
+            import re
+            import shutil
+            clean_name = re.sub(r'[\/:*?"<>|]', '_', str(cand_name).strip()) or "个人"
+            if primary_pdf and Path(primary_pdf).exists():
+                named_pdf = out_dir / f"{clean_name}_个人简历.pdf"
+                shutil.copy2(primary_pdf, named_pdf)
+                result["generated_resumes"]["named_pdf"] = named_pdf
+            primary_html = result["generated_resumes"].get("html")
+            if not primary_html and resume_theme == "all" and "modern-navy" in built_files:
+                primary_html = built_files["modern-navy"].get("html")
+            if primary_html and Path(primary_html).exists():
+                named_html = out_dir / f"{clean_name}_个人简历.html"
+                shutil.copy2(primary_html, named_html)
+                result["generated_resumes"]["named_html"] = named_html
+        except Exception:
+            pass
 
     return result
 

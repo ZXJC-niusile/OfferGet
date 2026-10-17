@@ -59,8 +59,8 @@ class LayoutConfig:
     target_item_gap_pt: float = 6.0
     max_item_gap_pt: float = 8.0
 
-    min_page_padding_y_mm: float = 6.0
-    target_page_padding_y_mm: float = 8.5
+    min_page_padding_y_mm: float = 7.0
+    target_page_padding_y_mm: float = 10.0
     max_page_padding_y_mm: float = 14.0
     max_body_font_pt: float = 10.5
 
@@ -783,8 +783,13 @@ def generate_micro_typography_css(
     }}
   }}
 
-  .org-right, .time, .date {{
+  .org-right, .time, .date, .entry-date, .resume-contacts, .contacts {{
     white-space: nowrap !important;
+    font-size: calc(var(--body-font-size, {font_pt}pt) * 0.9) !important;
+  }}
+
+  .resume-contacts span, .resume-contacts a {{
+    font-size: calc(var(--body-font-size, {font_pt}pt) * 0.9) !important;
   }}
 
   h1, h2, h3, .section-header, .item-header {{

@@ -49,8 +49,8 @@ def cmd_resume_build(args_list=None):
     )
     build_parser.add_argument(
         "--output-dir",
-        default="output/resumes",
-        help="Output directory to save generated resumes (default: output/resumes)",
+        default=None,
+        help="Output directory to save generated resumes (default: Desktop/个人简历)",
     )
     photo_group = build_parser.add_mutually_exclusive_group()
     photo_group.add_argument("--no-photo", action="store_true", help="Exclude all photos and photo slots, including photos in the profile")
@@ -98,7 +98,11 @@ def cmd_resume_build(args_list=None):
         emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
         sys.exit(1)
 
-    out_dir = Path(parsed.output_dir)
+    if parsed.output_dir:
+        out_dir = Path(parsed.output_dir).resolve()
+    else:
+        from core.paths import get_default_resume_output_dir
+        out_dir = get_default_resume_output_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
 
     baseline_data = None
@@ -202,6 +206,35 @@ def cmd_resume_build(args_list=None):
         diff_json = out_dir / "resume_diff_ledger.json"
         if diff_md.exists() and diff_json.exists():
             print(f"  ✓ [diff-ledger     ] -> {diff_md.name} & {diff_json.name}")
+
+    # Synchronize candidate-named convenience files in the output directory
+    try:
+        import re
+        import shutil
+        primary_pdf = None
+        primary_html = None
+        if parsed.theme == "all" and "results" in locals():
+            if "modern-navy" in results and results["modern-navy"].get("pdf"):
+                primary_pdf = results["modern-navy"]["pdf"]
+                primary_html = results["modern-navy"].get("html")
+            elif results:
+                first_val = next(iter(results.values()))
+                primary_pdf = first_val.get("pdf")
+                primary_html = first_val.get("html")
+        elif "files" in locals():
+            primary_pdf = files.get("pdf")
+            primary_html = files.get("html")
+
+        if primary_pdf and Path(primary_pdf).exists():
+            clean_name = re.sub(r'[\/:*?"<>|]', '_', str(cand_name).strip()) or "个人"
+            named_pdf = out_dir / f"{clean_name}_个人简历.pdf"
+            shutil.copy2(primary_pdf, named_pdf)
+            print(f"  ★ [named-resume   ] -> {named_pdf.name}")
+            if primary_html and Path(primary_html).exists():
+                named_html = out_dir / f"{clean_name}_个人简历.html"
+                shutil.copy2(primary_html, named_html)
+    except Exception:
+        pass
 
     print("=" * 68)
     print(f"🎉 Successfully built resume variant(s) in {out_dir}")

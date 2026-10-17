@@ -264,11 +264,21 @@ class ResumeBuilder:
         self._vm_cache[cache_key] = vm
         return vm
 
+    def _resolve_output_dir(self, output_dir: Optional[Union[str, Path]]) -> Path:
+        """Resolves target output directory, defaulting to Desktop/个人简历."""
+        if output_dir is None:
+            from core.paths import get_default_resume_output_dir
+            out = get_default_resume_output_dir()
+        else:
+            out = Path(output_dir).resolve()
+        out.mkdir(parents=True, exist_ok=True)
+        return out
+
     def _privacy_diff_ledger(self, enabled: bool, output_dir: Any, anonymize: Optional[str]) -> bool:
         """Never place source identities beside an anonymized export."""
         if not (anonymize or self.anonymize):
             return enabled
-        out_dir = Path(output_dir).resolve()
+        out_dir = self._resolve_output_dir(output_dir)
         if any((out_dir / f"resume_diff_ledger.{suffix}").exists() for suffix in ("md", "json")):
             raise ValueError("Anonymized export requires an output directory without existing "
                              "resume_diff_ledger sidecars; choose a separate clean output directory")
@@ -338,7 +348,7 @@ class ResumeBuilder:
     def build_html_theme(
         self,
         theme_name: str,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
@@ -355,8 +365,7 @@ class ResumeBuilder:
         diff_ledger = self._privacy_diff_ledger(diff_ledger, output_dir, anonymize)
         eff_photo_path = photo_path or self.photo_path
 
-        out_dir = Path(output_dir).resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._resolve_output_dir(output_dir)
 
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
         populated_html = self.html_renderer.render(
@@ -541,15 +550,17 @@ class ResumeBuilder:
 
     def build_ats_plain(
         self,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         anonymize: Optional[str] = None,
+        autofit: bool = True,
+        pages: str = "auto",
+        **kwargs,
     ) -> Dict[str, Path]:
         """Builds ATS-friendly Markdown and single-column HTML with reserved photo slot."""
         self._privacy_diff_ledger(False, output_dir, anonymize)
-        out_dir = Path(output_dir).resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._resolve_output_dir(output_dir)
 
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
@@ -565,16 +576,30 @@ class ResumeBuilder:
         actual_html_path = Path(write_text_atomic(html_content, html_path))
 
         pdf_target = out_dir / "resume_ats_plain.pdf"
-        render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
-        render_ok, _, render_msg, pdf_path = _parse_render_result(render_res, pdf_target)
-        if not render_ok:
-            raise RuntimeError(f"Failed to render ATS plain PDF: {render_msg}")
+        if autofit and pages == "1":
+            fit_ok, _, fit_details = self.autofit_engine.fit_to_single_page(
+                input_html_path=actual_html_path,
+                output_html_path=actual_html_path,
+                output_pdf_path=pdf_target,
+            )
+            if fit_ok and Path(pdf_target).exists():
+                pdf_path = Path(fit_details.get("final_pdf_path", pdf_target))
+            else:
+                render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
+                render_ok, _, render_msg, pdf_path = _parse_render_result(render_res, pdf_target)
+                if not render_ok:
+                    raise RuntimeError(f"Failed to render ATS plain PDF: {render_msg}")
+        else:
+            render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
+            render_ok, _, render_msg, pdf_path = _parse_render_result(render_res, pdf_target)
+            if not render_ok:
+                raise RuntimeError(f"Failed to render ATS plain PDF: {render_msg}")
 
         return {"md": actual_md_path, "html": actual_html_path, "pdf": Path(pdf_path)}
 
     def build_academic_latex(
         self,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         anonymize: Optional[str] = None,
@@ -583,14 +608,15 @@ class ResumeBuilder:
         photo_height: Optional[int] = None,
         lang: str = "zh",
         section_titles: Optional[Dict[str, str]] = None,
+        autofit: bool = True,
+        pages: str = "auto",
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds academic LaTeX resume, standalone HTML twin, and PDF."""
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
         self._privacy_diff_ledger(False, output_dir, anonymize)
-        out_dir = Path(output_dir).resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._resolve_output_dir(output_dir)
 
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
 
@@ -616,10 +642,24 @@ class ResumeBuilder:
         pdf_target = out_dir / "resume_academic_latex.pdf"
         # Try native LaTeX compile first; if unavailable, render the LaTeX-style HTML
         if not self.academic_exporter.compile_latex(actual_tex_path, pdf_target):
-            render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
-            render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
-            if not render_ok:
-                raise RuntimeError(f"Failed to render academic LaTeX PDF: {render_msg}")
+            if autofit and pages == "1":
+                fit_ok, _, fit_details = self.autofit_engine.fit_to_single_page(
+                    input_html_path=actual_html_path,
+                    output_html_path=actual_html_path,
+                    output_pdf_path=pdf_target,
+                )
+                if fit_ok and Path(pdf_target).exists():
+                    actual_pdf = Path(fit_details.get("final_pdf_path", pdf_target))
+                else:
+                    render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
+                    render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
+                    if not render_ok:
+                        raise RuntimeError(f"Failed to render academic LaTeX PDF: {render_msg}")
+            else:
+                render_res = self.renderer.render_pdf(actual_html_path, pdf_target)
+                render_ok, _, render_msg, actual_pdf = _parse_render_result(render_res, pdf_target)
+                if not render_ok:
+                    raise RuntimeError(f"Failed to render academic LaTeX PDF: {render_msg}")
             pdf_path = actual_pdf
         else:
             last_res = getattr(self.academic_exporter, "last_compile_result", None)
@@ -629,17 +669,18 @@ class ResumeBuilder:
 
     def build_academic_typst(
         self,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         anonymize: Optional[str] = None,
+        pages: str = "auto",
+        **kwargs,
     ) -> Dict[str, Path]:
         """Builds modern academic Typst resume and compiles to PDF."""
         prof = self._resolve_profile(anonymize)
         eff_photo_path = photo_path or self.photo_path
         self._privacy_diff_ledger(False, output_dir, anonymize)
-        out_dir = Path(output_dir).resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._resolve_output_dir(output_dir)
 
         vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
         photo_reference = None
@@ -682,7 +723,7 @@ class ResumeBuilder:
     def build_theme(
         self,
         theme: str,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
@@ -697,12 +738,13 @@ class ResumeBuilder:
         theme_normalized = theme.lower().replace("_", "-")
         if theme_normalized in ("ats-docx", "docx") and pages != "auto":
             raise ValueError("Explicit page budgets require PDF output; use pages=auto for DOCX and check pagination in Word.")
-        diff_ledger = self._privacy_diff_ledger(diff_ledger, output_dir, anonymize)
+        out_dir = self._resolve_output_dir(output_dir)
+        diff_ledger = self._privacy_diff_ledger(diff_ledger, out_dir, anonymize)
         eff_photo_path = photo_path or self.photo_path
         if theme_normalized in self.HTML_THEMES:
             return self.build_html_theme(
                 theme_normalized,
-                output_dir,
+                out_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
                 autofit=autofit,
@@ -715,29 +757,36 @@ class ResumeBuilder:
             )
         elif theme_normalized == "ats-plain":
             res = self.build_ats_plain(
-                output_dir,
+                out_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
+                autofit=autofit,
+                pages=pages,
+                **kwargs,
             )
         elif theme_normalized in ("academic-latex", "latex"):
             res = self.build_academic_latex(
-                output_dir,
+                out_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
+                autofit=autofit,
+                pages=pages,
                 **kwargs,
             )
         elif theme_normalized in ("academic-typst", "typst"):
             res = self.build_academic_typst(
-                output_dir,
+                out_dir,
                 photo=photo,
                 photo_path=eff_photo_path,
                 anonymize=anonymize,
+                pages=pages,
+                **kwargs,
             )
         elif theme_normalized in ("ats-docx", "docx"):
             res = self.build_ats_docx(
-                output_dir,
+                out_dir,
                 anonymize=anonymize,
                 photo=photo,
                 photo_path=eff_photo_path,
@@ -755,7 +804,7 @@ class ResumeBuilder:
                 "status": "unverified",
                 "pdf_path": str(res["pdf"]),
             }
-            report_target = Path(output_dir).resolve() / f"resume_{theme_normalized.replace('-', '_')}_layout.json"
+            report_target = out_dir / f"resume_{theme_normalized.replace('-', '_')}_layout.json"
             try:
                 actual_pages = _verified_pdf_page_count(Path(res["pdf"]))
                 layout_meta["actual_page_count"] = actual_pages
@@ -774,7 +823,6 @@ class ResumeBuilder:
                 warnings.warn(f"Resume uses {actual_pages} pages in auto mode. Layout diagnostics: {report_path}", UserWarning, stacklevel=2)
 
         if diff_ledger and "diff_ledger_md" not in res:
-            out_dir = Path(output_dir).resolve()
             effective_baseline = baseline_profile or self.raw_profile or self.profile
             cand_name = (
                 self.profile.get("candidate", {}).get("name")
@@ -804,16 +852,15 @@ class ResumeBuilder:
 
     def build_ats_docx(
         self,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         anonymize: Optional[str] = None,
         photo: Optional[bool] = None,
         photo_path: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Path]:
         """Builds ATS-friendly single-column Word (.docx) resume."""
         from core.ats_docx_renderer import AtsDocxRenderer
-        self._privacy_diff_ledger(False, output_dir, anonymize)
-        out_dir = Path(output_dir).resolve()
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = self._resolve_output_dir(output_dir)
+        self._privacy_diff_ledger(False, out_dir, anonymize)
         prof = self._resolve_profile(anonymize)
         candidate = prof.get("candidate", {})
         path = photo_path or self.photo_path
@@ -833,7 +880,7 @@ class ResumeBuilder:
 
     def build_all(
         self,
-        output_dir: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
         photo: bool = True,
         photo_path: Optional[Union[str, Path]] = None,
         autofit: bool = True,
@@ -848,12 +895,13 @@ class ResumeBuilder:
         """Builds all 6 standard resume variants (or all 7 if include_docx=True)."""
         if include_docx and pages != "auto":
             raise ValueError("Explicit page budgets require PDF output; omit include_docx or use pages=auto and check DOCX pagination in Word.")
+        out_dir = self._resolve_output_dir(output_dir)
         themes = self.THEMES if include_docx else self.PDF_THEMES
         results = {}
         for t in themes:
             results[t] = self.build_theme(
                 t,
-                output_dir,
+                out_dir,
                 photo=photo,
                 photo_path=photo_path,
                 autofit=autofit,
