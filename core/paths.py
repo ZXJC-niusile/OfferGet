@@ -69,6 +69,33 @@ def get_output_dir(sub_dir: str = "") -> Path:
     return out.resolve()
 
 
+def get_desktop_dir() -> Path:
+    """Resolves the user's Desktop directory reliably across platforms (including Windows OneDrive redirection)."""
+    home = Path.home()
+    desktop = home / "Desktop"
+    onedrive_desktop = home / "OneDrive" / "Desktop"
+    if not desktop.exists() and onedrive_desktop.is_dir():
+        return onedrive_desktop
+    return desktop
+
+
+def get_default_resume_output_dir() -> Path:
+    """Returns and ensures the default resume output directory: Desktop/个人简历.
+
+    Creates the directory on the user's Desktop upon invocation. If writing to Desktop
+    fails (e.g. in restricted CI environments), safely falls back to output/个人简历.
+    """
+    desktop = get_desktop_dir()
+    target = desktop / "个人简历"
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        return target.resolve()
+    except OSError:
+        fallback = get_project_root() / "output" / "个人简历"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback.resolve()
+
+
 __all__ = [
     "get_project_root",
     "get_template_path",
@@ -76,4 +103,7 @@ __all__ = [
     "get_theme_path",
     "get_example_path",
     "get_output_dir",
+    "get_desktop_dir",
+    "get_default_resume_output_dir",
 ]
+

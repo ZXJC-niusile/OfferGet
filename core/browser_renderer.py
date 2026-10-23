@@ -548,25 +548,40 @@ const browserProc = spawn(browserExe, [
   '--headless=new',
   `--remote-debugging-port=${port}`,
   `--user-data-dir=${tmpDir}`,
+  '--window-size=794,1123',
   '--disable-gpu',
   '--no-sandbox'
 ]);
 
-function queryJson(pathUrl) {
+function queryJson(pathUrl, method = 'GET') {
   return new Promise((resolve, reject) => {
-    http.get(`http://127.0.0.1:${port}${pathUrl}`, (res) => {
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: port,
+      path: pathUrl,
+      method: method,
+      headers: {
+        'Host': `127.0.0.1:${port}`
+      }
+    }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch(e) { reject(e); }
+        try {
+          resolve(JSON.parse(data));
+        } catch(e) {
+          reject(new Error(`Failed to parse JSON from ${pathUrl} (status ${res.statusCode}): ${data.slice(0, 100)}`));
+        }
       });
-    }).on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
   });
 }
 
 async function run() {
   let attempts = 0;
-  while (attempts < 20) {
+  while (attempts < 30) {
     try {
       await queryJson('/json/version');
       break;
@@ -576,22 +591,29 @@ async function run() {
     }
   }
 
-  const newTab = await queryJson('/json/new?' + encodeURIComponent(targetUrl));
+  // Chrome 115+ requires PUT for creating new targets via HTTP CDP endpoint
+  const newTab = await queryJson('/json/new?' + encodeURIComponent(targetUrl), 'PUT');
   const wsUrl = newTab.webSocketDebuggerUrl;
 
   const ws = new WebSocket(wsUrl);
-  ws.onopen = () => {
-    ws.send(JSON.stringify({
-      id: 1,
-      method: "Runtime.evaluate",
-      params: { expression: "Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)" }
-    }));
+  let id = 1;
+  const send = (method, params = {}) => {
+    ws.send(JSON.stringify({ id: id++, method, params }));
   };
+
+  ws.onopen = () => {
+    send('Emulation.setEmulatedMedia', { media: 'print' });
+    send('Page.enable');
+    send('Runtime.evaluate', {
+      expression: 'Math.max(document.body.scrollHeight, document.documentElement.scrollHeight, document.body.offsetHeight)'
+    });
+  };
+
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
-    if (msg.id === 1) {
-      const h = msg.result?.result?.value || 0;
-      console.log("HEIGHT=" + Math.round(h));
+    if (msg.result?.result?.value !== undefined) {
+      const h = msg.result.result.value;
+      console.log('HEIGHT=' + Math.round(h));
       ws.close();
       browserProc.kill();
       try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(_) {}
@@ -600,7 +622,7 @@ async function run() {
   };
 }
 
-run().catch(() => {
+run().catch((err) => {
   browserProc.kill();
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch(_) {}
   process.exit(1);
@@ -629,13 +651,16 @@ run().catch(() => {
             finally:
                 Path(tmp_js).unlink(missing_ok=True)
 
-        # Fallback: estimate from PDF page count
+        # Fallback: estimate from PDF page count with gentle multi-page gradient
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
             tmp_pdf = tf.name
         try:
             ok, pages, _ = self.render_pdf(html_path, tmp_pdf)
             if pages <= 1:
                 return int(a4_target_height), 0
+            elif pages == 2:
+                # Conservative overflow estimate for initial 2-page spill (never claim 1122px void)
+                return int(a4_target_height + 80), 80
             else:
                 return int(a4_target_height * pages), int(a4_target_height * (pages - 1))
         finally:
