@@ -13,7 +13,6 @@ Implements ASu-style high-density engineering modeling and strict factual verifi
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
@@ -96,10 +95,10 @@ from core.lexicon import (
     MODULE_QUALIFIERS,
     PLANNED_MARKERS,
     FORBIDDEN_SUPERLATIVES,
-    INFLATION_PATTERNS,
-    ROLE_RANKS,
-    VERB_HIERARCHY,
-    FORBIDDEN_BUZZWORDS,
+    INFLATION_PATTERNS as INFLATION_PATTERNS,
+    ROLE_RANKS as ROLE_RANKS,
+    VERB_HIERARCHY as VERB_HIERARCHY,
+    FORBIDDEN_BUZZWORDS as FORBIDDEN_BUZZWORDS,
 )
 
 

@@ -1,14 +1,13 @@
 """
 OfferGet Resume Command Handlers:
 - cmd_resume_build: Build multi-template resumes from candidate profile
-- cmd_resume_passthrough: Direct passthrough to ApexResume CLI
+- cmd_resume_dispatch: Dispatch resume subcommands to native handlers
 """
 
 from __future__ import annotations
 
 import sys
 import argparse
-import subprocess
 from pathlib import Path
 
 from core.paths import get_project_root
@@ -18,35 +17,21 @@ from core.cli_helpers import (
     emit_stderr,
 )
 from core.resume_builder import ResumeBuilder
+from core.resume_themes import THEMES
 
 
 def cmd_resume_build(args_list=None):
     """Build multi-template resumes from candidate profile."""
     build_parser = argparse.ArgumentParser(
         prog="offerget resume build",
-        description="Build a resume (PDF & HTML) from candidate profile; use --theme all for every theme",
+        description="Build a resume; --theme all builds all PDF themes (DOCX is selected separately)",
     )
     build_parser.add_argument("profile", help="Path to candidate profile JSON (minimal or standard)")
     build_parser.add_argument(
         "--theme",
         default="modern-navy",
-        choices=[
-            "all",
-            "modern-navy",
-            "silicon-clean",
-            "classic-tech",
-            "asu-dense",
-            "sidebar-clean",
-            "academic-postgraduate",
-            "engineering-sb2nov",
-            "modern-corporate",
-            "modern-career",
-            "ats-plain",
-            "academic-latex",
-            "academic-typst",
-            "ats-docx",
-        ],
-        help="Resume theme to build (default: modern-navy; use all for the previous batch output)",
+        choices=["all", *THEMES],
+        help="Resume theme to build (default: modern-navy; use all for all PDF themes)",
     )
     build_parser.add_argument(
         "--output-dir",
@@ -373,6 +358,3 @@ def cmd_resume_dispatch(args_list):
     else:
         emit_stderr(f"[-] Unknown resume subcommand: {subcmd}")
         sys.exit(1)
-
-
-cmd_resume_passthrough = cmd_resume_dispatch

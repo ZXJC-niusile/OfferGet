@@ -20,8 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-# Ensure OfferGet and ApexResume are in sys.path
 from core.paths import get_project_root, get_theme_path
+from core.resume_themes import HTML_THEMES
 
 PROJECT_ROOT = get_project_root()
 
@@ -33,7 +33,7 @@ from core.security_gate import (
 )
 
 
-from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
+from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo  # noqa: F401 - public photo helper
 
 
 PUBLICATION_FIELDS = (
@@ -475,21 +475,10 @@ def resolve_theme_template(
 class HtmlThemeRenderer:
     """Renders HTML-based themes from ResumeViewModel."""
 
-    THEMES = (
-        "modern-navy",
-        "silicon-clean",
-        "classic-tech",
-        "asu-dense",
-        "sidebar-clean",
-        "academic-postgraduate",
-        "engineering-sb2nov",
-        "modern-corporate",
-        "modern-career",
-    )
+    THEMES = HTML_THEMES
 
     def render_header(self, vm: ResumeViewModel, theme_name: str = "modern-navy") -> str:
         """Renders header markup with optional photo placeholder."""
-        loc_str = f'<span aria-hidden="true">•</span><span data-field="identity.location">{vm.location}</span>' if vm.location else ""
         if theme_name == "academic-postgraduate":
             title_prefix = "申请方向："
             title_color = "var(--color-primary, #8B1E1E)"
@@ -512,6 +501,15 @@ class HtmlThemeRenderer:
             email_link = f'<a href="{escape_html_attribute(mailto_url)}" style="color:inherit; text-decoration:none;">{vm.email}</a>'
         else:
             email_link = f'<span>{vm.email}</span>'
+
+        contact_items = []
+        if vm.phone:
+            contact_items.append(f'<span data-field="identity.phone">{vm.phone}</span>')
+        if vm.email:
+            contact_items.append(f'<span data-field="identity.email">{email_link}</span>')
+        if vm.location:
+            contact_items.append(f'<span data-field="identity.location">{vm.location}</span>')
+        contacts_html = '<span aria-hidden="true">•</span>'.join(contact_items)
 
         photo_html = ""
         if vm.photo_data_uri:
@@ -538,10 +536,7 @@ class HtmlThemeRenderer:
           {title_html}
         </div>
         <div class="contacts resume-contacts"{self._style("display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;", theme_name)}>
-          <span data-field="identity.phone">{vm.phone}</span>
-          <span aria-hidden="true">•</span>
-          <span data-field="identity.email">{email_link}</span>
-          {loc_str}
+          {contacts_html}
         </div>
       </div>
       {photo_html}

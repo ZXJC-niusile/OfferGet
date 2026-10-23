@@ -5,18 +5,10 @@ Central orchestrator for multi-template resume generation, compiling, and compac
 1. Universal Profile Ingestion:
    - Uses `core.profile_adapter.normalize_candidate_profile` to accept both
      standard and minimal candidate profiles (Track 1 / Track 2 SSOT).
-2. Deep Reuse of ApexResume Engines:
-   - Reuses `ApexResume.core.render.BrowserRenderer` for cross-platform headless
-     PDF rendering without external PDF tools.
-   - Reuses `ApexResume.core.autofit.AutoFitEngine` for single-page A4 stepped
-     compaction (CSS variables auto-tuning).
-3. Universal Multi-Template Formats:
-   - Modern Navy (`modern-navy`)
-   - Silicon Clean (`silicon-clean`)
-   - Classic Tech (`classic-tech`)
-   - ATS Plain (`ats-plain`, Markdown & single-column HTML)
-   - Academic LaTeX (`academic-latex`, .tex + HTML twin + PDF)
-   - Academic Typst (`academic-typst`, .typ + native compile)
+2. Local rendering and compaction:
+   - Uses core.browser_renderer.BrowserRenderer for headless PDF rendering.
+   - Uses core.autofit.AutoFitEngine for single-page A4 compaction.
+3. Theme catalog: core.resume_themes defines the supported HTML, PDF and DOCX variants.
 """
 
 from __future__ import annotations
@@ -42,6 +34,7 @@ from core.security_gate import validate_output_security
 
 from core.browser_renderer import BrowserRenderer
 from core.autofit import AutoFitEngine
+from core.resume_themes import HTML_THEMES, PDF_THEMES, DOCX_THEMES, THEMES
 from core.resume_auditor import ResumeAuditor
 
 
@@ -108,33 +101,12 @@ def _verified_pdf_page_count(pdf_path: Path) -> int:
 
 
 class ResumeBuilder:
-    """Unified engine for building all 6 resume variants from candidate profile data."""
+    """Unified engine for building registered resume themes from candidate profiles."""
 
-    HTML_THEMES = [
-        "modern-navy",
-        "silicon-clean",
-        "classic-tech",
-        "asu-dense",
-        "sidebar-clean",
-        "academic-postgraduate",
-        "engineering-sb2nov",
-        "modern-corporate",
-        "modern-career",
-    ]
-    THEMES = HTML_THEMES + [
-        "ats-plain",
-        "academic-latex",
-        "academic-typst",
-        "ats-docx",
-    ]
-    PDF_THEMES = HTML_THEMES + [
-        "ats-plain",
-        "academic-latex",
-        "academic-typst",
-    ]
-    DOCX_THEMES = [
-        "ats-docx",
-    ]
+    HTML_THEMES = list(HTML_THEMES)
+    PDF_THEMES = list(PDF_THEMES)
+    DOCX_THEMES = list(DOCX_THEMES)
+    THEMES = list(THEMES)
 
     def __init__(
         self,
@@ -893,7 +865,7 @@ class ResumeBuilder:
         pages: str = "auto",
         **kwargs,
     ) -> Dict[str, Dict[str, Path]]:
-        """Builds all 6 standard resume variants (or all 7 if include_docx=True)."""
+        """Build all PDF themes, optionally including DOCX."""
         if include_docx and pages != "auto":
             raise ValueError("Explicit page budgets require PDF output; omit include_docx or use pages=auto and check DOCX pagination in Word.")
         out_dir = self._resolve_output_dir(output_dir)
@@ -928,7 +900,7 @@ def audit_resume_quality(
 ) -> Dict[str, Any]:
     """
     Audits generated resume HTML quality, layout health, security, and completeness.
-    Reuses ResumeAuditor from ApexResume.core.audit.
+    Reuses ResumeAuditor from core.resume_auditor.
     Checks:
       1. Unreplaced placeholders ({{...}}, .todo, [待定], NaN, undefined, etc.)
       2. Dangerous tags / XSS (<script>, <iframe>, <object>, <embed>, dangerous handlers)
@@ -957,7 +929,7 @@ def audit_resume_quality(
 
     content = path.read_text(encoding="utf-8")
 
-    # 1. Base audit using ApexResume.core.audit.ResumeAuditor
+    # 1. Base audit using core.resume_auditor.ResumeAuditor
     if ResumeAuditor is not None:
         auditor = ResumeAuditor()
         auditor.audit_html_file(path)

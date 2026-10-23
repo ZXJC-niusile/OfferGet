@@ -143,6 +143,16 @@ def test_markdown_resume_jd_match():
             assert match_result["candidate_name"] == "李华"
 
 
+def test_parse_report_keeps_unknown_sections_out_of_experience_and_flags_missing_fields():
+    profile = ResumeTextParser("# Synthetic\n## 工作经历\n### Example · 开发工程师\n- 开发接口服务并交付。\n## 资格证书\n- 某证书原文\n## 项目经历\n### 报表项目\n- 使用 Python 开发工具。\n").parse()
+    report = profile["_parse_report"]
+    assert report["status"] == "needs_review"
+    assert report["recognized_counts"]["experience"] == 1
+    assert any("某证书原文" in item["text"] for item in report["unclassified_lines"])
+    assert "某证书原文" not in str(profile["experience"])
+    assert {w["code"] for w in report["warnings"]} >= {"missing_contact", "missing_date", "unclassified_content"}
+
+
 def test_cli_profile_parse():
     from presentation.commands.profile_cmd import cmd_profile_parse
     import argparse
@@ -162,6 +172,12 @@ def test_cli_profile_parse():
         assert out_json.exists()
         saved = json.loads(out_json.read_text(encoding="utf-8"))
         assert saved["candidate"]["name"] == "李华"
+        args.input_file = str(out_json)
+        args.confirm_parsed = True
+        cmd_profile_parse(args)
+        reviewed = json.loads(out_json.read_text(encoding="utf-8"))
+        assert reviewed["_parse_report"]["status"] == "reviewed"
+        assert reviewed["_parse_report"]["warnings"] == saved["_parse_report"]["warnings"]
 
 
 # ---------------------------------------------------------------------------

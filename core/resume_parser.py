@@ -156,7 +156,39 @@ class ResumeTextParser:
             "honors": honors_list,
             "publications": publications_list,
         }
+        profile["_parse_report"] = self._build_parse_report(profile, sections)
         return profile
+
+    def _build_parse_report(self, profile: Dict[str, Any], sections: Dict[str, List[str]]) -> Dict[str, Any]:
+        warnings = []
+        candidate = profile["candidate"]
+        if not candidate.get("name") or candidate["name"] == "候选人":
+            warnings.append({"code": "missing_name", "path": "candidate.name", "message": "未可靠识别姓名，请核对。"})
+        if not (candidate.get("email") or candidate.get("phone")):
+            warnings.append({"code": "missing_contact", "path": "candidate", "message": "未识别到电话或邮箱，请确认投递时使用的联系方式。"})
+        for section in ("education", "experience", "projects"):
+            for index, entry in enumerate(profile[section]):
+                if not (entry.get("time") or entry.get("period")):
+                    warnings.append({"code": "missing_date", "path": f"{section}[{index}].time",
+                                     "message": "未识别到起止日期，请核对；确实无日期时可保留。"})
+        unclassified = list(self.unclassified_lines)
+        # Identify body text that did not survive the heuristic field parsers.
+        corpus = re.sub(r"[\W_]+", "", json.dumps(profile, ensure_ascii=False)).lower()
+        body_lines = {line for body in sections.values() for line in body}
+        for number, line in enumerate(self.lines, 1):
+            if self._is_section_header(line) or not line.strip() or line not in body_lines:
+                continue
+            tokens = [re.sub(r"[\W_]+", "", t).lower() for t in re.split(r"[\s|·，,:：()（）]+", self._content_line(line))]
+            tokens = [t for t in tokens if len(t) > 1]
+            if tokens and any(t not in corpus for t in tokens):
+                unclassified.append({"line": number, "text": line, "reason": "需核对原文是否完整进入字段"})
+        if unclassified:
+            warnings.insert(0, {"code": "unclassified_content", "path": "_parse_report.unclassified_lines",
+                                "message": f"有 {len(unclassified)} 行原文需核对归类，尚不能确认完整导入。"})
+        return {"status": "needs_review" if warnings else "parsed",
+                "recognized_counts": {s: len(profile[s]) for s in ("education", "experience", "projects", "skills", "honors", "publications")},
+                "warnings": warnings, "unclassified_lines": unclassified,
+                "next_action": "先核对未归类原文及缺失字段，再确认简历内容。" if warnings else "核对识别结果后，可使用默认主题导出。"}
 
     # -------------------------------------------------------------------------
     # Header & Contact Extraction
@@ -290,14 +322,28 @@ class ResumeTextParser:
         """Splits raw text lines into named section line lists."""
         sections: Dict[str, List[str]] = {}
         current_section: Optional[str] = None
+        self.unclassified_lines: List[Dict[str, Any]] = []
+        section_level = 2
+        unknown_section = False
 
-        for line in self.lines:
+        for number, line in enumerate(self.lines, 1):
             stripped = line.strip()
             sec = self._is_section_header(stripped)
             if sec:
                 current_section = sec
                 if current_section not in sections:
                     sections[current_section] = []
+                heading = re.match(r"^(#{1,6})\s", stripped)
+                section_level = len(heading.group(1)) if heading else 2
+                unknown_section = False
+                continue
+
+            heading = re.match(r"^(#{1,6})\s", stripped)
+            if number > 1 and heading and len(heading.group(1)) <= section_level:
+                current_section = None
+                unknown_section = True
+            if unknown_section and stripped:
+                self.unclassified_lines.append({"line": number, "text": line, "reason": "未识别的章节"})
                 continue
 
             if current_section:

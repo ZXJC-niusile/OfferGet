@@ -75,10 +75,17 @@ def test_same_source_produces_photo_and_no_photo_without_changing_facts(profile,
     if theme in HtmlThemeRenderer.SEMANTIC_THEMES:
         identity = re.search(r'<div class="resume-identity"([^>]*)>', without)
         assert identity and "style=" not in identity.group(1)
-        assert ".resume-identity { flex: 1; min-width: 0; }" in without
+        rule = re.search(r"\.resume-identity\s*\{([^}]+)\}", without)
+        assert rule, "Semantic header must define identity sizing"
+        properties = dict(re.findall(r"([\w-]+)\s*:\s*([^;]+);?", rule.group(1)))
+        assert properties.get("flex", "").strip() == "1"
+        assert properties.get("min-width", "").strip() == "0"
     else:
         assert "padding-right:0px" in without
     assert text_content(with_photo) == text_content(without)
+    from core.security_gate import validate_output_security
+    assert validate_output_security(with_photo, format_type="html") == []
+    assert validate_output_security(without, format_type="html") == []
     assert "17 verified test cases" in without and "Synthetic Test Candidate" in without
     assert profile == original
 
