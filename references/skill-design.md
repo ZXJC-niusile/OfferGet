@@ -24,7 +24,7 @@ an MCP plugin, upload resumes, or add an OpenAI API dependency.
 - Keep the existing root `SKILL.md` so current local installations remain compatible.
 - Use a single router with non-overlapping outcome routes instead of several skills
   that compete to activate on the same resume request.
-- Select one explicit theme in recipes. The CLI's existing `all` default is unchanged.
+- Select one explicit theme in recipes. The CLI defaults to `modern-navy`; use `all` only for an explicitly requested theme comparison.
 - Retain the source-of-truth and proposal-approval boundaries. A formatting request
   does not authorize rewriting content or submitting the resume.
 - Report dependency/rendering gaps honestly. Readability, factual preservation, and

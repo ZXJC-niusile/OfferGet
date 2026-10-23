@@ -1,10 +1,7 @@
 # Release verification
 
-This is a procedure, not a current release certification. Earlier revisions of
-this file contained an undated RC report with no pinned commit. Its test counts,
-package sizes, pass-rate claims and Windows timings are historical notes, not
-proof for the current tree. The former `ApexResume/tests` path is no longer a
-separate test suite; current regression tests live in `tests/`.
+This procedure does not certify the current revision. Record fresh results for
+the exact checkout; regression tests live in `tests/`.
 
 ## Source and installed-package checks
 
@@ -26,6 +23,12 @@ python -m pytest tests/ -ra
   PDF, and explicitly reports rendering as `NOT RUN`.
 - `pytest` is the developer regression suite. Report passes, failures, skips and
   deselections separately. A constrained or filtered run is not a full pass.
+
+For a quick development run, use `python -m pytest tests -m "not browser and not package"`.
+The complementary integration selection is `-m "browser or package"`; the full
+command above includes both. CI configures fast checks on Windows/Linux with
+Python 3.9–3.13, and integration checks on both systems with Python 3.12. Record
+actual job results; configuration alone is not evidence of a remote pass.
 
 The suite already includes direct smoke checks and
 [`tests/test_packaged_diagnostics.py`](../tests/test_packaged_diagnostics.py).

@@ -2,7 +2,7 @@
   "version": "1.0",
   "candidate": "张晨 (Chen Zhang)",
   "target_role": "Senior LLM / Agent Algorithm Engineer",
-  "description": "ApexResume Verification Claims Dataset covering verified metrics, role bounds, and anti-inflation violations",
+  "description": "OfferGet Verification Claims Dataset covering verified metrics, role bounds, and anti-inflation violations",
   "claims": [
     {
       "id": "claim-01",
