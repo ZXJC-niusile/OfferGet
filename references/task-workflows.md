@@ -88,19 +88,36 @@ A draft with placeholders must be labeled as a draft, never submission-ready.
 ## Tailor to a job description
 
 Input: an existing source profile and target JD. For a Markdown/text source, first
-parse into a separate JSON file and inspect it; `proposal accept` currently expects
-JSON. Keep the same inspected JSON and JD through review and acceptance.
+parse into a separate JSON file and inspect it, or use the same inspected Markdown/text
+source throughout. Review and acceptance use the same profile loader and require unchanged
+source/JD fingerprints. On a retry after an interrupted acceptance, the stored
+recovery source also permits the exact approved output as input; unrelated changes
+remain rejected.
 
 ```bash
-python cli.py review "/path/to/jd.txt" --profile "/path/to/profile.json" --proposal-db "/path/to/output/proposals.db" --output "/path/to/output/review.json" --json
+python cli.py review "/path/to/jd.txt" --profile "/path/to/profile.json" --goal tailor --workspace "/path/to/output" --json
 python cli.py proposal list --status draft --db "/path/to/output/proposals.db" --json
 python cli.py proposal show "MP-RETURNED-ID" --db "/path/to/output/proposals.db" --json
 ```
 
+Deterministic sentence edits currently remove introductory framing only; they preserve
+actions, qualifications, metrics and attribution. Edit previews retain exact source
+references, and dependent wording/sorting patches require approval as one group.
 Use the JD to prioritize source-supported strengths, not to invent skills or
 promote the candidate's role. Review the draft for duplicated points and unclear
 personal contribution using the same writing guidance as a first resume.
-Show the proposed changes and their source evidence to the user. Ask for approval
+If `evidence_followup.questions` is nonempty, ask up to three source-bound fact
+questions first. Use the full `workflow.answer_template` or the file at `workflow.answer_path` for replies,
+preserving its `answer_context` version token. Then follow `workflow.next_command` or rerun `review --workspace "/path/to/output" --answers "<workflow.answer_path>"`.
+The workspace restores the source paths and goal, saves the current session and review,
+and keeps the proposal database linked. Written answers are preserved; later rounds
+may receive a new answer-template path. Updated sources refresh the workspace and discard
+stale question/answer snapshots. Existing resume exports are replaced at their current paths
+from the user-updated source; unapproved proposed wording is not applied.
+Explicit `--session` / `--save-session` flags remain supported.
+Replies stay unverified draft facts until explicitly accepted. Preserve every
+`approval_group` when selecting sorting patches; partial permutations are rejected.
+Show the updated proposed changes and their source evidence. Ask for approval
 of the proposal or selected patch indexes. The command below is an **approval
 boundary**, not the next automatic step:
 
@@ -142,8 +159,11 @@ findings with evidence paths and uncertainty. Do not apply edits without approva
 
 These are optional destinations, never prerequisites for resume formatting:
 
-- Interview preparation: `python cli.py defense simulate --help`, or `review` with
-  supplied answers. Ask the user for their own answers; do not fabricate experience.
+- Interview preparation: `python cli.py defense simulate --help`, or `review --goal interview` with
+  supplied answers. Use `--goal review` only for the combined workflow. Ask the
+  user for their own answers; do not fabricate experience. Simulation can start with `review --profile <resume> --goal interview --workspace <directory>`
+  without a JD. Questions use actual resume excerpts, personal work, choices, results and boundaries. Use
+  `practice_queue` for diagnosis-based follow-ups; answers keep their parent question ID.
 - Academic materials: `python cli.py baoyan --help`. Preserve simulation vs. physical
   experiments, submitted vs. accepted papers, and personal contribution boundaries.
 - Offer analysis: `python cli.py offer --help`. Explain assumptions and uncertainty;

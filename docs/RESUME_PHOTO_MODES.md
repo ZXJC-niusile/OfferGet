@@ -77,7 +77,7 @@ outputs in separate directories.
 ## Verification
 
 `python -m pytest tests/test_resume_photo_contract.py` checks same-profile pairs,
-all eight HTML themes, native sources, ATS HTML/Markdown, DOCX exclusions, CLI
+all nine HTML themes, native sources, ATS HTML/Markdown, DOCX exclusions, CLI
 precedence, source immutability, and invalid-file rejection. The synthetic fixture
 is a clearly illustrated head-and-shoulders portrait with registration markers,
 not a real candidate or the user's photo.

@@ -89,12 +89,12 @@
 
 ## 三、 JSON Schema 规范定义
 
-ApexResume 统一采用严谨的 JSON Schema 校验台账文件（`claims.json` 或 `claim-ledger.json`）：
+OfferGet 统一采用严谨的 JSON Schema 校验台账文件（`claims.json` 或 `claim-ledger.json`）：
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ApexResumeClaimLedger",
+  "title": "OfferGetClaimLedger",
   "description": "Schema for Atomic Claim Ledger used in technical resume verification",
   "type": "object",
   "required": ["version", "candidate", "claims"],

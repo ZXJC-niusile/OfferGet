@@ -2,11 +2,9 @@
 
 ## Scope
 
-Only `AtsPlainRenderer.render_html` changes in the shared view-model module.
-The view-model factory, other renderers, Markdown serializer, input aliases,
-anonymization, fact guard, and builder dispatch remain unchanged. The design
-retains every already-rendered source field and the existing photo choices.
-No facts are added, rewritten, shortened, or selected by the theme.
+`AtsPlainRenderer` provides the plain HTML/Markdown resume view. It uses the
+shared view model, photo resolver, and output security checks. The theme formats
+source facts; it must not invent, shorten, or rewrite achievements.
 
 The updated HTML uses a semantic `main`, header, section headings, and entry
 headings. Black text, 10.5pt body type, a 1.48 line height, and restrained rules
@@ -16,12 +14,9 @@ organizations, education, exam fields, and skill labels. Print pages retain
 15mm top/bottom and 16mm side margins; screen padding responds to narrow widths.
 There are no decorative cards, sidebars, tables, gradients, or hidden keywords.
 
-This is a presentation change, not a new ATS parsing guarantee. Existing
-Markdown escaping and field support are preserved rather than silently changed.
-In particular, this work does not expand ATS Plain's pre-existing publication
-or narrative support. Baseline Markdown parity is not proof of factual accuracy.
-The source-side checks below are an independent assertion for the supported
-facts actually present in the synthetic fixtures.
+The layout does not guarantee acceptance by every ATS. Check supported source
+fields against the current renderer and inspect the exported text. Markdown
+parity alone does not establish factual completeness.
 
 ## Reproducible checks
 
@@ -68,52 +63,19 @@ repository's existing matrix, HTML theme, DOCX, LaTeX, or Typst checks. A shared
 view-model edit continues to trigger the existing checks according to their
 path filters.
 
-## Local validation against main f01d6c1
+## Photo behavior
 
-- Dedicated design tests: 29 passed.
-- Dedicated tests plus existing browser-independent view-model checks: 43 passed.
-- Source-only before/after validation: 11 pairs, 335 source anchors preserved in
-  HTML, Markdown bytes identical in every pair.
-- All module bytes outside `AtsPlainRenderer.render_html`: identical to the base.
-- Dedicated QA/test lint: passed.
-- Full suite: 985 passed, 2 skipped, 15 failed. The same baseline run has 956
-  passed, 2 skipped, and the exact same 15 failures; no new failures were found.
-- CLI self-test: failed in the rendering subsystem at the existing real-browser
-  AutoFit check. The earlier non-rendering checks ran; this is not a full pass.
+Actual-photo markup has no inline `onerror` handler. No-photo mode excludes the
+image and reserved slot; placeholders remain an explicit preview choice.
+Embedded-image QA enables photo selection explicitly. See
+[photo modes](RESUME_PHOTO_MODES.md) for the input contract.
 
-The local Chromium processes terminate with `socket() failed: Operation not
-permitted` in this execution environment. This prevents actual local PDF and
-visual verification, including the existing ATS Plain production test. No
-sandbox workaround is used. Visual completion remains unverified until the normal CI workflow produces inspectable PDFs/screenshots
-and its exact-head artifacts are reviewed. A CI job that fails before running
-steps provides no validation evidence and should be reported as a separate
-workflow-start blocker, without guessing its cause.
+## Recording results
 
-## Integration with the explicit photo contract
+Run the checks above for the revision being reviewed. Report source checks,
+real-browser results, and visual inspection separately. Earlier development-run
+counts and environment failures do not describe the current checkout.
 
-The conflict resolution is based on exact main
-`3135de74dfab74dea01b38f02cc0d35da41c42a8` (238 verified tracked blobs).
-It preserves the shared photo resolver, view-model factories, CLI defaults, and
-builder behavior introduced by PR #23. Only the ATS HTML method is replaced;
-every other byte of the current-main view-model module is identical.
-
-The updated actual-photo markup has no `onerror` handler or hidden placeholder.
-No-photo continues to exclude image/path/reserved-slot output, and placeholders
-remain an explicit preview choice. Embedded-image QA passes an enabled photo
-selection instead of relying on the former `photo=False` behavior.
-
-The user waived GitHub Actions review for the merge decision. This does not
-convert source-only validation into a PDF/visual pass; the browser and Actions
-limitations above remain disclosed. No workflow retries or gate changes were
-made for this integration.
-
-Integration validation on the resolved candidate:
-
-- ATS design + shared photo contract + browser-independent view-model checks:
-  90 passed.
-- Eleven source-only before/after fixture pairs: all 335 HTML source anchors
-  present; Markdown bytes unchanged against the current-main baseline.
-- Full candidate suite: 1,070 passed, 2 skipped, 15 failed. Exact current-main
-  baseline: 1,041 passed, 2 skipped, the identical 15 browser failures.
-- Dedicated lint and Python compilation passed; CLI self-test still fails only
-  at the known real-browser rendering check. PDF/visual validation is not claimed.
+Follow [release verification](RELEASE_VERIFICATION.md) to record the environment,
+failures, skips, and retained artifacts. A local pytest pass does not prove that
+remote CI ran or that every rendered page was visually approved.

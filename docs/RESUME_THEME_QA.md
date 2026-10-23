@@ -1,8 +1,8 @@
 # HTML resume theme visual QA
 
 The shared harness compares the same explicitly synthetic input against an
-isolated exact baseline and the working tree. It supports all eight HTML themes:
-`modern-navy`, `modern-corporate`, `classic-tech`, `silicon-clean`, `asu-dense`,
+isolated exact baseline and the working tree. It supports all nine HTML themes:
+`modern-navy`, `modern-corporate`, `modern-career`, `classic-tech`, `silicon-clean`, `asu-dense`,
 `sidebar-clean`, `academic-postgraduate`, and `engineering-sb2nov`.
 
 ```bash
@@ -10,7 +10,7 @@ BASE_SHA="<exact comparison commit>"
 BASE_DIR="$(mktemp -d)"
 git archive "$BASE_SHA" | tar -x -C "$BASE_DIR"
 printf '%s\n' "$BASE_SHA" > "$BASE_DIR/revision.txt"
-python -m pip install -e '.[all]' 'playwright==1.62.0'
+python -m pip install -e '.[render]' 'playwright==1.62.0'
 python -m playwright install --with-deps chromium
 # Install local CJK fonts (CI uses fonts-noto-cjk).
 python scripts/qa_modern_navy_layout.py --theme modern-corporate \
@@ -55,7 +55,10 @@ reading order, and photo choices before approving the exact candidate head.
 The visual workflow selects actual changed `themes/*.html`, rather than always
 rendering Navy. A shared harness/workflow change also exercises Navy for backward
 compatibility; a shared rendering-engine change exercises all supported themes.
-Artifacts are stored under `output/visual-regression/<theme>/` and uploaded even
+Affected themes run in separate matrix jobs (up to four concurrently), with fail-fast disabled.
+The pinned Playwright browser cache is reused; OS dependencies and CJK fonts are installed
+in each job. The exact archived baseline and all selected fixture checks are retained.
+Artifacts are stored under `output/visual-regression/<theme>/` and uploaded per theme even
 on failure. Theme authors should limit their PR to their theme, independent
 contract tests and documentation. The dedicated QA owner maintains this script
 and workflow to avoid concurrent infrastructure edits.
