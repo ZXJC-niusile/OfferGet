@@ -40,7 +40,7 @@ class OfferStrategyReporter:
         score_pct = round(matcher.final_match_score * 100, 1)
 
         def metric(value: float, field: str) -> str:
-            return "N/A" if field in unavailable_fields else f"{round(value * 100, 1)}%"
+            return "N/A" if field in unavailable_fields or field in matcher.unavailable_dimensions else f"{round(value * 100, 1)}%"
 
         score_text = metric(matcher.final_match_score, "score")
         raw_text = metric(matcher.raw_match_score, "raw_score")
@@ -472,7 +472,8 @@ class OfferStrategyReporter:
                 </div>
                 <div class="formula-card">
                     <div><strong><span data-lang="zh">算法公式:</span> <span data-lang="en">Formula:</span></strong></div>
-                    <code>Match Score = 0.6 * MustHave ({must_text}) + 0.2 * NiceToHave ({nice_text}) + 0.2 * HiddenSignal ({hidden_text})</code>
+                    <code>Base weights: MustHave 0.6 ({must_text}), NiceToHave 0.2 ({nice_text}), HiddenSignal 0.2 ({hidden_text})</code>
+                    <div><span data-lang="zh">仅对 JD 中存在的维度归一化；N/A 表示未评估。</span> <span data-lang="en">Weights are normalized over dimensions present in the JD; N/A means not assessed.</span></div>
                     <div style="margin-top: 4px; font-size: 12px;"><span data-lang="zh">原始无扣罚分:</span> <span data-lang="en">Raw Match Score:</span> {raw_text} {' | ⚠️ 触发一票否决扣罚' if matcher.is_hard_vetoed else ''}</div>
                 </div>
             </div>
@@ -911,6 +912,12 @@ class OfferStrategyReporter:
 
     def _build_probability_html(self, pred: PredictionResult, chart_svg: str, *, age_available: bool = True) -> str:
         fc = pred.probability_forecast
+        if fc.base_max_prob is None or fc.estimate_status == "unavailable":
+            return ('<div class="item-box"><strong><span data-lang="zh">拿面概率：无法估计</span> '
+                    '<span data-lang="en">Interview probability: unavailable</span></strong><p>'
+                    '<span data-lang="zh">缺少经过校准的招聘结果数据；匹配分不是成功概率。</span> '
+                    '<span data-lang="en">No calibrated recruitment outcome data is available; match scores are not success probabilities.</span>'
+                    '</p></div>')
         age_text = str(fc.listing_age_days) if age_available else "N/A"
         decay_text = f"{fc.age_decay_multiplier}x" if age_available else "N/A"
         age_warning = ""
@@ -931,6 +938,7 @@ class OfferStrategyReporter:
                 <div style="font-size: 13px; color: #94a3b8;"><span data-lang="zh">战略投递指导</span> <span class="en-label" data-lang="en">/ Strategy Summary</span></div>
                 <div style="font-size: 14px; margin-top: 6px; line-height: 1.7; color: #f1f5f9;"><span data-lang="zh">{_esc(fc.strategic_summary)}</span> <span data-lang="en">{_esc(fc.strategic_summary)}</span></div>
                 <div style="margin-top: 12px; font-size: 12px; color: #a5b4fc;">
+                    <span data-lang="zh">外部提供的估计，未经本工具校准。</span> <span data-lang="en">Externally supplied estimate; not calibrated by OfferGet.</span><br>
                     <strong><span data-lang="zh">预估拿面概率:</span> <span data-lang="en">Estimated Probability:</span></strong> {round(fc.base_max_prob, 1)}% • <strong><span data-lang="zh">挂出时效调整:</span> <span data-lang="en">Listing Age Adjustment:</span></strong> {age_text} <span data-lang="zh">天</span> <span data-lang="en">Days</span> (<span data-lang="zh">衰减乘数:</span> <span data-lang="en">Decay Multiplier:</span> {decay_text})
                 </div>
             </div>

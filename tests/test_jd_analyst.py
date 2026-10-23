@@ -255,7 +255,7 @@ class TestJDMatcher(unittest.TestCase):
         self.assertAlmostEqual(result.final_match_score, 0.90, places=2)
 
     def test_single_item_scores(self):
-        """Test 1.0 (Matched with metrics), 0.5 (insufficient evidence or expression gap), 0.0 (unmatched)."""
+        """Practice needs actions and outcomes; numbers alone are insufficient."""
         jd = DecodedJD(
             raw_text="sample",
             job_title="LLM Infra",
@@ -266,6 +266,9 @@ class TestJDMatcher(unittest.TestCase):
                 CoreSkill(name="DeepSpeed", category="framework", importance="must_have", domain="训练"),
                 CoreSkill(name="Megatron-LM", category="framework", importance="must_have", domain="训练"),
                 CoreSkill(name="Rust", category="language", importance="must_have", domain="语言"),
+                CoreSkill(name="Python", category="language", importance="must_have", domain="语言"),
+                CoreSkill(name="Java", category="language", importance="must_have", domain="语言"),
+                CoreSkill(name="Go", category="language", importance="must_have", domain="语言"),
             ],
         )
 
@@ -275,6 +278,9 @@ class TestJDMatcher(unittest.TestCase):
                 "使用 vLLM 部署千亿模型，并发吞吐提升 3x，首字延迟降低 45%。",
                 "使用 DeepSpeed 进行模型微调训练。",
                 "参与 PyTorch FSDP 训练集群优化。",
+                "负责使用 Python 开发报表工具，已交付业务团队采用。",
+                "Java 99%。",
+                "负责使用 Django 开发接口服务并交付。",
             ],
         )
 
@@ -292,6 +298,14 @@ class TestJDMatcher(unittest.TestCase):
 
         self.assertEqual(gap_map["技能-Rust"].score, 0.0)
         self.assertEqual(gap_map["技能-Rust"].state, GapState.REAL_GAP)
+        self.assertEqual(gap_map["技能-Python"].state, GapState.MATCHED)
+        self.assertEqual(gap_map["技能-Java"].state, GapState.INSUFFICIENT_EVIDENCE)
+        self.assertNotIn("显存", gap_map["技能-Java"].actionable_advice)
+        self.assertEqual(gap_map["技能-Go"].state, GapState.REAL_GAP)
+        actual_go = self.matcher.match(jd, CandidateProfile(
+            skills=["Go"], project_descriptions=["负责使用 Go 开发接口服务并交付。"],
+        ))
+        self.assertEqual(next(g for g in actual_go.gap_matrix if g.requirement_name == "技能-Go").state, GapState.MATCHED)
 
     def test_hard_threshold_veto_rule(self):
         """Test hard threshold veto on degree and experience years."""
@@ -578,7 +592,7 @@ class TestPredictor(unittest.TestCase):
         self.pipeline = JDPredictor()
 
     def test_probability_calculation_channels(self):
-        """Test channel multiplier differences (Internal referral vs Cold application)."""
+        """Uncalibrated scores must not generate outcome probabilities or channel odds."""
         matcher_high = MatcherResult(
             must_have_score=1.0,
             nice_to_have_score=1.0,
@@ -589,24 +603,16 @@ class TestPredictor(unittest.TestCase):
         )
 
         forecast = self.calc.calculate(matcher_high, listing_age_days=10)
-        self.assertEqual(forecast.base_min_prob, 60.0)
-        self.assertEqual(forecast.base_max_prob, 85.0)
-        self.assertEqual(forecast.age_decay_multiplier, 1.0)
+        self.assertIsNone(forecast.base_min_prob)
+        self.assertIsNone(forecast.base_max_prob)
+        self.assertIsNone(forecast.age_decay_multiplier)
         self.assertFalse(forecast.is_ghost_job_risk)
-
-        channels = forecast.channel_forecasts
-        internal = channels[ChannelType.INTERNAL_REFERRAL.value]
-        cold = channels[ChannelType.COLD_APPLICATION.value]
-        recruiter = channels[ChannelType.RECRUITER_DIRECT.value]
-
-        self.assertGreater(internal.min_prob, 80.0)
-        self.assertLessEqual(internal.max_prob, 96.0)
-        self.assertAlmostEqual(cold.min_prob, 18.0, delta=1.0)
-        self.assertAlmostEqual(cold.max_prob, 25.5, delta=1.0)
-        self.assertGreater(recruiter.min_prob, cold.max_prob)
+        self.assertEqual(forecast.channel_forecasts, {})
+        self.assertEqual(forecast.estimate_status, "unavailable")
+        self.assertNotIn("%", forecast.strategic_summary)
 
     def test_listing_age_decay_and_ghost_job(self):
-        """Test listing age decay and ghost job trigger (> 60 days)."""
+        """Posting age prompts confirmation without asserting ghost jobs or decay factors."""
         matcher_mid = MatcherResult(
             must_have_score=0.7,
             nice_to_have_score=0.7,
@@ -618,21 +624,16 @@ class TestPredictor(unittest.TestCase):
 
         # Fresh job (5 days)
         fc_fresh = self.calc.calculate(matcher_mid, listing_age_days=5)
-        self.assertEqual(fc_fresh.age_decay_multiplier, 1.1)
+        self.assertIsNone(fc_fresh.age_decay_multiplier)
         self.assertFalse(fc_fresh.is_ghost_job_risk)
-
-        # Ghost job (75 days)
-        fc_ghost = self.calc.calculate(matcher_mid, listing_age_days=75)
-        self.assertEqual(fc_ghost.age_decay_multiplier, 0.4)
-        self.assertTrue(fc_ghost.is_ghost_job_risk)
-        self.assertIn("幽灵职位", fc_ghost.strategic_summary)
-
-        internal_fresh = fc_fresh.channel_forecasts[ChannelType.INTERNAL_REFERRAL.value]
-        internal_ghost = fc_ghost.channel_forecasts[ChannelType.INTERNAL_REFERRAL.value]
-        self.assertGreater(internal_fresh.min_prob, internal_ghost.min_prob)
+        fc_old = self.calc.calculate(matcher_mid, listing_age_days=75)
+        self.assertIsNone(fc_old.base_max_prob)
+        self.assertFalse(fc_old.is_ghost_job_risk)
+        self.assertIn("确认是否仍在招聘", fc_old.strategic_summary)
+        self.assertIn("不能证明", fc_old.strategic_summary)
 
     def test_hard_veto_suppression(self):
-        """Hard veto should suppress base probabilities to [5%, 15%]."""
+        """A hard veto prompts review without fabricating a low success probability."""
         matcher_vetoed = MatcherResult(
             must_have_score=0.9,
             nice_to_have_score=0.9,
@@ -644,10 +645,10 @@ class TestPredictor(unittest.TestCase):
         )
 
         fc = self.calc.calculate(matcher_vetoed, listing_age_days=15)
-        self.assertEqual(fc.base_min_prob, 5.0)
-        self.assertEqual(fc.base_max_prob, 15.0)
-        cold = fc.channel_forecasts[ChannelType.COLD_APPLICATION.value]
-        self.assertLessEqual(cold.max_prob, 10.0)
+        self.assertIsNone(fc.base_min_prob)
+        self.assertIsNone(fc.base_max_prob)
+        self.assertEqual(fc.channel_forecasts, {})
+        self.assertIn("硬门槛", fc.strategic_summary)
 
     def test_top20_interview_questions_structure(self):
         """Test that Top 20 predictor returns exactly 20 questions, 4 categories x 5 questions."""
@@ -701,7 +702,8 @@ class TestPredictor(unittest.TestCase):
 
         pred_res = self.pipeline.predict(jd, matcher, listing_age_days=10)
         self.assertEqual(len(pred_res.top20_questions), 20)
-        self.assertIn("INTERNAL_REFERRAL", pred_res.probability_forecast.channel_forecasts)
+        self.assertEqual(pred_res.probability_forecast.channel_forecasts, {})
+        self.assertIsNone(pred_res.probability_forecast.base_max_prob)
 
 
 # ============================================================================

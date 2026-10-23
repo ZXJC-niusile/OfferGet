@@ -5,12 +5,13 @@ OfferGet native JD decision and strategic application evaluation engine.
 Provides:
 1. DecodeBeforeMatchGate: Pipeline enforcement ensuring no un-decoded raw JD can bypass semantic decomposition.
 2. ShouldIApplyEvaluator: 5-dimension Go/No-Go decision framework, ⭐ 1-5 rating, mandatory 3-pros/3-cons,
-   channel-adjusted interview probability intervals, and 6-week structured action plan.
+   evidence boundaries and a 6-week structured action plan.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import math
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -20,7 +21,6 @@ from core.jd_analyst.models import (
     MatcherResult,
 )
 from core.jd_analyst.decoder import JDDecoder
-from core.jd_analyst.predictor import InterviewProbabilityCalculator
 
 
 class UnverifiedJDPipelineError(ValueError):
@@ -68,12 +68,16 @@ class ShouldIApplyReport:
     verdict_description: str
     pros: List[str]                           # 必须提供 3 条具体正向理由
     cons: List[str]                           # 必须提供 3 条具体负面/风险理由（绝不粉饰）
-    probability_range: Tuple[float, float]    # 拿面概率综合区间 (min%, max%)
+    probability_range: Optional[Tuple[float, float]]    # 拿面概率综合区间 (min%, max%)
     probability_breakdown: Dict[str, Tuple[float, float]] # 各渠道概率区间
     next_action: NextAction
     action_advice: str
-    dimension_scores: Dict[str, float]        # match, trajectory, downside, comp, opp_cost
+    dimension_scores: Dict[str, Optional[float]]
     six_week_plan: SixWeekActionPlan
+    unavailable_dimensions: List[str] = field(default_factory=list)
+    dimension_weights: Dict[str, float] = field(default_factory=dict)
+    assessment_status: str = "complete"
+    next_questions: List[str] = field(default_factory=list)
 
 
 # ============================================================================
@@ -168,19 +172,34 @@ class ShouldIApplyEvaluator:
         dim_downside = self._score_downside_risk(decoded_jd, matcher_result)
 
         # 4. Dimension 4: Compensation / Hard Constraints (15%)
-        dim_comp = float(user_constraints.get("compensation_fit", 0.7))
+        def constraint_score(key: str) -> Optional[float]:
+            value = user_constraints.get(key)
+            if value is None:
+                return None
+            if isinstance(value, bool):
+                raise ValueError(f"{key} must be a number between 0 and 1")
+            score = float(value)
+            if not math.isfinite(score) or not 0 <= score <= 1:
+                raise ValueError(f"{key} must be a number between 0 and 1")
+            return score
+
+        dim_comp = constraint_score("compensation_fit")
 
         # 5. Dimension 5: Opportunity Cost & Timing (10%)
-        dim_opp = float(user_constraints.get("opportunity_cost_fit", 0.7))
+        dim_opp = constraint_score("opportunity_cost_fit")
 
         # Composite Score
-        composite = (
-            self.WEIGHT_MATCH * dim_match
-            + self.WEIGHT_TRAJECTORY * dim_trajectory
-            + self.WEIGHT_DOWNSIDE * dim_downside
-            + self.WEIGHT_COMPENSATION * dim_comp
-            + self.WEIGHT_OPPORTUNITY_COST * dim_opp
-        )
+        dimensions = {
+            "match_quality": dim_match, "career_trajectory": dim_trajectory,
+            "downside_risk": dim_downside, "compensation": dim_comp,
+            "opportunity_cost": dim_opp,
+        }
+        weights = dict(zip(dimensions, (0.30, 0.25, 0.20, 0.15, 0.10)))
+        available_weight = sum(weights[k] for k, v in dimensions.items() if v is not None)
+        normalized_weights = {k: weights[k] / available_weight if v is not None else 0.0
+                              for k, v in dimensions.items()}
+        unavailable = [k for k, v in dimensions.items() if v is None]
+        composite = sum(normalized_weights[k] * v for k, v in dimensions.items() if v is not None)
         composite = round(min(max(composite, 0.0), 1.0), 3)
 
         # Map to Stars (1 ~ 5)
@@ -216,25 +235,21 @@ class ShouldIApplyEvaluator:
         # Generate 3 Cons (Mandatory, never sugarcoat)
         cons = self._generate_cons(decoded_jd, candidate, matcher_result, stars)
 
-        # Calculate Channel Probabilities
-        prob_calc = InterviewProbabilityCalculator()
-        prob_forecast = prob_calc.calculate(matcher_result)
-
-        prob_range = (prob_forecast.base_min_prob, prob_forecast.base_max_prob)
-        breakdown = {
-            "cold_apply": (
-                round(prob_forecast.base_min_prob * 0.4, 1),
-                round(prob_forecast.base_max_prob * 0.4, 1),
-            ),
-            "tailored_apply": prob_range,
-            "referral": (
-                min(round(prob_forecast.base_min_prob * 1.8, 1), 95.0),
-                min(round(prob_forecast.base_max_prob * 1.8, 1), 99.0),
-            ),
-        }
+        # Match scores do not establish outcome or channel probabilities.
+        prob_range = None
+        breakdown = {}  # Unknown channel outcomes are not synthetic probability ranges.
 
         # Next Action Recommendation
-        next_action, action_advice = self._determine_next_action(verdict, matcher_result, breakdown)
+        next_action, action_advice = self._determine_next_action(verdict)
+        next_questions = []
+        if dim_comp is None:
+            next_questions.append("岗位薪酬、地点等硬约束是否符合你的最低要求？")
+        if dim_opp is None:
+            next_questions.append("与现有机会相比，这个岗位的准备成本和时间安排是否可接受？")
+        if unavailable:
+            title += "（基于已知条件，待确认）"
+            desc = "当前评分仅覆盖已知维度，缺失条件未计分；无法据此确定完整投递优先级。"
+            action_advice = "先确认缺失的薪酬/硬约束与机会成本，再结合材料建议决定是否投递。"
 
         # 6-Week Action Plan
         six_week_plan = self._generate_six_week_plan(verdict, matcher_result, decoded_jd)
@@ -259,6 +274,10 @@ class ShouldIApplyEvaluator:
                 "opportunity_cost": dim_opp,
             },
             six_week_plan=six_week_plan,
+            unavailable_dimensions=unavailable,
+            dimension_weights=normalized_weights,
+            assessment_status="provisional" if unavailable else "complete",
+            next_questions=next_questions,
         )
 
     def _score_career_trajectory(
@@ -380,8 +399,6 @@ class ShouldIApplyEvaluator:
     def _determine_next_action(
         self,
         verdict: DecisionVerdict,
-        matcher: MatcherResult,
-        breakdown: Dict[str, Tuple[float, float]],
     ) -> Tuple[NextAction, str]:
         """Determines the single most strategic next action."""
         if verdict == DecisionVerdict.NO_GO:
@@ -399,16 +416,9 @@ class ShouldIApplyEvaluator:
                 NextAction.TAILOR_FIRST,
                 "必须先定制简历再投递。修正简历中的表达缺口，补全量化指标基线，防范 ATS 自动过滤。",
             )
-        # For CONDITIONAL_GO and STRONG_GO:
-        referral_min, referral_max = breakdown.get("referral", (0.0, 0.0))
-        if referral_max >= 70.0:
-            return (
-                NextAction.REFERRAL_FIRST,
-                "强烈建议通过在职校友或前同事走内部推荐通道，内推可将拿面概率提升至最高区间。",
-            )
         return (
             NextAction.DIRECT_APPLY,
-            "材料准备充分，可直接投递；若有内推资源则优先内推，投递后 48 小时内准备答辩追问预案。",
+            "核对证据与硬门槛后可投递；如有现成联系人，可先确认岗位和流程，不推断渠道胜率。",
         )
 
     def _generate_six_week_plan(

@@ -4,6 +4,7 @@ JD Matcher: Weighted matching with hard threshold veto, 5-state gap matrix, and 
 
 import re
 from typing import List, Dict, Set, Tuple
+from core.registry import AliasRegistry
 from .models import (
     DecodedJD,
     CandidateProfile,
@@ -21,7 +22,7 @@ from .models import (
 class JDMatcher:
     """
     Evaluates Candidate alignment against a Decoded JD:
-    - Match Score = 0.6 * MustHaveScore + 0.2 * NiceToHaveScore + 0.2 * HiddenSignalFit
+    - Base dimension weights are 0.6 / 0.2 / 0.2; absent JD dimensions are excluded and the remaining weights are normalized.
     - Single item score: 1.0 (Fully matched), 0.5 (Partially matched / adjacent), 0.0 (Unmatched)
     - Hard threshold veto rule (degree, years of experience, etc.) with automatic penalty and breakthrough advice
     - 5-State Gap Matrix:
@@ -128,9 +129,21 @@ class JDMatcher:
         # 4. Score Hidden Signals & Culture Fit
         hidden_score, signal_gaps = self._evaluate_hidden_signals(jd.implicit_signals, candidate)
 
-        # 5. Calculate Weighted Score
-        # Match Score = 0.6 * MustHaveScore + 0.2 * NiceToHaveScore + 0.2 * HiddenSignalFit
-        raw_match_score = round(0.6 * must_have_score + 0.2 * nice_to_have_score + 0.2 * hidden_score, 4)
+        # Missing JD dimensions are unavailable, not successes or failures.
+        dimensions = {
+            "must_have": (0.6, must_have_score, bool(must_scores)),
+            "nice_have": (0.2, nice_to_have_score, bool(nice_have_items)),
+            "hidden_fit": (0.2, hidden_score, bool(jd.implicit_signals)),
+        }
+        total_weight = sum(weight for weight, _, present in dimensions.values() if present)
+        dimension_weights = {
+            name: weight / total_weight
+            for name, (weight, _, present) in dimensions.items() if present
+        }
+        raw_match_score = round(sum(
+            dimension_weights.get(name, 0.0) * value
+            for name, (_, value, _) in dimensions.items()
+        ), 4)
 
         # 6. Apply Hard Veto Penalty
         if is_vetoed:
@@ -170,6 +183,8 @@ class JDMatcher:
             insufficient_evidence_count=insuff_count,
             real_gap_count=real_count,
             to_be_confirmed_count=tbc_count,
+            dimension_weights=dimension_weights,
+            unavailable_dimensions=[name for name, (_, _, present) in dimensions.items() if not present],
         )
 
     def _check_hard_thresholds(
@@ -381,27 +396,25 @@ class JDMatcher:
             + "。\n".join(candidate.project_descriptions)
         ).lower()
 
-        # Extract numerical metrics from candidate text
-        has_quant_metrics = bool(re.search(r"(\d+%\s*|\d+x\s*|\d+\s*(?:qps|ms|token|万|亿|gb|tb|卡))", cand_text))
-
         for sk in skills:
             sk_lower = sk.name.lower()
-            exact_match = sk_lower in cand_text or any(sk_lower == cs.lower() for cs in candidate.skills)
+            exact_match = AliasRegistry.claim_matches(sk.name, cand_text)
 
             if exact_match:
                 # Check if evidence has metrics
                 # Find the sentence containing the skill
                 mention_sentences = [
-                    s.strip() for s in re.split(r"[。\n;；]", cand_text) if sk_lower in s.strip()
+                    s.strip() for s in re.split(r"[。\n;；]", cand_text) if AliasRegistry.claim_matches(sk.name, s)
                 ]
-                metric_sentences = [
+                evidence_sentences = [
                     sent for sent in mention_sentences
-                    if re.search(r"(\d+%\s*|\d+x\s*|\d+\s*(?:qps|ms|token|万|亿|gb|tb|卡))", sent)
+                    if re.search(r"开发|设计|实现|搭建|部署|交付|维护|负责|编写|完成|修复|优化|建设|上线|build|built|develop|implement|deploy|deliver|maintain", sent)
+                    and re.search(r"\d+%|\d+x|\d+\s*(?:qps|ms|token|万|亿|gb|tb|卡)|上线|交付|验收|采用|发布|合并|通过|报告|文档|系统|平台|服务|工具|接口|流程|测试|deployed|delivered|released|merged|adopted|service|report|test", sent)
                 ]
-                has_sentence_metric = bool(metric_sentences)
-                chosen_sent = metric_sentences[0] if metric_sentences else (mention_sentences[0] if mention_sentences else "")
+                has_contextual_evidence = bool(evidence_sentences)
+                chosen_sent = evidence_sentences[0] if evidence_sentences else (mention_sentences[0] if mention_sentences else "")
 
-                if has_sentence_metric:
+                if has_contextual_evidence:
                     # Fully matched
                     scores.append(1.0)
                     gaps.append(
@@ -411,13 +424,13 @@ class JDMatcher:
                             importance=sk.importance,
                             state=GapState.MATCHED,
                             score=1.0,
-                            candidate_evidence=f"简历中明确提及【{sk.name}】并具备量化落地上下文: '{chosen_sent[:60]}...'",
-                            gap_explanation="技能与项目战功高度契合，证据充分",
-                            actionable_advice="在面试中保持原述，进一步准备深挖架构与选型思考细节",
+                            candidate_evidence=f"简历中提及【{sk.name}】并包含具体动作与结果/交付物: '{chosen_sent[:120]}'",
+                            gap_explanation="当前材料包含实践上下文；属于材料支持，尚不等于外部核验",
+                            actionable_advice="保留真实动作与交付物，准备说明个人负责范围及可核验来源；有可靠指标时再补充",
                         )
                     )
                 else:
-                    # Mentioned but lacking quantifiable metrics -> INSUFFICIENT_EVIDENCE
+                    # A keyword or number alone is not evidence of practice.
                     scores.append(0.5)
                     gaps.append(
                         GapItem(
@@ -426,9 +439,9 @@ class JDMatcher:
                             importance=sk.importance,
                             state=GapState.INSUFFICIENT_EVIDENCE,
                             score=0.5,
-                            candidate_evidence=f"简历中提及【{sk.name}】，但缺少量化业务指标/参数规模/性能数据",
-                            gap_explanation="仅有技能罗列或泛泛描述，缺少可验证的数字证据与业务ROI支撑",
-                            actionable_advice=f"采用 STAR 原则补充数据：如【使用 {sk.name} 重构训练/推理流水线，吞吐提升 XX%，降低显存占用 XX GB】",
+                            candidate_evidence=f"简历中提及【{sk.name}】，但未识别到具体动作与结果/交付物",
+                            gap_explanation="需要确认实践场景及个人贡献；缺少数字本身不构成能力缺口",
+                            actionable_advice=f"请说明在哪项真实经历中使用 {sk.name}、本人做了什么、交付了什么，以及可核验来源；没有可靠数字时保留定性结果",
                         )
                     )
                 continue
@@ -437,7 +450,7 @@ class JDMatcher:
             adjacent_matches = []
             if sk_lower in self.ADJACENT_SKILLS:
                 for adj in self.ADJACENT_SKILLS[sk_lower]:
-                    if adj in cand_text:
+                    if AliasRegistry.claim_matches(adj, cand_text):
                         adjacent_matches.append(adj)
 
             if adjacent_matches:
@@ -458,7 +471,6 @@ class JDMatcher:
                 continue
 
             # Check if domain is somewhat touched
-            domain_terms = [t for t in cand_text.split() if len(t) >= 3]
             is_possibly_covered = any(word in cand_text for word in ["算法", "模型", "深度学习", "训练", "推理"])
 
             if is_possibly_covered and sk.category in ["framework", "tool"]:
@@ -561,7 +573,7 @@ class JDMatcher:
     ) -> Tuple[float, List[GapItem]]:
         """Evaluate candidate fit for implicit signals / big tech jargon."""
         if not signals:
-            return 1.0, []
+            return 0.0, []
 
         scores: List[float] = []
         gaps: List[GapItem] = []

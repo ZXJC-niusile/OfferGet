@@ -106,11 +106,21 @@ class TestShouldIApplyEvaluator(unittest.TestCase):
         for con in report.cons:
             self.assertTrue(len(con) > 5)
 
-        # Probabilities
-        self.assertGreaterEqual(report.probability_range[1], report.probability_range[0])
-        self.assertIn("cold_apply", report.probability_breakdown)
-        self.assertIn("tailored_apply", report.probability_breakdown)
-        self.assertIn("referral", report.probability_breakdown)
+        # Missing outcome data is not a synthetic channel forecast.
+        self.assertIsNone(report.probability_range)
+        self.assertEqual(report.probability_breakdown, {})
+        self.assertIsNone(report.dimension_scores["compensation"])
+        self.assertIsNone(report.dimension_scores["opportunity_cost"])
+        self.assertEqual(report.assessment_status, "provisional")
+        self.assertAlmostEqual(sum(report.dimension_weights.values()), 1.0)
+        complete = self.evaluator.evaluate(self.decoded_jd, self.candidate, matcher_result,
+                                          {"compensation_fit": 0, "opportunity_cost_fit": 1})
+        self.assertEqual(complete.assessment_status, "complete")
+        self.assertEqual(complete.unavailable_dimensions, [])
+        self.assertEqual(complete.dimension_scores["compensation"], 0)
+        with self.assertRaises(ValueError):
+            self.evaluator.evaluate(self.decoded_jd, self.candidate, matcher_result,
+                                    {"compensation_fit": float("nan")})
 
         # 6-week plan
         self.assertEqual(len(report.six_week_plan.weeks), 4)

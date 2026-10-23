@@ -286,7 +286,6 @@ class JDDecoder:
             (r"(\d+)[-~至到](\d+)\s*年(?:工作经验|经验)?", "range_years"),
             (r"(应届生|应届毕业生|202[4-7]届|无工作年限要求)", "fresh_grad"),
         ]
-        exp_found = False
         for pat, kind in exp_patterns:
             m = re.search(pat, text, re.IGNORECASE)
             if m:
@@ -300,7 +299,6 @@ class JDDecoder:
                             min_years=yrs,
                         )
                     )
-                    exp_found = True
                     break
                 elif kind == "range_years":
                     min_yrs = float(m.group(1))
@@ -312,7 +310,6 @@ class JDDecoder:
                             min_years=min_yrs,
                         )
                     )
-                    exp_found = True
                     break
                 elif kind == "fresh_grad":
                     thresholds.append(
@@ -323,7 +320,6 @@ class JDDecoder:
                             min_years=0.0,
                         )
                     )
-                    exp_found = True
                     break
 
         # Do not convert seniority wording into a numeric hard gate. If the JD
@@ -416,7 +412,6 @@ class JDDecoder:
         active_domains: set = set()
 
         # Split into requirements vs nice-to-have sections if possible
-        must_section = text
         nice_section = ""
         nice_match = re.search(r"(?:加分项|优先考虑|具备以下条件者优先|加分条件|Preferred|Nice to have)[\s：:]*([\s\S]*?)(?=(?:福利待遇|关于我们|$))", text, re.IGNORECASE)
         if nice_match:

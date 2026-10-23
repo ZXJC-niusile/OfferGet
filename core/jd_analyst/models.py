@@ -154,7 +154,7 @@ class MatcherResult:
     must_have_score: float
     nice_to_have_score: float
     hidden_signal_fit: float
-    raw_match_score: float  # 0.6 * must + 0.2 * nice + 0.2 * hidden
+    raw_match_score: float  # Weighted mean over dimensions actually present in the JD
     final_match_score: float
     is_hard_vetoed: bool
     hard_veto_reasons: List[str] = field(default_factory=list)
@@ -165,6 +165,8 @@ class MatcherResult:
     insufficient_evidence_count: int = 0
     real_gap_count: int = 0
     to_be_confirmed_count: int = 0
+    dimension_weights: Dict[str, float] = field(default_factory=dict)
+    unavailable_dimensions: List[str] = field(default_factory=list)
 
 
 class RedFlagType(str, Enum):
@@ -215,14 +217,16 @@ class ChannelProbability:
 
 @dataclass
 class ProbabilityForecast:
-    base_min_prob: float
-    base_max_prob: float
+    base_min_prob: Optional[float]
+    base_max_prob: Optional[float]
     listing_age_days: int
-    age_decay_multiplier: float
+    age_decay_multiplier: Optional[float]
     is_ghost_job_risk: bool
     channel_forecasts: Dict[str, ChannelProbability] = field(default_factory=dict)
     recommended_channel: str = ""
     strategic_summary: str = ""
+    estimate_status: str = "supplied"
+    estimate_basis: str = "Externally supplied estimate; calibration not verified by OfferGet."
 
 
 class QuestionCategory(str, Enum):
