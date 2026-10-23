@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for ApexResume Smart Auto-Fit Compaction Engine."""
+"""Unit tests for OfferGet Smart Auto-Fit Compaction Engine."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+import pytest
 
 MODULE_ROOT = Path(__file__).resolve().parent.parent
 if str(MODULE_ROOT) not in sys.path:
@@ -229,6 +230,7 @@ class TestAutoFitEngine(unittest.TestCase):
             Path(out_pdf).unlink(missing_ok=True)
 
 
+@pytest.mark.browser
 class TestAutoFitRealBrowserIntegration(unittest.TestCase):
     """Integration test suite executing against real Chrome/Edge browser when available."""
 

@@ -11,7 +11,6 @@ import os
 import sys
 
 from core.cli_helpers import (
-    load_json,
     load_profile,
     load_json_or_text,
     write_json,

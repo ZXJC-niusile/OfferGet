@@ -210,7 +210,6 @@ class ClaimExtractor:
             if not isinstance(exp, dict):
                 continue
             exp_company = exp.get("company", f"Org-{exp_idx}")
-            exp_role = exp.get("role") or exp.get("title", "")
             scope_desc = f"experience[{exp_idx}] ({exp_company})"
 
             for b_idx, b in enumerate(exp.get("bullets", [])):

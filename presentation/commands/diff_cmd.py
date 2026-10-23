@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from core.cli_helpers import (
-    load_json,
     load_profile,
     load_json_or_text,
     emit_json,

@@ -24,7 +24,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 try:
-    import docx
     from docx import Document
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
     from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT

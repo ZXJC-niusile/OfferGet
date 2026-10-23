@@ -433,7 +433,6 @@ class OfferNegotiator:
             or stock_data.get("exit_terms")
             or ""
         )
-        liquidity = str(stock_data.get("liquidity") or stock_data.get("liquidity_status") or "")
         total_pool_disclosed = stock_data.get("total_pool_disclosed", True)
 
         detected = False
@@ -735,7 +734,6 @@ class OfferNegotiator:
         company = str(evaluation_result.get("company", "目标企业"))
         comp = evaluation_result.get("total_compensation", {})
         current_base = float(comp.get("monthly_base", 0.0))
-        current_package = float(comp.get("total_annual_package", 0.0))
         detected_traps = evaluation_result.get("detected_traps", [])
 
         # Fallback profile from evaluation_result if not explicitly provided

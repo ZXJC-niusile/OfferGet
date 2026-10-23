@@ -53,7 +53,7 @@ def _run_smoke_checks(output_dir: Path):
     profile_data = load_fixture("candidate_profile.json")
     match_result = MatchService().match(decoded, profile_data)
     assert 0 <= match_result["overall_match_score"] <= 100, "Match score must be bounded"
-    print(f"      ✓ Match Matrix verified (Overall: {match_result['overall_match_score']}%, Interview Prob: {match_result['interview_prob']}%)")
+    print(f"      ✓ Match Matrix verified (Overall: {match_result['overall_match_score']}%, Interview Prob: {str(match_result['interview_prob']) + '%' if match_result['interview_prob'] is not None else 'N/A (no calibrated outcome data)'})")
 
     # 3. Test Report Generator & Bilingual Validator
     print("[4/11] Testing Report Generator & Bilingual Twin Validator ...")
@@ -145,7 +145,7 @@ def _run_smoke_checks(output_dir: Path):
 
     # Core-only checks do not depend on repository tests or optional renderers.
     print("[11/11] Testing Resume Audit & AutoFit CSS ...")
-    from core.audit import ResumeAuditor
+    from core.resume_auditor import ResumeAuditor
     from core.autofit import TUNING_LADDER, AutoFitEngine
     auditor = ResumeAuditor()
     auditor.check_metrics("synthetic", "4/5 (80%)", {
