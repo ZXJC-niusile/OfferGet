@@ -23,7 +23,6 @@ from core.cli_helpers import (
 )
 
 from services.academic_service import AcademicService
-from core.defense.simulator import DefenseSimulator
 
 
 def cmd_defense_simulate(args):

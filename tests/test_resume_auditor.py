@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for ApexResume Deterministic Verification & Anti-Inflation Audit Engine."""
+"""Unit tests for OfferGet Deterministic Verification & Anti-Inflation Audit Engine."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ MODULE_ROOT = Path(__file__).resolve().parent.parent
 if str(MODULE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODULE_ROOT))
 
-from core.audit import (
+from core.resume_auditor import (
     ResumeAuditor,
     Finding,
     ROLE_RANKS,

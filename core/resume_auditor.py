@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ApexResume Deterministic Verification & Anti-Inflation Audit Engine.
+"""OfferGet Deterministic Verification & Anti-Inflation Audit Engine.
 
 Performs mathematical recalculation, role strength gating, verb hierarchy checking,
 data depth & outcome evidence tiering, static HTML quality inspection, and
@@ -661,12 +661,12 @@ if __name__ == "__main__":
         auditor.audit_html_file(html_arg)
     if source_arg:
         if not html_arg:
-            print("[ApexResume ERROR] --source requires --html to be specified for sandbox verification.")
+            print("[OfferGet ERROR] --source requires --html to be specified for sandbox verification.")
             sys.exit(1)
         auditor.audit_source_sandbox(html_arg, source_arg)
 
     res = auditor.summary()
-    print("\n[ApexResume Audit Summary]")
+    print("\n[OfferGet Audit Summary]")
     print(f"Passed: {res['passed']}")
     print(f"Critical: {res['critical_count']} | Warning: {res['warning_count']} | Info: {res['info_count']}")
 

@@ -680,7 +680,7 @@ class QualityRuleRegistry:
     ]
 
     # -------------------------------------------------------------------------
-    # ApexResume Decision, Depth, and Evidence Standards
+    # OfferGet Decision, Depth, and Evidence Standards
     # -------------------------------------------------------------------------
     DECISION_PLANNING_KEYWORDS: List[str] = [
         "选型", "技术路线", "架构设计", "方案决策", "规划", "制定", "技术决策",

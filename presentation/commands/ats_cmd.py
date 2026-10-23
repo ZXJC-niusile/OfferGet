@@ -12,7 +12,6 @@ import sys
 
 from core.cli_helpers import (
     read_text,
-    load_json,
     load_profile,
     write_json,
     emit_json,

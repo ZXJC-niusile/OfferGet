@@ -283,7 +283,6 @@ class AcademicExporter:
         photo_reference: Optional[str] = None,
     ) -> str:
         """Generate a restrained, single-column native Typst resume."""
-        import json
         from html import unescape
         vm = self._resolve_view_model(profile, reserve_photo=reserve_photo, photo_path=photo_path, photo_mode=photo_mode)
         raw = self._raw_field
@@ -415,7 +414,6 @@ class AcademicExporter:
         raw = self._raw_field
         name = esc(vm.raw_name or unescape(vm.name) or ("Candidate" if en else "候选人"))
         title = esc(vm.raw_title or unescape(vm.title))
-        photo = vm.photo_path
         need_photo = vm.reserve_photo or bool(vm.photo_data_uri)
         image = ""
         if need_photo:

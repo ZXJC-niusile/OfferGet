@@ -283,7 +283,7 @@ class TestQualityRuleRegistry(unittest.TestCase):
         self.assertTrue(QualityRuleRegistry.is_forbidden_buzzword("世界一流"))
     def test_05_unified_constants_and_accessors(self):
         """Verify newly unified constants, accessors, and type safety."""
-        # ApexResume standards
+        # OfferGet standards
         depths = QualityRuleRegistry.get_data_depth_levels()
         self.assertIn("D0", depths)
         self.assertIn("D4", depths)
@@ -375,6 +375,8 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         # METRIC_TYPE_TO_TOPICS and NON_METRIC_TECH_PATTERNS match MetricPatternRegistry
         self.assertIs(fact_guard.METRIC_TYPE_TO_TOPICS, MetricPatternRegistry.METRIC_TYPE_TO_TOPICS)
         self.assertIs(fact_guard.NON_METRIC_TECH_PATTERNS, MetricPatternRegistry.NON_METRIC_TECH_PATTERNS)
+        self.assertIs(fact_guard.INFLATION_PATTERNS, QualityRuleRegistry.INFLATION_PATTERNS)
+        self.assertIs(fact_guard.FORBIDDEN_BUZZWORDS, QualityRuleRegistry.FORBIDDEN_BUZZWORDS)
 
         # _extract_raw_metrics_from_text delegates to MetricPatternRegistry
         metrics = guard._extract_raw_metrics_from_text("年均节省云算力开销 3800 万元")
@@ -383,13 +385,14 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertEqual(metrics[0]["type"], "currency")
 
     def test_05_apex_audit_and_validator_coverage_check(self):
-        """Verify full SSOT identity and parity across QualityRuleRegistry, ApexResume, Validator, ATS, and Baoyan."""
+        """Verify full SSOT identity and parity across QualityRuleRegistry, OfferGet, Validator, ATS, and Baoyan."""
         import core.resume_auditor as apex_audit
         import core.validator as validator
         import core.ats_checker as ats_checker
         import core.baoyan_auditor as baoyan_auditor
+        import core.asu_modeler as asu_modeler
 
-        # 1. ApexResume SSOT identity check
+        # 1. OfferGet SSOT identity check
         self.assertIs(apex_audit.ROLE_RANKS, QualityRuleRegistry.ROLE_RANKS)
         self.assertIs(apex_audit.VERB_HIERARCHY, QualityRuleRegistry.VERB_HIERARCHY)
         self.assertEqual(apex_audit.STRONG_VERBS_THRESHOLD, QualityRuleRegistry.STRONG_VERBS_THRESHOLD)
@@ -406,6 +409,16 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertIs(ats_checker.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
         self.assertIs(ats_checker.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
         self.assertIs(ats_checker.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
+        # Consumer aliases from the removed lexicon parity test are owned here.
+        self.assertIs(ats_checker.STRONG_ACTION_VERBS_ZH, QualityRuleRegistry.STRONG_ACTION_VERBS_ZH)
+        self.assertIs(ats_checker.STRONG_ACTION_VERBS_EN, QualityRuleRegistry.STRONG_ACTION_VERBS_EN)
+        self.assertIs(ats_checker.WEAK_ACTION_VERBS_ZH, QualityRuleRegistry.WEAK_ACTION_VERBS_ZH)
+        self.assertIs(ats_checker.WEAK_ACTION_VERBS_EN, QualityRuleRegistry.WEAK_ACTION_VERBS_EN)
+        self.assertIs(ats_checker.QUANTIFIED_PATTERNS, MetricPatternRegistry.QUANTIFIED_PATTERNS)
+        self.assertIs(ats_checker.AI_BUZZWORDS_LEXICON, QualityRuleRegistry.AI_BUZZWORDS_LEXICON)
+        self.assertIs(asu_modeler.INFLATION_PATTERNS, QualityRuleRegistry.INFLATION_PATTERNS)
+        self.assertIs(asu_modeler.ROLE_RANKS, QualityRuleRegistry.ROLE_RANKS)
+        self.assertIs(asu_modeler.VERB_HIERARCHY, QualityRuleRegistry.VERB_HIERARCHY)
 
         # 4. Baoyan Auditor SSOT identity check
         self.assertIs(baoyan_auditor.SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)

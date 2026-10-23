@@ -38,13 +38,7 @@ def get_template_path(name: str = "offer_strategy.html") -> Path:
 
 def get_theme_dir() -> Path:
     """Returns the resume themes directory."""
-    root_themes = (get_project_root() / "themes").resolve()
-    if root_themes.is_dir():
-        return root_themes
-    legacy = (get_project_root() / "ApexResume" / "themes").resolve()
-    if legacy.is_dir():
-        return legacy
-    return root_themes
+    return (get_project_root() / "themes").resolve()
 
 
 def get_theme_path(theme_name: str) -> Path:

@@ -344,10 +344,8 @@ class CourseworkGridAdapter:
         # allowing 2 natural lines instead of forcing 3 columns and abbreviating!
         if max_char_len > 20 or avg_char_len > 16:
             col_spec = "repeat(2, 1fr)"
-            min_col_w = "260px"
         else:
             col_spec = "repeat(3, 1fr)"
-            min_col_w = "180px"
 
         item_spans = []
         for c in clean_items:

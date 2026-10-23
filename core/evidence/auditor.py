@@ -74,7 +74,6 @@ class EvidenceAuditor:
 
         # 1. Build Sources
         sources = self._build_sources()
-        source_map = {s.id: s for s in sources}
         primary_source_id = sources[0].id if sources else "S-001"
 
         # 2. Extract Claims

@@ -702,7 +702,6 @@ class PostInterviewDebriefEngine:
                     metrics_to_memorize.append(f"参数口径核实: {num}（原问题: {turn.interviewer_question[:25]}...）")
 
             if profile_evidence_index:
-                verified_skills = set(profile_evidence_index.get("verified_skills", []))
                 for word in ["架构重构", "全链路压测", "自研内核", "百亿级", "零故障"]:
                     if word in turn.candidate_answer and word not in profile_evidence_index.get("keywords", []):
                         turn.metric_anomalies.append(f"词汇「{word}」在底层经历底稿中缺乏硬性支撑")

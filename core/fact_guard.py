@@ -1475,7 +1475,6 @@ class FactVerificationGuard:
         # 1. Numerical metrics verification
         metrics = self._extract_raw_metrics_from_text(bullet)
         for met in metrics:
-            val = met["value"]
             raw_str = met["raw"]
             met_type = met.get("type", "")
 
