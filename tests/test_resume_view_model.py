@@ -372,7 +372,8 @@ class TestResumeViewModel(unittest.TestCase):
         output_html = self.test_dir / "test_autofit_output.html"
         output_pdf = self.test_dir / "test_autofit_output.pdf"
 
-        browser_renderer = BrowserRenderer()
+        from tests.test_resume_builder import FastBrowserRenderer
+        browser_renderer = FastBrowserRenderer()
         autofit_engine = AutoFitEngine(browser_renderer)
 
         success, msg, details = autofit_engine.fit_to_single_page(

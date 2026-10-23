@@ -8,6 +8,8 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+import pytest
 
 from PIL import Image
 
@@ -114,6 +116,7 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertEqual(builder.profile["candidate"]["name"], "测试候选人")
         self.assertIn("modern-navy", builder.THEMES)
 
+    @pytest.mark.browser
     def test_build_ats_plain(self):
         builder = ResumeBuilder(self.minimal_profile)
         res = builder.build_ats_plain(self.test_dir, photo=True)
@@ -124,8 +127,9 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertIn("测试候选人", md_text)
         self.assertIn("预留证件照位置", md_text)
 
-    def test_build_academic_latex(self):
-        builder = ResumeBuilder(self.minimal_profile)
+    @patch("core.academic_exporter.AcademicExporter.compile_latex", return_value=False)
+    def test_build_academic_latex(self, compile_latex):
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         res = builder.build_academic_latex(self.test_dir, photo=True)
         self.assertTrue(res["tex"].exists())
         self.assertTrue(res["html"].exists())
@@ -134,8 +138,9 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertIn("测试候选人", tex_text)
         self.assertIn("fbox", tex_text)
 
-    def test_build_academic_typst(self):
-        builder = ResumeBuilder(self.minimal_profile)
+    @patch("core.academic_exporter.AcademicExporter.compile_typst", return_value=False)
+    def test_build_academic_typst(self, compile_typst):
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         res = builder.build_academic_typst(self.test_dir, photo=True)
         self.assertTrue(res["typ"].exists())
         self.assertTrue(res["pdf"].exists())
@@ -143,8 +148,8 @@ class TestResumeBuilder(unittest.TestCase):
         self.assertIn("测试候选人", typ_text)
 
     def test_build_html_themes(self):
-        # 1. Full end-to-end integration test with real AutoFitEngine and Chromium rasterization
-        builder = ResumeBuilder(self.minimal_profile)
+        # Builder/template wiring; the CLI workflow owns real PDF acceptance.
+        builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         res = builder.build_html_theme("modern-navy", self.test_dir, photo=True, autofit=True)
         self.assertTrue(res["html"].exists())
         self.assertTrue(res["pdf"].exists())
@@ -514,6 +519,7 @@ class TestResumeBuilder(unittest.TestCase):
         html_text = out_files["html"].read_text(encoding="utf-8")
         self.assertIn("offerget-micro-typography", html_text)
 
+    @patch("core.resume_builder.BrowserRenderer", FastBrowserRenderer)
     def test_cmd_resume_build_cli_flags(self):
         """Tests cmd_resume_build CLI command with --diff-ledger and --adaptive-fill."""
         from presentation.commands.resume_cmd import cmd_resume_build

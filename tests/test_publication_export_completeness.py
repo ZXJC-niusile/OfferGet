@@ -11,7 +11,7 @@ import pytest
 from core.academic_exporter import AcademicExporter
 from core.ats_docx_renderer import AtsDocxRenderer
 from core.resume_builder import ResumeBuilder
-from core.resume_view_model import AtsPlainRenderer, HtmlThemeRenderer, ResumeViewModel
+from core.resume_view_model import AtsPlainRenderer, HtmlThemeRenderer, ResumeViewModel, publication_facts, publication_text_parts
 
 
 # Deliberately independent of the production field tuple and VM projections.
@@ -29,10 +29,13 @@ SOURCE_FACTS = {
 }
 THEMES = (
     "modern-navy", "silicon-clean", "classic-tech", "asu-dense", "sidebar-clean",
-    "academic-postgraduate", "engineering-sb2nov", "modern-corporate",
+    "academic-postgraduate", "engineering-sb2nov", "modern-corporate", "modern-career",
 )
 FORMATS = THEMES + ("ats-markdown", "ats-html", "docx", "latex", "typst", "academic-html")
 HTML_FORMATS = THEMES + ("ats-html", "academic-html")
+# All HTML themes use HtmlThemeRenderer.render_publications. Exercise shared
+# input variants once per serializer, while the all-fields test visits every theme.
+SERIALIZERS = ("modern-navy", "ats-markdown", "ats-html", "docx", "latex", "typst", "academic-html")
 
 
 class TextContent(HTMLParser):
@@ -40,13 +43,21 @@ class TextContent(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts = []
         self.tags = []
+        self.hidden_depth = 0
         self.feed(source)
 
     def handle_starttag(self, tag, attrs):
         self.tags.append(tag)
+        if tag in {"style", "script"}:
+            self.hidden_depth += 1
+
+    def handle_endtag(self, tag):
+        if tag in {"style", "script"} and self.hidden_depth:
+            self.hidden_depth -= 1
 
     def handle_data(self, data):
-        self.parts.append(data)
+        if not self.hidden_depth:
+            self.parts.append(data)
 
 
 def render(format_name, profile_or_vm, tmp_path):
@@ -85,10 +96,11 @@ def test_matrix_includes_every_supported_html_theme():
 
 @pytest.mark.parametrize("format_name", FORMATS)
 def test_every_recognized_field_survives_from_independent_raw_source(format_name, tmp_path):
-    profile = {"candidate": {"name": "Synthetic Author"}, "publications": [copy.deepcopy(SOURCE_FACTS)]}
+    profile = {"candidate": {"name": "Synthetic Author"}, "publications": [{**SOURCE_FACTS, "internal_note": "PrivateNoteK9"}]}
     before = copy.deepcopy(profile)
     output = text_content(format_name, render(format_name, profile, tmp_path))
     assert profile == before
+    assert "PrivateNoteK9" not in output
     positions = []
     for key, sentinel in SOURCE_FACTS.items():
         assert sentinel in output, (format_name, key)
@@ -100,37 +112,59 @@ def test_every_recognized_field_survives_from_independent_raw_source(format_name
     assert "个人贡献：only validation ContributionV2" in output
 
 
-@pytest.mark.parametrize("format_name", FORMATS)
 @pytest.mark.parametrize("publication", [
     {"title": "OnlyTitleY6"},
     {"status": "accepted, not published StatusA5"},
     {"author_role": "supporting author RoleB6"},
     {"individual_contribution": "validation only ContributionC7"},
 ])
-def test_partial_records_do_not_require_title_or_infer_missing_qualifications(format_name, publication, tmp_path):
-    output = text_content(format_name, render(format_name, {"publications": [publication]}, tmp_path))
-    for value in publication.values():
-        assert value in output
+def test_shared_publication_model_preserves_partial_records_without_invention(publication):
+    vm = ResumeViewModel.from_profile({"publications": [publication]}, photo_mode="no-photo")
+    assert len(vm.publications) == 1
+    assert dict(publication_facts(vm.publications[0])) == publication
+    text = " · ".join(publication_text_parts(vm.publications[0]))
     for key, label in (("status", "状态："), ("author_role", "作者角色："), ("individual_contribution", "个人贡献：")):
-        assert (label in output) == (key in publication)
-    if "status" not in publication:
-        assert "accepted" not in output
-        assert "published" not in output
+        assert (label in text) == (key in publication)
+
+
+@pytest.mark.parametrize("format_name", SERIALIZERS)
+def test_serializers_keep_qualifications_when_title_is_missing(format_name, tmp_path):
+    publication = {"status": "submitted, not accepted StatusT0", "author_role": "supporting author RoleB6",
+                   "individual_contribution": "validation only ContributionC7"}
+    output = text_content(format_name, render(format_name, {"publications": [publication]}, tmp_path))
+    assert all(value in output for value in publication.values())
+    assert "状态：" in output and "作者角色：" in output and "个人贡献：" in output
+
+
+@pytest.mark.parametrize("publications", [None, [], [{}], [{"title": "", "status": None, "authors": []}],
+                                           [{"title": "  ", "summary": [None, ""]}], [None, 42]])
+def test_shared_model_filters_empty_publication_variants(publications):
+    profile = {} if publications is None else {"publications": publications}
+    vm = ResumeViewModel.from_profile(profile, photo_mode="no-photo")
+    assert not any(publication_facts(pub) for pub in vm.publications)
 
 
 @pytest.mark.parametrize("format_name", FORMATS)
-@pytest.mark.parametrize("publications", [None, [], [{}], [{"title": "", "status": None, "authors": []}],
-                                           [{"title": "  ", "summary": [None, ""]}], [None, 42]])
-def test_missing_and_empty_records_do_not_emit_publication_sections(format_name, publications, tmp_path):
-    profile = {} if publications is None else {"publications": publications}
-    output = render(format_name, profile, tmp_path)
+def test_empty_publications_do_not_emit_sections_in_any_format(format_name, tmp_path):
+    output = render(format_name, {}, tmp_path)
+    visible = text_content(format_name, output)
     for heading in ("学术成果", "学术发表", "PUBLICATIONS", "/ Publications"):
-        assert heading not in output
+        assert heading not in visible
     assert 'id="publications"' not in output
     assert "状态：" not in output
 
 
-@pytest.mark.parametrize("format_name", FORMATS)
+@pytest.mark.parametrize("format_name", SERIALIZERS)
+def test_serializers_omit_empty_manually_constructed_vm_records(format_name, tmp_path):
+    # Public serializers also accept VM instances that bypass normalization.
+    vm = ResumeViewModel(name="Synthetic", reserve_photo=False, publications=[{}])
+    output = render(format_name, vm, tmp_path)
+    visible = text_content(format_name, output)
+    assert "学术成果" not in visible and "/ Publications" not in visible
+    assert 'id="publications"' not in output
+
+
+@pytest.mark.parametrize("format_name", SERIALIZERS)
 def test_ordered_string_lists_and_plain_publication_strings_are_preserved(format_name, tmp_path):
     profile = {"publications": [
         "CitationOneZ1",
@@ -149,7 +183,7 @@ def test_ordered_string_lists_and_plain_publication_strings_are_preserved(format
     assert "['" not in output
 
 
-@pytest.mark.parametrize("format_name", FORMATS)
+@pytest.mark.parametrize("format_name", SERIALIZERS)
 def test_legacy_escaped_vm_and_raw_precedence_do_not_double_decode(format_name, tmp_path):
     vm = ResumeViewModel(name="Synthetic Author", reserve_photo=False, publications=[
         {key: escape(value) for key, value in SOURCE_FACTS.items()},
@@ -165,7 +199,7 @@ def test_legacy_escaped_vm_and_raw_precedence_do_not_double_decode(format_name, 
     assert expected in output
 
 
-@pytest.mark.parametrize("format_name", FORMATS)
+@pytest.mark.parametrize("format_name", SERIALIZERS)
 def test_markup_qualifiers_are_literal_and_format_escaped(format_name, tmp_path):
     # Every newly exposed optional field is independently checked for escaping.
     value = '<script>x</script> & 50% #tag {x} **own**'
@@ -185,14 +219,6 @@ def test_markup_qualifiers_are_literal_and_format_escaped(format_name, tmp_path)
     else:
         # ATS Markdown is the existing plain-text source contract; DOCX stores literal text.
         assert output.count(value) == len(SOURCE_FACTS)
-
-
-@pytest.mark.parametrize("format_name", FORMATS)
-def test_unknown_metadata_is_not_serialized_as_publication_content(format_name, tmp_path):
-    profile = {"publications": [{"title": "PublicTitleP2", "internal_note": "PrivateNoteK9"}]}
-    output = text_content(format_name, render(format_name, profile, tmp_path))
-    assert "PublicTitleP2" in output
-    assert "PrivateNoteK9" not in output
 
 
 def test_typst_multiline_qualifiers_stay_in_the_original_bullet(tmp_path):

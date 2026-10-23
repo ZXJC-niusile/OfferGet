@@ -8,7 +8,6 @@ Provides page count calculation and document overflow measurement.
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -655,8 +654,11 @@ run().catch((err) => {
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
             tmp_pdf = tf.name
         try:
-            ok, pages, _ = self.render_pdf(html_path, tmp_pdf)
-            if pages <= 1:
+            result = self.render_pdf(html_path, tmp_pdf)
+            ok, pages, message = result
+            if not ok or not isinstance(pages, int) or isinstance(pages, bool) or pages < 1:
+                raise RuntimeError(f"Cannot measure document overflow: {message}")
+            if pages == 1:
                 return int(a4_target_height), 0
             elif pages == 2:
                 # Conservative overflow estimate for initial 2-page spill (never claim 1122px void)

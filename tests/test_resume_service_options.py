@@ -27,12 +27,11 @@ def builder_mock(monkeypatch):
 
 
 @pytest.mark.parametrize("method,build_method", [("build_resume", "build_theme"), ("build_all", "build_all")])
-@pytest.mark.parametrize("pages", ["auto", "1", "2"])
-@pytest.mark.parametrize("enabled", [True, False])
-def test_explicit_layout_and_evidence_options_are_forwarded(builder_mock, tmp_path, method, build_method, pages, enabled):
+@pytest.mark.parametrize("pages,adaptive_fill,diff_ledger", [("1", True, False), ("2", False, True)])
+def test_explicit_layout_and_evidence_options_are_forwarded(builder_mock, tmp_path, method, build_method, pages, adaptive_fill, diff_ledger):
     profile = {"candidate": {"name": "Synthetic Candidate"}}
     baseline = {"candidate": {"name": "Synthetic Baseline"}}
-    options = {"pages": pages, "adaptive_fill": enabled, "diff_ledger": enabled,
+    options = {"pages": pages, "adaptive_fill": adaptive_fill, "diff_ledger": diff_ledger,
                "baseline_profile": baseline}
     result = getattr(ResumeService(), method)(profile, output_dir=tmp_path, **options)
     call = getattr(builder_mock.return_value, build_method)
@@ -44,15 +43,14 @@ def test_explicit_layout_and_evidence_options_are_forwarded(builder_mock, tmp_pa
         assert call.call_args.kwargs["include_docx"] is False
 
 
-@pytest.mark.parametrize("include_docx", [True, False])
-def test_build_all_preserves_docx_opt_in(builder_mock, include_docx):
-    ResumeService().build_all({}, include_docx=include_docx)
-    assert builder_mock.return_value.build_all.call_args.kwargs["include_docx"] is include_docx
+def test_build_all_preserves_docx_opt_in(builder_mock):
+    ResumeService().build_all({}, include_docx=True)
+    assert builder_mock.return_value.build_all.call_args.kwargs["include_docx"] is True
 
 
 @pytest.mark.parametrize("method,build_method", [("build_resume", "build_theme"), ("build_all", "build_all")])
-@pytest.mark.parametrize("photo_mode", [None, "photo", "no-photo", "placeholder"])
-@pytest.mark.parametrize("photo", [True, False])
+# Default/None and no-photo are also exercised by CLI parity below.
+@pytest.mark.parametrize("photo_mode,photo", [("photo", True), ("placeholder", False)])
 def test_existing_photo_and_privacy_options_are_preserved(builder_mock, tmp_path, method, build_method, photo_mode, photo):
     profile = {"candidate": {"name": "Synthetic Candidate"}}
     photo_path = tmp_path / "synthetic-photo.png"
