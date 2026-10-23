@@ -23,11 +23,20 @@ from scripts.qa_modern_navy_layout import (
     validate_paths,
 )
 
-# ASu historically uses the default matrix, including its two all-fields cases.
-SOURCE_THEMES = ("asu-dense", "classic-tech", "engineering-sb2nov", "modern-navy",
-                 "sidebar-clean", "silicon-clean")
-SOURCE_CASES = [(theme, case) for theme in SOURCE_THEMES
-                for case in fixtures(DEFAULT_THEME if theme == "asu-dense" else theme)]
+# This test renders templates directly; mode=builder/solver/compact does not
+# execute those pipelines here. Their full fixture matrix belongs to browser QA.
+SOURCE_CASES = [(theme, case) for theme in THEMES for case in fixtures(theme)
+                if case["name"] == "professional-none"]
+# Every template's photo/no-photo facts are compared in test_resume_photo_contract.
+# Reserved slots exercise the semantic header and both legacy header variants.
+SOURCE_CASES += [(theme, next(case for case in fixtures(theme) if case["name"] == "professional-reserved"))
+                 for theme in ("modern-navy", "sidebar-clean", "engineering-sb2nov")]
+# Distinct shared-model branches not exercised by professional profiles: a
+# single string skill value and exam markup in a stylesheet-owned theme.
+SOURCE_CASES += [
+    ("modern-navy", next(case for case in fixtures() if case["name"] == "skills-long-raw-none")),
+    ("modern-navy", next(case for case in fixtures("sidebar-clean") if case["name"] == "exam-long-none")),
+]
 
 
 @pytest.mark.parametrize("theme,case", SOURCE_CASES,
@@ -45,6 +54,7 @@ def test_theme_source_preserves_facts_styles_and_photo_modes(theme, case, tmp_pa
     bare = renderer.render(vm, theme, template_content=re.sub(
         r"<style>.*?</style>", "", template, flags=re.DOTALL))
     assert case == original
+    assert re.search(r"<title>(.*?)</title>", template).group(1) in html
     assert text_content(html) == text_content(bare)
     assert case["profile"]["name"] in html
     assert case["profile"]["email"] in html
@@ -57,9 +67,10 @@ def test_theme_source_preserves_facts_styles_and_photo_modes(theme, case, tmp_pa
         assert '<body class="resume-dense">' in html
 
 
-@pytest.mark.parametrize("theme", SOURCE_THEMES + ("academic-postgraduate",))
-@pytest.mark.parametrize("profile", TUNING_LADDER, ids=lambda profile: profile.name)
-def test_theme_autofit_tokens_and_repeatable_print_gutters(theme, profile):
+@pytest.mark.parametrize("theme", THEMES)
+def test_theme_autofit_tokens_and_repeatable_print_gutters(theme):
+    # Intermediate tuning steps and the search ladder are covered by test_autofit.
+    profile = TUNING_LADDER[-1]
     template = (ROOT / theme_path(theme)).read_text(encoding="utf-8")
     tuned = AutoFitEngine(renderer=object()).apply_profile_to_html(template, profile)
     expected = {
@@ -78,22 +89,6 @@ def test_theme_autofit_tokens_and_repeatable_print_gutters(theme, profile):
         assert "break-after: avoid;" in tuned
 
 
-@pytest.mark.parametrize("theme", THEMES)
-def test_explicit_theme_uses_its_actual_template_and_preserves_facts(theme):
-    case = fixtures(theme)[0]
-    original = copy.deepcopy(case)
-    html = render_html(ROOT, case)
-    template = (ROOT / theme_path(theme)).read_text(encoding="utf-8")
-    assert case == original
-    assert re.search(r"<title>(.*?)</title>", template).group(1) in html
-    assert case["profile"]["name"] in html
-    assert case["profile"]["email"] in html
-    vm = ResumeViewModel.from_profile(case["profile"], reserve_photo=False)
-    bare = HtmlThemeRenderer().render(vm, theme, template_content=re.sub(
-        r"<style>.*?</style>", "", template, flags=re.DOTALL))
-    assert text_content(html) == text_content(bare)
-
-
 def test_default_fixture_matrix_remains_compatible_with_modern_navy():
     assert all(case["theme"] == DEFAULT_THEME for case in fixtures())
     assert len(fixtures()) == 26
@@ -103,10 +98,14 @@ def test_default_fixture_matrix_remains_compatible_with_modern_navy():
 def test_changed_themes_selects_changed_files_and_shared_regression_coverage():
     assert changed_themes(["themes/classic-tech.html"]) == ["classic-tech"]
     assert changed_themes(["themes/modern-corporate.html", "themes/sidebar-clean.html"]) == [
-        "modern-corporate", "sidebar-clean"]
+        "sidebar-clean", "modern-corporate"]
     assert changed_themes(["themes/modern-corporate.html", "scripts/qa_modern_navy_layout.py"]) == [
         "modern-navy", "modern-corporate"]
-    assert changed_themes(["core/resume_view_model.py"]) == list(THEMES)
+    workflow = (ROOT / ".github/workflows/resume-visual.yml").read_text(encoding="utf-8")
+    for source in ("core/resume_view_model.py", "core/profile_adapter.py", "core/resume_photo.py",
+                   "core/security_gate.py", "core/atomic_writer.py", "core/artifacts.py", "pyproject.toml"):
+        assert changed_themes([source]) == list(THEMES)
+        assert workflow.count("      - '" + source + "'") == 2  # Both push and PR triggers.
     assert changed_themes([]) == [DEFAULT_THEME]
     assert changed_themes(["themes/not-a-theme.html"]) == [DEFAULT_THEME]
 

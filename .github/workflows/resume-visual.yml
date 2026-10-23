@@ -6,6 +6,17 @@ on:
     paths:
       - 'themes/*.html'
       - 'core/resume_view_model.py'
+      - 'core/resume_themes.py'
+      - 'core/profile_adapter.py'
+      - 'core/resume_photo.py'
+      - 'core/security_gate.py'
+      - 'core/anonymizer.py'
+      - 'core/atomic_writer.py'
+      - 'core/artifacts.py'
+      - 'core/paths.py'
+      - 'core/asu_modeler.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
       - 'core/resume_builder.py'
       - 'core/browser_renderer.py'
       - 'core/autofit.py'
@@ -19,6 +30,17 @@ on:
     paths:
       - 'themes/*.html'
       - 'core/resume_view_model.py'
+      - 'core/resume_themes.py'
+      - 'core/profile_adapter.py'
+      - 'core/resume_photo.py'
+      - 'core/security_gate.py'
+      - 'core/anonymizer.py'
+      - 'core/atomic_writer.py'
+      - 'core/artifacts.py'
+      - 'core/paths.py'
+      - 'core/asu_modeler.py'
+      - 'pyproject.toml'
+      - 'requirements.txt'
       - 'core/resume_builder.py'
       - 'core/browser_renderer.py'
       - 'core/autofit.py'
@@ -32,9 +54,46 @@ permissions:
   contents: read
 
 jobs:
+  select-themes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      themes: ${{ steps.select.outputs.themes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select affected themes
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          python - <<'PYCODE'
+          import json, os, subprocess
+          from scripts.qa_modern_navy_layout import changed_themes
+          paths = subprocess.check_output(
+              ["git", "diff", "--name-only", os.environ["BASE_SHA"], "HEAD"], text=True).splitlines()
+          themes = changed_themes(paths)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("themes=" + json.dumps(themes) + "\n")
+          print("Visual themes:", ", ".join(themes))
+          PYCODE
+
   visual:
+    needs: select-themes
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        theme: ${{ fromJSON(needs.select-themes.outputs.themes) }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/offerget-browsers
     steps:
       - uses: actions/checkout@v4
         with:
@@ -44,9 +103,14 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      - name: Cache pinned Chromium
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: ${{ runner.os }}-offerget-playwright-1.62.0
       - name: Install isolated visual-test dependencies
         run: |
-          python -m pip install -e '.[all]' 'playwright==1.62.0'
+          python -m pip install -e '.[render]' 'playwright==1.62.0'
           python -m playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
@@ -58,36 +122,19 @@ jobs:
           mkdir -p "$RUNNER_TEMP/offerget-baseline"
           git archive "$BASE_SHA" | tar -x -C "$RUNNER_TEMP/offerget-baseline"
           printf '%s\n' "$BASE_SHA" > "$RUNNER_TEMP/offerget-baseline/revision.txt"
-      - name: Render changed themes through the production builder
+      - name: Render theme through the production builder
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          QA_THEME: ${{ matrix.theme }}
           QA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          python - <<'PYCODE'
-          import os, subprocess, sys
-          from pathlib import Path
-          from scripts.qa_modern_navy_layout import changed_themes
-          paths = subprocess.check_output(
-              ["git", "diff", "--name-only", os.environ["BASE_SHA"], "HEAD"], text=True).splitlines()
-          themes = changed_themes(paths)
-          print("Visual themes:", ", ".join(themes), flush=True)
-          failed = []
-          for theme in themes:
-              result = subprocess.run([
-                  sys.executable, "scripts/qa_modern_navy_layout.py", "--theme", theme,
-                  "--baseline-root", str(Path(os.environ["RUNNER_TEMP"]) / "offerget-baseline"),
-                  "--output-dir", str(Path("output/visual-regression") / theme),
-              ])
-              if result.returncode:
-                  failed.append(theme)
-          if failed:
-              raise SystemExit("Visual checks failed: " + ", ".join(failed))
-          PYCODE
+          python scripts/qa_modern_navy_layout.py --theme "$QA_THEME" \
+            --baseline-root "$RUNNER_TEMP/offerget-baseline" \
+            --output-dir "output/visual-regression/$QA_THEME"
       - name: Preserve screenshots, PDFs, and measurements
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: resume-themes-visual-${{ github.sha }}
-          path: output/visual-regression/
+          name: resume-visual-${{ matrix.theme }}-${{ github.sha }}
+          path: output/visual-regression/${{ matrix.theme }}/
           if-no-files-found: error
           retention-days: 14

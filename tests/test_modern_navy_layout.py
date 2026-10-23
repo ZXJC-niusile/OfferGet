@@ -27,7 +27,13 @@ from scripts.qa_modern_navy_layout import (
 TEMPLATE = (ROOT / "themes/modern-navy.html").read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("case", [case for case in fixtures() if case["mode"] != "builder"], ids=lambda case: case["name"])
+# One specimen per real generator branch, plus long fields, embedded photos,
+# source-photo opt-out and complete source facts. Full geometry combinations
+# remain in the real-browser QA fixture matrix.
+@pytest.mark.parametrize("case", [case for case in fixtures() if case["name"] in {
+    "short-none", "long-embedded", "compact-reserved", "dense-embedded",
+    "skills-long-raw-none", "source-photo-raw-none", "all-fields-embedded",
+}], ids=lambda case: case["name"])
 def test_synthetic_fixtures_render_without_changing_facts(case):
     original = copy.deepcopy(case)
     actual = render_html(ROOT, case)

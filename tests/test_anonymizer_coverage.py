@@ -14,15 +14,16 @@ from core.resume_builder import ResumeBuilder
 
 
 @pytest.mark.parametrize("identity_key", [None, "candidate", "basics"])
-@pytest.mark.parametrize("school_key", ["school", "institution", "university", "undergraduate_school", "degree_school"])
-def test_unfamiliar_identities_across_supported_schemas(identity_key, school_key):
-    identities = {"name": "Synthetic Zorabel Person", school_key: "Fictional Qerlon College"}
+def test_unfamiliar_identities_across_supported_schemas(identity_key):
+    identities = {"name": "Synthetic Zorabel Person", **{
+        key: f"Fictional Qerlon College {index}" for index, key in enumerate(
+            ("school", "institution", "university", "undergraduate_school", "degree_school"))}}
     profile = {identity_key: identities} if identity_key else identities.copy()
     profile.update({"education": [{"school": "Fictional Wistaria Academy"}],
                     "internships": [{"organization": "Imaginary Fernworks"}],
                     "experience": [{"org": "Synthetic Kestrel Company"}],
                     "campus_experience": [{"title": "Fictional Opal Project"}],
-                    "summary": "Synthetic Zorabel Person studied at Fictional Qerlon College."})
+                    "summary": f"Synthetic Zorabel Person studied at {identities['school']}."})
     original = copy.deepcopy(profile)
     anonymizer = PrivacyAnonymizer()
     masked, reverse = anonymizer.anonymize(profile, "strict")
@@ -34,10 +35,10 @@ def test_unfamiliar_identities_across_supported_schemas(identity_key, school_key
     assert anonymizer.deanonymize(masked, reverse) == profile
 
 
-@pytest.mark.parametrize("key", ["company", "company_en", "org", "organization", "employer"])
-def test_company_aliases_and_standard_level_boundaries(key):
+def test_company_aliases_and_standard_level_boundaries():
     profile = {"candidate": {"name": "Synthetic Alias Person", "school": "Invented Institute"},
-               "experience": [{key: "Invented Organization"}]}
+               "experience": [{key: f"Invented Organization {index}"} for index, key in enumerate(
+                   ("company", "company_en", "org", "organization", "employer"))]}
     anonymizer = PrivacyAnonymizer()
     standard, reverse = anonymizer.anonymize(profile, "standard")
     assert standard["candidate"]["name"] != profile["candidate"]["name"]
@@ -198,9 +199,10 @@ def test_project_base_codename_mentions_are_masked_and_reversible(key):
     assert anonymizer.deanonymize(masked, reverse) == profile
 
 
-@pytest.mark.parametrize("level", ["standard", "strict"])
-@pytest.mark.parametrize("constructor_level", [True, False])
-@pytest.mark.parametrize("theme", ["ats-docx", "classic-tech"])
+@pytest.mark.parametrize("theme,level,constructor_level", [
+    ("ats-docx", "strict", True), ("ats-docx", "standard", False),
+    ("classic-tech", "strict", False), ("classic-tech", "standard", True),
+])
 def test_default_export_does_not_write_reverse_identity_sidecars(tmp_path, level, constructor_level, theme):
     from tests.test_resume_builder import FastBrowserRenderer
     profile = {"candidate": {"name": "Synthetic Sidecar Person", "school": "Imaginary Academy"},

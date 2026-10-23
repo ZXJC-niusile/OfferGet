@@ -1,7 +1,6 @@
 """Static packaging/recipe checks, not model activation or quality evaluations."""
 
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -35,13 +34,15 @@ def test_readme_has_no_machine_specific_file_links():
     ["resume", "build"], ["profile", "parse"], ["review"],
     ["proposal", "show"], ["proposal", "accept"], ["diff", "audit"],
 ])
-def test_documented_recipe_command_help(command):
-    result = subprocess.run(
-        [sys.executable, str(ROOT / "cli.py"), *command, "--help"],
-        cwd=ROOT, capture_output=True, text=True, timeout=30, check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert "usage:" in result.stdout.lower()
+def test_documented_recipe_command_help(command, monkeypatch, capsys):
+    import cli
+    # Root CLI startup is covered by a real subprocess smoke test. Each recipe
+    # still traverses the real entrypoint/parser without another interpreter.
+    monkeypatch.setattr(sys, "argv", ["offerget", *command, "--help"])
+    with pytest.raises(SystemExit) as stopped:
+        cli.main()
+    assert stopped.value.code == 0
+    assert "usage:" in capsys.readouterr().out.lower()
 
 
 def test_visibility_boundary_remains_in_router_and_export_recipe():

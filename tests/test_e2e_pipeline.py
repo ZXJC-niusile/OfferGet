@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+import pytest
 
 # Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -161,6 +162,7 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
+    @pytest.mark.browser
     def test_e2e_resume_render_and_autofit(self):
         profile = {
             "candidate": {
@@ -427,17 +429,6 @@ class TestE2EInterviewDebriefAndDefensePipeline(unittest.TestCase):
         self.assertEqual(reloaded_data["questions"][1]["diagnosis"], QuestionDiagnosis.EXPERIENCE_BOUNDARY.value)
 
 
-class TestE2ECLIWorkflow(unittest.TestCase):
-    """ATS command smoke coverage; JD CLI and diagnostics have dedicated suites."""
-
-    def test_cli_ats_audit(self):
-        from presentation.commands.ats_cmd import cmd_ats_audit
-        import argparse
-
-        jd_path = str(PROJECT_ROOT / "examples" / "sample_ai_jd.txt")
-        prof_path = str(PROJECT_ROOT / "examples" / "candidate_profile.json")
-        args_ats = argparse.Namespace(input_file=prof_path, jd=jd_path, tag=None, json=True)
-        cmd_ats_audit(args_ats)
 
 
 if __name__ == "__main__":

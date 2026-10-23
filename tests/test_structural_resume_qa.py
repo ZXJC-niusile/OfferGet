@@ -290,11 +290,13 @@ def test_embedded_portrait_geometry_is_enforced_in_screen_and_print(regression):
 
 
 @pytest.mark.parametrize('theme', STRUCTURAL_LAYOUTS)
-def test_all_pilot_raw_compact_solver_sources_pass_real_renderer_ledger(theme):
+def test_pilot_generator_modes_preserve_source_ledger(theme):
     """Real source integration only; this never launches or substitutes a browser."""
     from scripts.qa_modern_navy_layout import ROOT, render_html
-    for case in fixtures(theme):
-        if case['mode'] == 'builder':
-            continue  # Production-path PDF coverage remains a required browser stage.
+    # One source per generator mode and photo mode. The browser QA owns the
+    # full density matrix; shared field/photo contracts have their own tests.
+    cases = {case['name']: case for case in fixtures(theme)}
+    for name in ('all-fields-none', 'dense-reserved', 'compact-embedded'):
+        case = cases[name]
         audit = audit_html(render_html(ROOT, case), case)
         assert audit['errors'] == [], (case['name'], audit['errors'])

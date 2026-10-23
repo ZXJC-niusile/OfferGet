@@ -235,27 +235,46 @@ class SkillEvaluationTests(unittest.TestCase):
         with self.assertRaises(evals.EvalError):
             evals.grade_trace(path, self.suite, local_suite)
 
-    def test_smoke_ignores_unreferenced_symlinks_and_rejects_referenced_escape(self):
+    def test_smoke_ignores_unreferenced_links_and_rejects_referenced_escape(self):
+        import os
+        import subprocess
+
+        def directory_link(link, target):
+            try:
+                link.symlink_to(target, target_is_directory=True)
+            except OSError:
+                if os.name != "nt":
+                    raise
+                # Windows directory junctions exercise real path resolution
+                # without requiring the symbolic-link creation privilege.
+                result = subprocess.run([
+                    "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                    "$ErrorActionPreference = 'Stop'\n"
+                    "New-Item -ItemType Junction -Path $env:OFFERGET_TEST_LINK "
+                    "-Value $env:OFFERGET_TEST_TARGET | Out-Null",
+                ], env={**os.environ, "OFFERGET_TEST_LINK": str(link), "OFFERGET_TEST_TARGET": str(target)},
+                   capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(link.resolve(), target.resolve())
+            # Remove only the link before TemporaryDirectory cleans the fixture.
+            self.addCleanup(lambda: link.unlink() if link.is_symlink() else link.rmdir())
+
         local_suite = self.work / "suite.json"
         local_suite.write_bytes(self.suite_path.read_bytes())
-        outside = self.work / "outside.txt"
-        outside.write_text("must not be copied")
-        link = self.work / "inputs/unreferenced.txt"
-        try:
-            link.symlink_to(outside)
-        except OSError:
-            self.skipTest("Symlinks not supported or permitted on this platform/environment")
+        outside = self.work / "outside"
+        outside.mkdir()
+        sentinel = outside / "must-not-copy.txt"
+        sentinel.write_text("must not be copied")
+        directory_link(self.work / "inputs/unreferenced", outside)
         with patch.object(evals.shutil, "copy2", wraps=evals.shutil.copy2) as copier:
             report = evals.smoke(local_suite)
         self.assertTrue(all(c["status"] == "pass" for c in report["checks"]))
-        self.assertFalse(any(call.args[0] == outside for call in copier.call_args_list))
-        escaping = self.work / "inputs/resume.md"
-        escaping.unlink()
-        try:
-            escaping.symlink_to(ROOT / "SKILL.md")
-        except OSError:
-            self.skipTest("Symlinks not supported or permitted on this platform/environment")
-        with self.assertRaises(evals.EvalError):
+        self.assertNotIn(sentinel.resolve(), {Path(call.args[0]).resolve() for call in copier.call_args_list})
+        directory_link(self.work / "inputs/escape", ROOT)
+        suite = json.loads(local_suite.read_text(encoding="utf-8"))
+        suite["cases"][0]["files"] = ["inputs/escape/SKILL.md"]
+        local_suite.write_text(json.dumps(suite), encoding="utf-8")
+        with self.assertRaisesRegex(evals.EvalError, "path escapes bundle"):
             evals.load_suite(local_suite)
 
     def test_no_jd_question_for_formatting(self):
