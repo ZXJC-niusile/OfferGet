@@ -5,6 +5,7 @@ Provides clean I/O separation, directory creation, and structured JSON output.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import sys
@@ -19,6 +20,29 @@ COMMON_FILE_EXTENSIONS = {
     ".csv", ".tsv", ".pdf", ".py", ".sh", ".doc", ".docx", ".xml", ".log"
 }
 
+
+
+def _input_exists(value: Union[str, os.PathLike[str]], *, must_exist: bool = False) -> bool:
+    """Probe paths without swallowing read failures or treating long prose as a path."""
+    raw = str(value)
+    path = Path(value)
+    explicit = (not isinstance(value, str) or must_exist or (
+        "\n" not in raw and "\r" not in raw and (
+            path.suffix.lower() in COMMON_FILE_EXTENSIONS
+            or raw.startswith((".", "~", "/", "\\"))
+            or (len(raw) > 2 and raw[1] == ":" and raw[2] in ("\\", "/"))
+        )
+    ))
+    try:
+        path.stat()
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        invalid_name = exc.errno in {errno.EINVAL, errno.ENAMETOOLONG} or getattr(exc, "winerror", None) in {123, 206}
+        if invalid_name and not explicit:
+            return False
+        raise
 
 def read_text(path_or_str: Union[str, Path], must_exist: bool = False) -> str:
     """
@@ -43,17 +67,10 @@ def read_text(path_or_str: Union[str, Path], must_exist: bool = False) -> str:
         raise TypeError(f"Expected str or Path, got {type(path_or_str).__name__}")
 
     p = Path(path_or_str)
-    try:
-        if p.exists():
-            if p.is_file():
-                return p.read_text(encoding="utf-8")
-            if p.is_dir():
-                raise IsADirectoryError(f"Target path is a directory, not a file: {path_or_str}")
-    except OSError as e:
-        if isinstance(e, IsADirectoryError):
-            raise
-        # Path name too long or invalid path syntax on Windows -> treat as raw text
-        return path_or_str
+    if _input_exists(path_or_str, must_exist=must_exist):
+        if p.is_dir():
+            raise IsADirectoryError(f"Target path is a directory, not a file: {path_or_str}")
+        return p.read_text(encoding="utf-8")
 
     if must_exist:
         raise FileNotFoundError(f"File not found: {path_or_str}")
@@ -84,12 +101,9 @@ def load_json(path_or_str: Union[str, Path, os.PathLike[str]]) -> Dict[str, Any]
 
     raw_str = str(path_or_str)
     p = Path(path_or_str)
-    try:
-        if p.exists() and p.is_file():
-            with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except OSError:
-        pass
+    if _input_exists(path_or_str):
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
 
     s = raw_str.strip()
     if s.startswith(("{", "[")):
@@ -121,29 +135,22 @@ def load_json_or_text(path_or_str: Union[str, Path, os.PathLike[str]]) -> Tuple[
 
     raw_str = str(path_or_str)
     p = Path(path_or_str)
-    is_file = False
-    try:
-        if p.exists():
-            if p.is_file():
-                text = p.read_text(encoding="utf-8")
-                is_file = True
-            elif p.is_dir():
-                raise IsADirectoryError(f"Target path is a directory, not a file: {path_or_str}")
-        else:
-            is_path_syntax = (
-                isinstance(path_or_str, Path)
-                or raw_str.startswith((".", "~", "/", "\\"))
-                or (len(raw_str) > 2 and raw_str[1] == ":" and raw_str[2] in ("\\", "/"))
-            )
-            has_newline = "\n" in raw_str or "\r" in raw_str
-            if p.suffix.lower() == ".json":
-                raise FileNotFoundError(f"JSON file not found: {path_or_str}")
-            elif (isinstance(path_or_str, Path) or is_path_syntax) and not has_newline:
-                raise FileNotFoundError(f"File not found: {path_or_str}")
-            text = raw_str
-    except OSError as e:
-        if isinstance(e, (FileNotFoundError, IsADirectoryError)):
-            raise
+    is_file = _input_exists(path_or_str)
+    if is_file:
+        if p.is_dir():
+            raise IsADirectoryError(f"Target path is a directory, not a file: {path_or_str}")
+        text = p.read_text(encoding="utf-8")
+    else:
+        is_path_syntax = (
+            isinstance(path_or_str, os.PathLike)
+            or raw_str.startswith((".", "~", "/", "\\"))
+            or (len(raw_str) > 2 and raw_str[1] == ":" and raw_str[2] in ("\\", "/"))
+        )
+        has_newline = "\n" in raw_str or "\r" in raw_str
+        if p.suffix.lower() == ".json":
+            raise FileNotFoundError(f"JSON file not found: {path_or_str}")
+        if is_path_syntax and not has_newline:
+            raise FileNotFoundError(f"File not found: {path_or_str}")
         text = raw_str
 
     stripped = text.strip()

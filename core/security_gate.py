@@ -21,6 +21,7 @@ and output validation across HTML, LaTeX, Typst, and Markdown resume outputs:
 from __future__ import annotations
 
 import html
+from html.parser import HTMLParser
 import re
 from typing import Any, List
 
@@ -162,7 +163,7 @@ def validate_output_security(content: str, format_type: str = "html") -> List[st
     """
     Audits serialized document output for security risks:
     - Dangerous <script>, <iframe>, <object>, <embed> tags
-    - Inline on* event handlers (allowing only verified safe internal image fallback)
+    - Inline on* event handlers (including image fallback handlers)
     - Dangerous javascript:, vbscript:, data:text/html URI schemes
     - Unreplaced {{...}} template placeholders
     - Format-specific code injection vectors (for Typst/LaTeX)
@@ -195,38 +196,21 @@ def validate_output_security(content: str, format_type: str = "html") -> List[st
             if re.search(pat, content, re.IGNORECASE):
                 risks.append(f"Dangerous HTML pattern detected: {desc}")
 
-        # 3. Dangerous URI schemes in HTML
-        uri_checks = [
-            (r"href\s*=\s*[\"']?\s*javascript:", "javascript: URI in href"),
-            (r"src\s*=\s*[\"']?\s*javascript:", "javascript: URI in src"),
-            (r"href\s*=\s*[\"']?\s*vbscript:", "vbscript: URI in href"),
-            (r"src\s*=\s*[\"']?\s*vbscript:", "vbscript: URI in src"),
-            (r"href\s*=\s*[\"']?\s*data:text/html", "data:text/html URI in href"),
-            (r"src\s*=\s*[\"']?\s*data:text/html", "data:text/html URI in src"),
-            (r"href\s*=\s*[\"']?\s*data:image/svg\+xml", "data:image/svg+xml URI in href"),
-            (r"src\s*=\s*[\"']?\s*data:image/svg\+xml", "data:image/svg+xml URI in src"),
-        ]
-        for pat, desc in uri_checks:
-            if re.search(pat, content, re.IGNORECASE):
-                risks.append(f"Dangerous URI pattern detected: {desc}")
+        # Generated resumes do not need inline JavaScript. Parse attributes so
+        # quoted > signs, entities and duplicate attributes cannot bypass checks.
+        class HandlerAudit(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                for name, value in attrs:
+                    if re.fullmatch(r"on[a-z]+", name, re.IGNORECASE):
+                        risks.append(f"Dangerous inline event handler '{name}' in <{tag}>: {(value or '')[:40]}")
+                    if name in {"href", "src", "xlink:href", "action", "formaction", "data", "poster", "background"}:
+                        normalized = re.sub(r"[\s\x00-\x1f\x7f-\x9f]+", "", value or "").lower()
+                        if re.match(r"(?:javascript|vbscript):", normalized) or (
+                            normalized.startswith("data:") and not _DATA_IMAGE_REGEX.fullmatch(value or "")
+                        ):
+                            risks.append(f"Dangerous URI in {name}: {normalized[:40]}")
 
-        # 4. Inline event handlers on* (e.g. onload=, onerror=, onclick=) inside HTML tags
-        tag_matches = re.finditer(r"<([a-zA-Z][a-zA-Z0-9:-]*)\b([^>]*)/?>", content)
-        for tm in tag_matches:
-            tag_name = tm.group(1).lower()
-            tag_attrs = tm.group(2)
-            handler_matches = re.finditer(
-                r"\b(on[a-zA-Z]+)\s*=\s*(?:([\"'])(.*?)\2|([^\s>]+))",
-                tag_attrs,
-                re.IGNORECASE,
-            )
-            for m in handler_matches:
-                event_name = m.group(1).lower()
-                event_val = m.group(3) if m.group(2) else (m.group(4) or "")
-                # Permit the designated benign internal photo fallback snippet on <img> tags
-                if tag_name == "img" and event_name == "onerror" and "this.style.display" in event_val and "nextElementSibling" in event_val:
-                    continue
-                risks.append(f"Dangerous inline event handler '{event_name}' in <{tag_name}>: {event_val[:40]}")
+        HandlerAudit(convert_charrefs=True).feed(content)
 
     elif fmt in ("typst", "typ"):
         # Check for dangerous Typst code injections if unescaped at top-level

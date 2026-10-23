@@ -17,7 +17,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from core.report_generator import (
     generate_report,
-    get_canonical_default_template_path,
     is_default_template,
     read_default_template_content,
     resolve_report_template,
@@ -365,6 +364,12 @@ class TestReportGenerator(unittest.TestCase):
         self.assertIn("Candidate: 张无忌", content)
         self.assertIn("Match Score: 88%", content)
         self.assertNotIn("{{COMPANY}}", content)
+
+        Path(custom_tpl_path).write_text('<a href="java&#x73;cript:alert(1)">x</a>', encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "security audit"):
+            generate_report(self.sample_decoded_jd, self.sample_match_result,
+                            template_path=custom_tpl_path, output_path=out_file)
+        self.assertEqual(Path(out_file).read_text(encoding="utf-8"), content)
 
     def test_default_template_none_resolution(self):
         out_file = os.path.join(self.tmp_dir.name, "default_none_report.html")

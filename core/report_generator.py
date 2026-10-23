@@ -71,12 +71,14 @@ def _report_values(match_result: Any) -> Dict[str, Any]:
         probability = probability_range[1]
     gate = next((source[key] for source in (result, canonical)
                  for key in ("hard_vetoed", "is_hard_vetoed") if key in source), None)
+    unavailable = canonical.get("unavailable_dimensions", result.get("unavailable_dimensions", []))
+    unavailable = unavailable if isinstance(unavailable, (list, tuple)) else []
     return {
         "score": _score_or_none(score),
         "raw_score": _score_or_none(result.get("raw_match_score", canonical.get("raw_match_score", score))),
-        "must_have": _score_or_none(breakdown.get("must_have", canonical.get("must_have_score"))),
-        "nice_have": _score_or_none(breakdown.get("nice_have", canonical.get("nice_to_have_score"))),
-        "hidden_fit": _score_or_none(breakdown.get("hidden_fit", canonical.get("hidden_signal_fit"))),
+        "must_have": None if "must_have" in unavailable else _score_or_none(breakdown.get("must_have", canonical.get("must_have_score"))),
+        "nice_have": None if "nice_have" in unavailable else _score_or_none(breakdown.get("nice_have", canonical.get("nice_to_have_score"))),
+        "hidden_fit": None if "hidden_fit" in unavailable else _score_or_none(breakdown.get("hidden_fit", canonical.get("hidden_signal_fit"))),
         "probability": _score_or_none(probability),
         "gate": gate if isinstance(gate, bool) else None,
     }
@@ -167,6 +169,8 @@ def _adapt_match_result(
         insufficient_evidence_count=ins_cnt,
         real_gap_count=real_cnt,
         to_be_confirmed_count=tbc_cnt,
+        dimension_weights=dict(canonical_match.get("dimension_weights", {})),
+        unavailable_dimensions=[name for name in ("must_have", "nice_have", "hidden_fit") if values[name] is None],
     )
 
     # RedFlags
@@ -197,6 +201,8 @@ def _adapt_match_result(
     # Explicit zero is meaningful. Never substitute a positive probability for it.
     if values["probability"] is not None:
         previous_range = (prediction.probability_forecast.base_min_prob, prediction.probability_forecast.base_max_prob)
+        prediction.probability_forecast.estimate_status = "supplied"
+        prediction.probability_forecast.estimate_basis = "Explicitly supplied estimate; not calibrated or inferred by OfferGet."
         prediction.probability_forecast.base_max_prob = values["probability"]
         probability_range = match_result.get("interview_probability_range")
         minimum = None
@@ -464,8 +470,7 @@ def generate_report(
     from core.artifacts import write_text_atomic
 
     out_path = Path(output_path).resolve()
-    write_text_atomic(html, out_path)
-    return str(out_path)
+    return write_text_atomic(html, out_path)
 
 
 __all__ = [
