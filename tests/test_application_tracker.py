@@ -33,7 +33,6 @@ from core.application_tracker import (
 from core.artifacts import inspect_artifacts, sha256_file
 from core.evidence.graph import (
     EvidenceGraph,
-    EvidenceNode,
     EvidenceNodeState,
 )
 from core.resume_version_diff import compare_resume_versions
@@ -343,7 +342,7 @@ class TestApplicationStorePersistence(unittest.TestCase):
             try:
                 with store._get_connection() as c:
                     ver = c.execute("PRAGMA user_version").fetchone()[0]
-                    self.assertEqual(ver, 8)
+                    self.assertEqual(ver, 9)
                     cols = [r[1] for r in c.execute("PRAGMA table_info(applications)").fetchall()]
                     self.assertIn("target_level", cols)
                     self.assertIn("portal_url", cols)
@@ -476,7 +475,7 @@ class TestApplicationOutcomes(unittest.TestCase):
     def test_schema_v4_migrates_to_v6(self):
         with ApplicationStore(self.db_path) as store:
             with store._get_connection() as conn:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
                 columns = {row[1] for row in conn.execute("PRAGMA table_info(application_outcomes)")}
                 self.assertIn("outcome_id", columns)
                 self.assertIn("feedback_tags_json", columns)
@@ -486,7 +485,7 @@ class TestApplicationOutcomes(unittest.TestCase):
                 conn.commit()
         with ApplicationStore(self.db_path) as migrated:
             with migrated._get_connection() as conn:
-                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+                self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
                 self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='application_outcomes'").fetchone())
                 self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='resume_versions'").fetchone())
 
@@ -647,13 +646,13 @@ class TestResumeVersions(unittest.TestCase):
             path = Path(tmp) / "versions.db"
             with ApplicationStore(path) as store:
                 with store._get_connection() as conn:
-                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
                     conn.execute("DROP TABLE resume_versions")
                     conn.execute("PRAGMA user_version = 6")
                     conn.commit()
             with ApplicationStore(path) as migrated:
                 with migrated._get_connection() as conn:
-                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 8)
+                    self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 9)
                     self.assertIsNotNone(conn.execute("SELECT name FROM sqlite_master WHERE name='resume_versions'").fetchone())
 
     def test_schema_v8_migration_from_true_legacy_v7_without_applied_phase(self):
@@ -708,13 +707,16 @@ class TestResumeVersions(unittest.TestCase):
                     '[]', 'draft', '[]', 'prop_hash_1', '', '2026-09-01 10:00:00'
                 )
             """)
+            from core.material_proposal import MaterialProposal
+            digest = MaterialProposal("PROP-LEGACY", "prof_hash_1", "jd_hash_1", application_id="APP-OLD").proposal_hash
+            conn.execute("UPDATE material_proposals SET proposal_hash = ? WHERE proposal_id = ?", (digest, "PROP-LEGACY"))
             conn.commit()
             conn.close()
 
             # 2. Open via ApplicationStore -> triggers v8 migration
             with ApplicationStore(path) as store:
                 with store._get_connection() as c:
-                    self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 8)
+                    self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 9)
                     cols = {r[1] for r in c.execute("PRAGMA table_info(material_proposals)").fetchall()}
                     self.assertIn("applied_phase", cols)
 
@@ -766,7 +768,7 @@ class TestResumeVersions(unittest.TestCase):
 
             with ApplicationStore(path) as store:
                 with store._get_connection() as c:
-                    self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 8)
+                    self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], 9)
 
 
     def test_metadata_diff_is_deterministic_and_does_not_claim_content_diff(self):
@@ -1166,6 +1168,24 @@ class TestMaterialProposal(unittest.TestCase):
             reloaded.accept(self.profile, drifted_jd)
         self.assertIn("source_jd_changed", str(ctx_drift.exception))
 
+        from core.material_proposal import apply_material_proposal
+        with tempfile.TemporaryDirectory() as tmp, ApplicationStore(Path(tmp) / "integrity.db") as store:
+            store.save_material_proposal(proposal)
+            tampered = store.get_material_proposal(proposal.proposal_id)
+            tampered.patches[0]["after"] = "Unapproved content"
+            for action in (
+                lambda: store.save_material_proposal(tampered),
+                lambda: tampered.accept(self.profile, self.jd),
+                lambda: apply_material_proposal(tampered, self.profile, self.jd),
+            ):
+                with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                    action()
+            tampered.proposal_hash = tampered.compute_hash()
+            with self.assertRaisesRegex(ValueError, "cannot overwrite"):
+                store.save_material_proposal(tampered)
+            stored = store.get_material_proposal(proposal.proposal_id)
+            self.assertEqual(stored.to_dict(), proposal.to_dict())
+
     def test_apply_failure_does_not_mutate_draft_to_accepted(self):
         """Verifies that an unsupported or unavailable target path fails closed without
         leaving the proposal in an invalid 'accepted' status."""
@@ -1229,13 +1249,49 @@ class TestProposalService(unittest.TestCase):
                 result = service.accept("PROP-SVC", self.profile, self.jd, output)
                 self.assertTrue(output.exists())
                 self.assertEqual(result["proposal"]["status"], "accepted")
+                with self.assertRaisesRegex(ValueError, "cannot overwrite"):
+                    service.save(self._proposal())
+                self.assertEqual(service.get("PROP-SVC").status, MaterialProposalStatus.ACCEPTED)
                 service.save(self._proposal("PROP-SVC2"))
                 rejected = service.reject("PROP-SVC2")
                 self.assertEqual(rejected.status, MaterialProposalStatus.REJECTED)
+                with self.assertRaisesRegex(ValueError, "cannot overwrite"):
+                    service.save(self._proposal("PROP-SVC2"))
+                self.assertEqual(service.get("PROP-SVC2").status, MaterialProposalStatus.REJECTED)
                 with self.assertRaises(KeyError):
                     service.accept("MISSING", self.profile, self.jd, output)
                 with self.assertRaises(KeyError):
                     service.reject("MISSING")
+
+                from unittest.mock import patch
+                from services.review_service import CareerReviewService
+                from cli import build_parser
+                source = Path(tmp) / "source.json"
+                jd_file = Path(tmp) / "jd.txt"
+                source.write_text(json.dumps(self.profile), encoding="utf-8")
+                jd_file.write_text(self.jd, encoding="utf-8")
+                for theme in ("all", "modern-career"):
+                    with self.subTest(theme=theme):
+                        draft = self._proposal("PROP-" + theme)
+                        service.save(draft)
+                        workflow = CareerReviewService().prepare_workflow(
+                            {"material_proposal": draft.to_dict(), "summary": {"next_action": {"kind": "confirm_proposal"}}},
+                            tmp, jd_file, source, session_path=Path(tmp) / "session.json", proposal_db=db_path,
+                            resume_theme=theme)
+                        args = build_parser().parse_args(workflow["next_command_args"][2:])
+                        self.assertEqual(args.resume_theme, theme)
+                        artifact = Path(tmp) / (theme + ".pdf")
+                        artifact.write_bytes(b"synthetic artifact")
+                        with patch("services.resume_service.ResumeService") as renderer:
+                            renderer.return_value.build_all.return_value = {"modern-navy": {"pdf": artifact}}
+                            renderer.return_value.build_resume.return_value = {"pdf": artifact}
+                            rendered = service.accept(draft.proposal_id, self.profile, self.jd, output,
+                                                      build_resume=True, resume_theme=theme)
+                        key = "modern-navy.pdf" if theme == "all" else "pdf"
+                        self.assertEqual(rendered["output_paths"][key], str(artifact))
+                        self.assertEqual(rendered["artifact_status"][key], "present")
+                        method = renderer.return_value.build_all if theme == "all" else renderer.return_value.build_resume
+                        method.assert_called_once()
 
     def test_service_accept_retry_preserves_completed_version(self):
         from unittest.mock import patch
@@ -1263,6 +1319,40 @@ class TestProposalService(unittest.TestCase):
                 self.assertEqual(len(versions), 1)
                 self.assertEqual(versions[0].to_dict(), first["resume_version"])
                 self.assertEqual(versions[0].created_at, "2026-10-09 08:00:00")
+
+        # Fail at each side-effect boundary, reopen the database, and retry the overwritten input.
+        for boundary in ("render", "session", "version"):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                output = root / "profile.json"
+                output.write_text(json.dumps(self.profile), encoding="utf-8")
+                with ProposalService(root / "svc.db") as service:
+                    service.store.save(ApplicationRecord("APP-SVC", "Example Co", "Engineer"))
+                    service.save(self._proposal())
+                    target = {"render": "services.resume_service.ResumeService.build_resume",
+                              "session": "services.review_service.CareerReviewService.activate_accepted_profile",
+                              "version": "core.application_tracker.ApplicationStore.save_resume_version"}[boundary]
+                    with patch(target, side_effect=OSError("synthetic failure")):
+                        with self.assertRaises(OSError):
+                            service.accept("PROP-SVC", self.profile, self.jd, output,
+                                           build_resume=boundary == "render")
+                    self.assertNotEqual(service.get("PROP-SVC").applied_phase, "completed")
+                    self.assertEqual(service.store.list_resume_versions("APP-SVC"), [])
+                updated = json.loads(output.read_text(encoding="utf-8"))
+                with ProposalService(root / "svc.db") as service:
+                    changed = json.loads(json.dumps(updated))
+                    changed["candidate"]["name"] = "Other"
+                    with self.assertRaisesRegex(ValueError, "source_profile_changed"):
+                        service.accept("PROP-SVC", changed, self.jd, output)
+                    with self.assertRaises(ValueError):
+                        service.accept("PROP-SVC", updated, "Changed JD", output)
+                    with self.assertRaises(ValueError):
+                        service.accept("PROP-SVC", updated, self.jd, output, patch_ids=[])
+                    result = service.accept("PROP-SVC", updated, self.jd, output)
+                    self.assertEqual(result["accept_phase"], "completed")
+                    self.assertNotIn("recovery_source", result["proposal"])
+                    self.assertEqual(service.accept("PROP-SVC", updated, self.jd, output), result)
+                    self.assertEqual(len(service.store.list_resume_versions("APP-SVC")), 1)
 
     def test_service_accept_failure_persists_conflict(self):
         from core.material_proposal import MaterialProposalStatus

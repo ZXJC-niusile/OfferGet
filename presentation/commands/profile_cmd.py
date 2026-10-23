@@ -25,13 +25,16 @@ def cmd_profile_parse(args: Any) -> None:
         fail_cli(args, "input_not_found", f"Resume file not found: {input_path}")
 
     profile_data = load_profile(input_path)
+    if getattr(args, "confirm_parsed", False) and profile_data.get("_parse_report"):
+        profile_data["_parse_report"]["status"] = "reviewed"
+        profile_data["_parse_report"]["next_action"] = "已记录人工核对，确认公开范围后可导出简历；原始解析提示保留供查阅。"
 
     if getattr(args, "output", None):
         out_path = write_json(profile_data, args.output)
         if getattr(args, "json", False):
             emit_json({"status": "success", "output": out_path, "profile": profile_data})
             return
-        print(f"[✓] Successfully parsed resume into OfferGet profile: {out_path}")
+        print(f"已保存解析结果：{out_path}")
     elif getattr(args, "json", False):
         emit_json(profile_data)
         return
@@ -45,9 +48,18 @@ def cmd_profile_parse(args: Any) -> None:
     comp = profile_data.get("competencies", {})
 
     print("=" * 68)
-    print("      OfferGet · Resume Auto-Parser & Profile Ingestion Engine    ")
+    print("      OfferGet · 简历解析结果核对    ")
     print("=" * 68)
-    print(f"[*] Candidate:      {cand.get('name', '候选人')} ({cand.get('title_zh') or '未指定职位'})")
+    print(f"候选人：{cand.get('name', '候选人')}（{cand.get('title_zh') or '未指定职位'}）")
+    report = profile_data.get("_parse_report", {})
+    if report:
+        counts = report["recognized_counts"]
+        print(f"已识别：教育 {counts['education']} 段、工作 {counts['experience']} 段、项目 {counts['projects']} 个、技能 {counts['skills']} 项。")
+        for warning in report.get("warnings", []):
+            print(f"待核对：{warning['message']}（{warning['path']}）")
+        for item in report.get("unclassified_lines", [])[:5]:
+            print(f"  原文第 {item['line']} 行：{item['text']}")
+        print(f"下一步：{report['next_action']}")
     contact = " | ".join(filter(None, [cand.get("email"), cand.get("phone"), cand.get("location")]))
     if contact:
         print(f"[*] Contact:        {contact}")

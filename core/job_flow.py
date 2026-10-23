@@ -1,13 +1,7 @@
-"""
-OfferGet Job Flow Orchestration Engine (core/job_flow.py)
-=========================================================
-Implements the competition track 2 closed-loop job-seeking pipeline:
-1. canonical JD breakdown (`jd_breakdown`) via core.jd_analyst.decoder
-2. candidate matching & fact-grounded resume recommendations (`resume_advice`) via profile_adapter
-3. exactly 3 targeted interview questions (`interview_questions`) via predictor.predict_targeted_questions
-4. one round of structured answer feedback (`answer_feedback`) via InterviewDebriefEngine
-5. deep polish focus (`polish_focus`: "interview_defense")
-6. schema version: "career-review.v1"
+"""Goal-oriented JD matching, evidence-backed material drafts and interview practice.
+
+Source facts remain unchanged until the user accepts a material proposal.
+Interview snapshots keep stable IDs across answer and follow-up rounds.
 """
 
 from __future__ import annotations
@@ -21,10 +15,6 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from core.artifacts import write_json_atomic
-from core.paths import get_project_root
-
-PROJECT_ROOT = get_project_root()
-
 from core.interview_debrief import InterviewDebriefEngine
 from core.jd_compat import profile_to_canonical
 from core.fact_guard import FactVerificationGuard
@@ -35,6 +25,7 @@ from core.profile_adapter import (
     ProfileContext,
     build_profile_context,
     claim_ref,
+    claim_matches,
     find_evidence,
     require_public_profile,
 )
@@ -134,6 +125,15 @@ def _next_evidence_question(requirement: str, flags: List[Dict[str, str]], has_c
     return f"针对“{requirement}”，请确认该证据是否仍准确，并准备说明选型、个人贡献和失败复盘。"
 
 
+def _polish_grounded_bullet(text: str) -> str:
+    """Remove presentation framing only; retain actions, scope and qualifications.
+
+    This deterministic edit never supplies technologies, ownership or outcomes.
+    Sentence and clause order stays intact so causal and attribution boundaries survive.
+    """
+    return re.sub(r"^(?:在该项目中[，,]|在此项目中[，,]|主要工作包括[：:])\s*", "", text.strip(), count=1)
+
+
 def generate_resume_advice(
     jd: DecodedJD,
     matcher_result: MatcherResult,
@@ -180,6 +180,14 @@ def generate_resume_advice(
                 seen_paths.add(c.source_path)
                 unique_claims.append(c)
         matching_claims = unique_claims
+        # Prefer actual practice over a keyword declaration or the first path.
+        matching_claims.sort(key=lambda c: (
+            claim_matches(req_name, c.text),
+            c.kind in {"experience", "project", "bullet", "highlight"} or bool(re.search(r"experience\[|projects\[", c.source_path)),
+            bool(c.role_scope or c.attribution),
+            bool(re.search(r"开发|实现|交付|上线|负责|完成|采用|develop|deliver|implement", c.text)),
+            c.direct,
+        ), reverse=True)
 
         evidence_refs = [claim_ref(c) for c in matching_claims]
         risk_flags: List[Dict[str, str]] = []
@@ -194,14 +202,14 @@ def generate_resume_advice(
             grounding_note = f"在过往履历中已具备充分佐证 ({len(matching_claims)} 条依据)，保持并高亮。"
         elif gap.state == GapState.EXPRESSION_GAP:
             state = "claimed"
-            action = "rewrite"
+            action = "keep"
             safe_bullet = matching_claims[0].text if matching_claims else ""
-            grounding_note = f"候选人具备底层相通经验，建议将术语转换为 JD 要求的关键词：{gap.actionable_advice}"
+            grounding_note = "保留相邻经验的真实技术名称，优先展示相关实践；不会将相邻技能改写成未使用过的目标技能。"
         elif gap.state == GapState.INSUFFICIENT_EVIDENCE:
             state = "needs_confirmation"
             action = "add_evidence"
             safe_bullet = matching_claims[0].text if matching_claims else ""
-            grounding_note = f"仅有泛化表述，请候选人依据事实补充具体基线与度量：{gap.actionable_advice}"
+            grounding_note = f"请确认实际场景、个人贡献与交付物：{gap.actionable_advice}"
         elif gap.state == GapState.REAL_GAP:
             state = "unsupported"
             action = "ask_user"
@@ -247,6 +255,17 @@ def generate_resume_advice(
         if coverage == "direct" and state == "needs_confirmation":
             coverage = "weak"
 
+        original_bullet = safe_bullet
+        if safe_bullet and action == "keep" and matching_claims:
+            source = matching_claims[0]
+            if re.search(r"(?:bullets|highlights)\[\d+\]", source.source_path):
+                polished = _polish_grounded_bullet(safe_bullet)
+                if polished and polished != safe_bullet:
+                    safe_bullet = polished
+                    action = "rewrite"
+                    # A rewrite has one exact source; other supporting claims remain context.
+                    evidence_refs = [claim_ref(source)]
+                    grounding_note = "去除句首介绍性套语；保留原文动作、技术、结果和个人贡献边界，确认后应用。"
         next_question = _next_evidence_question(req_name, risk_flags, bool(matching_claims))
         advice_list.append({
             "requirement": req_name,
@@ -262,6 +281,7 @@ def generate_resume_advice(
             "evidence_type": evidence_type,
             "evidence_refs": evidence_refs,
             "safe_bullet": safe_bullet,
+            "original_bullet": original_bullet,
             "gap_explanation": gap.gap_explanation,
             "grounding_note": grounding_note,
             "guard_report": guard_report,
@@ -279,6 +299,7 @@ class ResumePatch:
     target_path: str
     before: str
     after: str
+    approval_group: str = ""
     evidence_refs: List[Dict[str, Any]] = field(default_factory=list)
     validation_status: str = "applied"  # "applied", "rejected", "already_applied", "pending_user_confirmation"
     reason: str = ""
@@ -415,6 +436,7 @@ def generate_tailored_profile_from_review(
     applied_patches: List[Dict[str, Any]] = []
     unresolved_risks: List[Dict[str, Any]] = []
 
+    rewritten_sources = set()
     for advice in advice_list:
         if not isinstance(advice, dict):
             continue
@@ -440,6 +462,11 @@ def generate_tailored_profile_from_review(
         requirement = advice.get("requirement", "")
         evidence_refs = advice.get("evidence_refs", [])
         risk_flags = advice.get("risk_flags", [])
+        source_paths = tuple(ref.get("source_path", "") for ref in evidence_refs)
+        if any(path in rewritten_sources for path in source_paths):
+            continue
+        if action == "rewrite":
+            rewritten_sources.update(source_paths)
         matched_claim_id = next(
             (
                 str(ref.get("claim_id"))
@@ -491,7 +518,24 @@ def generate_tailored_profile_from_review(
         if category == "threshold" and any(k in requirement for k in ("学历", "学位", "年限", "工作经验", "专业")):
             continue
 
-        if evidence_graph is not None:
+        presentation_edit = (
+            action == "rewrite" and len(evidence_refs) == 1
+            and bool(evidence_refs[0].get("excerpt"))
+            and safe_bullet != evidence_refs[0]["excerpt"]
+            and safe_bullet == _polish_grounded_bullet(evidence_refs[0]["excerpt"])
+        )
+        if presentation_edit:
+            source_match = re.match(r"(experience|projects)\[(\d+)\]", evidence_refs[0].get("source_path", ""))
+            entries = tailored.get(source_match.group(1), []) if source_match else []
+            index = int(source_match.group(2)) if source_match else -1
+            presentation_edit = (
+                0 <= index < len(entries) and isinstance(entries[index], dict)
+                and _rewrite_bullet_index(source_match.group(1), index,
+                    entries[index].get("bullets", []), evidence_refs) is not None
+            )
+        # Removing introductory framing changes no factual claim. Keep it as an
+        # explicit approval draft even when the source itself is user-declared.
+        if evidence_graph is not None and not presentation_edit:
                 graph_claim_ids = [
                     str(ref.get("claim_id")) for ref in evidence_refs
                     if isinstance(ref, dict) and ref.get("claim_id")
@@ -651,8 +695,8 @@ def generate_tailored_profile_from_review(
                     before=before_str,
                     after=safe_bullet,
                     evidence_refs=evidence_refs,
-                    validation_status="applied",
-                    reason="grounded rewrite" if replaced else "grounded supplement",
+                    validation_status="pending_user_confirmation" if presentation_edit else "applied",
+                    reason="去除介绍性套语，保留原文事实与边界" if presentation_edit else "grounded rewrite" if replaced else "grounded supplement",
                     unresolved_risks=risk_flags,
                 )
                 applied_patches.append(patch.to_dict())
@@ -690,11 +734,50 @@ def generate_tailored_profile_from_review(
                     before=before_str,
                     after=safe_bullet,
                     evidence_refs=evidence_refs,
-                    validation_status="applied",
-                    reason="grounded project rewrite" if before_str else "grounded project supplement",
+                    validation_status="pending_user_confirmation" if presentation_edit else "applied",
+                    reason="去除介绍性套语，保留原文事实与边界" if presentation_edit else "grounded project rewrite" if before_str else "grounded project supplement",
                     unresolved_risks=risk_flags,
                 )
                 applied_patches.append(patch.to_dict())
+
+    # Prioritize existing facts within each entry, preserving chronology, wording
+    # and every bullet. The resulting permutation is an explicit approval diff.
+    def relevance(text: str) -> int:
+        score = 0
+        for advice in advice_list:
+            requirement = str(advice.get("requirement", ""))
+            terms = [t for t in re.split(r"[/、,\s]+", requirement) if len(t) >= 2]
+            if any(claim_matches(t, text) for t in terms):
+                importance = advice.get("jd_requirement", {}).get("importance", "")
+                score += 3 if importance == "must_have" else 1
+        return score
+
+    for section in ("experience", "projects"):
+        for index, entry in enumerate(tailored.get(section, []) or []):
+            if not isinstance(entry, dict):
+                continue
+            original = entry.get("bullets", [])
+            if not isinstance(original, list) or not all(isinstance(b, str) for b in original):
+                continue
+            ordered = sorted(original, key=relevance, reverse=True)
+            if ordered != original:
+                # Reordering depends on earlier edits in this entry; approve the whole plan.
+                for patch in applied_patches:
+                    if str(patch.get("target_path", "")).startswith(f"{section}[{index}].bullets["):
+                        patch["approval_group"] = f"reorder:{section}[{index}]"
+            for slot, (before, after) in enumerate(zip(original, ordered)):
+                if before == after:
+                    continue
+                applied_patches.append(ResumePatch(
+                    source_claim_id="jd_relevance_order",
+                    target_path=f"{section}[{index}].bullets[{slot}]",
+                    before=before, after=after,
+                    approval_group=f"reorder:{section}[{index}]",
+                    validation_status="pending_user_confirmation",
+                    evidence_refs=[{"source_path": f"{section}[{index}].bullets[{original.index(after)}]", "excerpt": after}],
+                    reason="优先展示岗位相关原文；保留全部事实与措辞",
+                ).to_dict())
+            entry["bullets"] = ordered
 
     tailored["applied_patches"] = applied_patches
     tailored["unresolved_risks"] = unresolved_risks
@@ -706,32 +789,21 @@ def generate_tailored_profile_from_review(
     return tailored
 
 
-def select_targeted_interview_questions(
-    decoded_jd: Any,
-    cand_profile: Dict[str, Any],
-    claims: List[EvidenceClaim],
-    matcher_result: Any,
-    predictor: Any,
-) -> List[Dict[str, Any]]:
-    """Select and format exactly 3 targeted interview defense questions across 3 dimensions.
-
-    Mainline 3 dimensions:
-    Q1 (`core_responsibility`): 核心岗位能力与技术架构深度考查 - derived from JD core_responsibilities or must_have core skills.
-    Q2 (`project_deep_dive`): 候选人真实项目经历与关键成果深入追问 - follows up on candidate's actual provided experience/project claims.
-    Q3 (`gap_boundary`): 技术缺口/证据不足边界与真实性防守考查 - directly examines gaps in matcher_result.gap_matrix.
-    """
-    formatted_questions: List[Dict[str, Any]] = []
-
-    # -------------------------------------------------------------------------
-    # Q1: core_responsibility (核心岗位能力与技术架构深度考查)
-    # -------------------------------------------------------------------------
+def _interview_role_evidence(decoded_jd, claims):
     core_resp_text = ""
     req_id_q1 = "core_responsibility"
     if hasattr(decoded_jd, "core_responsibilities") and decoded_jd.core_responsibilities:
-        core_resp_text = decoded_jd.core_responsibilities[0].description
-        req_id_q1 = getattr(decoded_jd.core_responsibilities[0], "responsibility_id", "core_resp_1")
+        responsibility = max(decoded_jd.core_responsibilities, key=lambda r: (
+            getattr(r, "weight", 1.0),
+            not bool(find_evidence(r.description, claims)),
+        ))
+        core_resp_text = responsibility.description
+        req_id_q1 = getattr(responsibility, "responsibility_id", "core_resp_" + hashlib.sha256(core_resp_text.encode()).hexdigest()[:8])
     elif hasattr(decoded_jd, "core_skills") and decoded_jd.core_skills:
-        core_resp_text = decoded_jd.core_skills[0].name
+        skill = max(decoded_jd.core_skills, key=lambda sk: (
+            sk.importance == "must_have", not bool(find_evidence(sk.name, claims)),
+        ))
+        core_resp_text = skill.name
         req_id_q1 = f"skill_{core_resp_text}"
     else:
         core_resp_text = "核心技术架构与系统设计"
@@ -756,6 +828,131 @@ def select_targeted_interview_questions(
     q1_evidence_refs = [claim_ref(c) for c in q1_claims[:3]]
     q1_evidence_ids = [ref.get("claim_id") for ref in q1_evidence_refs if ref.get("claim_id")]
 
+    return core_resp_text, req_id_q1, q1_evidence_refs, q1_evidence_ids
+
+
+def _rank_interview_projects(decoded_jd, claims, q1_evidence_refs, q1_evidence_ids):
+    substantive_claims = [
+        c for c in claims
+        if c.kind in ("experience", "project", "highlight", "bullet")
+        and len(c.text.strip()) >= 10
+        and not any(meta in c.source_path.lower() for meta in ("candidate.", "years_of_experience", "institution", "degree", "name", "phone", "email", "gender"))
+        and not any(meta in c.claim_id.lower() for meta in ("candidate.", "degree", "institution", "name"))
+    ]
+    distinct_claims: List[EvidenceClaim] = []
+    seen_claim_ids: Set[str] = set()
+    for c in substantive_claims:
+        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5a-zA-Z]", c.text):
+            distinct_claims.append(c)
+            seen_claim_ids.add(c.claim_id)
+    q1_used_texts = {ref.get("excerpt", "") for ref in q1_evidence_refs}
+    q1_used_ids = set(q1_evidence_ids)
+
+    def project_priority(claim):
+        relevant = sum(3 if sk.importance == "must_have" else 1
+                       for sk in getattr(decoded_jd, "core_skills", [])
+                       if claim_matches(sk.name, claim.text))
+        return (relevant, bool(claim.role_scope or claim.attribution), bool(claim.metric_context))
+
+    anchor_claim = max(distinct_claims, key=lambda c: (
+        project_priority(c), c.claim_id not in q1_used_ids and c.text not in q1_used_texts,
+    )) if distinct_claims else None
+
+    return sorted(distinct_claims, key=project_priority, reverse=True), anchor_claim
+
+
+def _resume_interview_questions(ranked):
+    if not ranked:
+        return []
+    unique = []
+    seen_texts = set()
+    for claim in ranked:
+        text_key = re.sub(r"\s+", "", claim.text).casefold()
+        if text_key not in seen_texts:
+            unique.append(claim)
+            seen_texts.add(text_key)
+
+    def entry(claim):
+        match = re.search(r"(?:experience|projects)\[\d+\]", claim.source_path)
+        return match.group() if match else claim.source_path
+
+    selected = [unique[0]]
+    for _ in range(2):
+        remaining = [claim for claim in unique if claim not in selected]
+        used_entries = {entry(claim) for claim in selected}
+        # Prefer another experience, then another statement in the same entry.
+        selected.append(next((c for c in remaining if entry(c) not in used_entries),
+                             remaining[0] if remaining else selected[0]))
+
+    formatted_questions = []
+    for slot, claim in enumerate(selected):
+        excerpt = claim.text.strip()
+        quoted = excerpt[:160] + ("…" if len(excerpt) > 160 else "")
+        decision = "你为什么选择这种做法？遇到的最难问题是什么？比较过哪些替代方案，最后如何解决？"
+        verification = "你如何验证交付结果？哪些结果来自团队，哪些是你的贡献？这项工作有哪些局限？"
+        if re.search(r"实验|论文|训练|评测|\b(?:training|experiment|benchmark)\b", excerpt, re.I):
+            decision = "你如何确定实验或评测方案？比较过哪些方法，如何控制影响结果的其他因素？"
+            verification = "你如何检查结果能否复现？评测样本有哪些限制，哪些结论尚不能确定？"
+        elif re.search(r"运营|活动|内容增长|用户增长|转化|拉新|留存|\b(?:campaign|conversion|retention)\b", excerpt, re.I):
+            decision = "你如何选择目标用户和执行方案？根据什么反馈调整，哪些动作由你负责？"
+            verification = "你如何判断效果来自这次行动，而非同期其他变化？统计范围和观察周期是什么？"
+        elif re.search(r"接口|数据库|索引|服务|系统|部署|缓存|\b(?:api|sql|sqlite|backend|deployment)\b", excerpt, re.I):
+            decision = "你如何拆分实现步骤并选择方案？遇到哪些故障或边界情况，如何定位和处理？"
+            verification = "你用哪些测试或运行记录验证结果？哪些场景没有覆盖，发生异常时如何处理？"
+        if slot == 0:
+            question = f"简历中写到【{quoted}】。请说明这项工作的背景、你具体负责的部分、做法以及交付结果。"
+            expected = ["工作背景", "个人动作", "交付结果及来源", "贡献边界与局限"]
+        elif slot == 1:
+            question = f"针对简历中的【{quoted}】，{decision}"
+            expected = ["方案选择依据", "替代方案或约束", "个人处理过程", "结果与局限"]
+        else:
+            question = f"针对简历中的【{quoted}】，{verification}"
+            if METRIC_PATTERN.search(excerpt):
+                question += "请说明数字的基线、统计口径和数据来源。"
+            expected = ["验证方法", "结果依据", "个人贡献边界", "未覆盖的情况"]
+        formatted_questions.append({
+            "question_id": slot + 1,
+            "target_dimension": ("core_responsibility", "project_deep_dive", "gap_boundary")[slot],
+            "dimension_name_cn": ("简历经历与个人贡献", "方案选择与问题解决", "结果依据与贡献边界")[slot],
+            "requirement_id": f"resume_{claim.claim_id}", "requirement_name": excerpt,
+            "question_zh": question,
+            "question_en": f"Explain your work, evidence and contribution boundary for this resume statement: {quoted}",
+            "jd_signal": excerpt, "category": "简历经历追问", "category_type": "DEEP_DIVE",
+            "interviewer_intent": "根据简历中的真实经历核实个人动作、结果与贡献边界。",
+            "expected_elements": expected,
+            "prep_keypoints": "结合原文说明" + "、".join(expected) + "；没有测量数据时如实说明。",
+            "evidence_refs": [claim_ref(claim)], "evidence_claim_ids": [claim.claim_id], "gap_refs": [],
+        })
+    return formatted_questions
+
+
+def select_targeted_interview_questions(
+    decoded_jd: Any,
+    cand_profile: Dict[str, Any],
+    claims: List[EvidenceClaim],
+    matcher_result: Any,
+    predictor: Any,
+    resume_first: bool = False,
+) -> List[Dict[str, Any]]:
+    """Select resume-grounded questions, or the legacy JD-focused questions.
+
+    Resume mode returns early without generating the legacy JD question set.
+
+    Mainline 3 dimensions:
+    Q1 (`core_responsibility`): 核心岗位能力与技术架构深度考查 - derived from JD core_responsibilities or must_have core skills.
+    Q2 (`project_deep_dive`): 候选人真实项目经历与关键成果深入追问 - follows up on candidate's actual provided experience/project claims.
+    Q3 (`gap_boundary`): 技术缺口/证据不足边界与真实性防守考查 - directly examines gaps in matcher_result.gap_matrix.
+    """
+    formatted_questions: List[Dict[str, Any]] = []
+
+    # -------------------------------------------------------------------------
+    # Q1: core_responsibility (核心岗位能力与技术架构深度考查)
+    # -------------------------------------------------------------------------
+    core_resp_text, req_id_q1, q1_evidence_refs, q1_evidence_ids = _interview_role_evidence(decoded_jd, claims)
+    ranked, anchor_claim = _rank_interview_projects(decoded_jd, claims, q1_evidence_refs, q1_evidence_ids)
+    if resume_first:
+        return _resume_interview_questions(ranked)
+
     top20_qs = predictor.top20_pred.predict(decoded_jd, matcher_result) if hasattr(predictor, "top20_pred") else []
     arch_qs = [q for q in top20_qs if getattr(q, "category_type", None) == QuestionCategory.ARCHITECTURE]
 
@@ -765,7 +962,7 @@ def select_targeted_interview_questions(
         for aq in arch_qs:
             score = 0.0
             aq_text = (aq.question_cn + " " + aq.jd_signal).lower()
-            if core_resp_text and any(t.lower() in aq_text for t in re.split(r"[/,、\s]+", core_resp_text) if len(t) >= 2):
+            if core_resp_text and any(claim_matches(t, aq_text) for t in re.split(r"[/,、\s]+", core_resp_text) if len(t) >= 2):
                 score += 5.0
             if score > best_score:
                 best_score = score
@@ -829,38 +1026,6 @@ def select_targeted_interview_questions(
     # -------------------------------------------------------------------------
     # Q2: project_deep_dive (候选人真实项目经历与关键成果深入追问)
     # -------------------------------------------------------------------------
-    substantive_claims = [
-        c for c in claims
-        if c.kind in ("experience", "project", "highlight", "bullet")
-        and len(c.text.strip()) >= 10
-        and not any(meta in c.source_path.lower() for meta in ("candidate.", "years_of_experience", "institution", "degree", "name", "phone", "email", "gender"))
-        and not any(meta in c.claim_id.lower() for meta in ("candidate.", "degree", "institution", "name"))
-    ]
-    distinct_claims: List[EvidenceClaim] = []
-    seen_claim_ids: Set[str] = set()
-    for c in substantive_claims:
-        if c.claim_id not in seen_claim_ids and re.search(r"[\u4e00-\u9fa5a-zA-Z]", c.text):
-            distinct_claims.append(c)
-            seen_claim_ids.add(c.claim_id)
-    for c in substantive_claims:
-        if c.claim_id not in seen_claim_ids:
-            distinct_claims.append(c)
-            seen_claim_ids.add(c.claim_id)
-
-    q1_used_texts = {ref.get("excerpt", "") for ref in q1_evidence_refs}
-    q1_used_ids = set(q1_evidence_ids)
-
-    candidate_q2_claims = [
-        c for c in distinct_claims
-        if c.claim_id not in q1_used_ids and not any(c.text[:20] in used for used in q1_used_texts)
-    ]
-    if candidate_q2_claims:
-        anchor_claim = candidate_q2_claims[0]
-    elif distinct_claims:
-        anchor_claim = distinct_claims[0]
-    else:
-        anchor_claim = None
-
     if anchor_claim is not None:
         c_text = anchor_claim.text.strip().rstrip("。")
         short_c = c_text[:45] + ("..." if len(c_text) > 45 else "")
@@ -918,7 +1083,7 @@ def select_targeted_interview_questions(
             g for g in matcher_result.gap_matrix
             if getattr(g, "state", None) in priority
         ]
-        actionable_gaps.sort(key=lambda g: priority.get(g.state, 9))
+        actionable_gaps.sort(key=lambda g: (g.importance not in {"must_have", "mandatory"}, priority.get(g.state, 9)))
 
     if actionable_gaps:
         top_gap = actionable_gaps[0]
@@ -977,67 +1142,222 @@ def select_targeted_interview_questions(
     return formatted_questions
 
 
-def run_career_review(
-    jd_text: str,
-    profile_dict: Union[Dict[str, Any], ProfileContext],
-    answers_dict: Optional[Dict[str, Any]] = None,
-    listing_age_days: int = 15,
-    build_resume: bool = False,
-    resume_theme: str = "modern-navy",
-    resume_output_dir: Optional[Union[str, Path]] = None,
-    reserve_photo: bool = True,
-    session_data: Optional[Dict[str, Any]] = None,
+def prepare_evidence_followup(
+    advice_list: List[Dict[str, Any]],
+    tailored: Dict[str, Any], answers: Optional[Dict[str, Any]],
+    session: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    if build_resume:
-        require_public_profile(profile_dict)
-    decoder = JDDecoder()
-    decoded_jd = decoder.decode(jd_text)
-
-    profile_ctx = build_profile_context(profile_dict if isinstance(profile_dict, (dict, ProfileContext)) else {})
-    cand_profile = profile_ctx.get_canonical_profile()
-    claims = list(profile_ctx.claims)
-
-    matcher = JDMatcher()
-    matcher_result = matcher.match(decoded_jd, cand_profile)
-
-    predictor = JDPredictor()
-    probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days)
-
-    jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
-    raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
-    profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
-
-    if session_data:
-        sess_jd_fp = session_data.get("jd_fingerprint")
-        sess_prof_fp = session_data.get("profile_fingerprint")
-        if sess_jd_fp and sess_jd_fp != jd_hash:
-            raise ValueError(f"Session JD fingerprint mismatch: expected {sess_jd_fp}, got {jd_hash}")
-        if sess_prof_fp and sess_prof_fp != profile_hash:
-            raise ValueError(f"Session Profile fingerprint mismatch: expected {sess_prof_fp}, got {profile_hash}")
-        formatted_questions = session_data.get("questions_snapshot", [])
-    else:
-        formatted_questions = select_targeted_interview_questions(
-            decoded_jd=decoded_jd,
-            cand_profile=cand_profile,
-            claims=claims,
-            matcher_result=matcher_result,
-            predictor=predictor,
-        )
-
-    fact_guard = FactVerificationGuard(profile_ctx)
-    resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard)
-
-    evidence_graph = EvidenceGraph.from_profile_context(profile_ctx)
-    referenced_claim_ids: List[str] = []
-    for advice in resume_advices:
-        if not advice.get("safe_bullet"):
+    """Collect source-bound facts as approval drafts, never as verified claims."""
+    targets = [f"{section}[{i}]" for section in ("experience", "projects")
+               for i, entry in enumerate(tailored.get(section, []) or []) if isinstance(entry, dict)]
+    questions = []
+    for advice in sorted(advice_list, key=lambda a: (
+        a.get("jd_requirement", {}).get("importance") != "must_have",
+        not bool(a.get("risk_flags")),
+    )):
+        if advice.get("category") == "threshold":
+            # Education and seniority must be corrected in the source fields,
+            # never appended to an unrelated project as a new bullet.
             continue
+        if advice.get("state") not in {"needs_confirmation", "unsupported"} and not advice.get("risk_flags"):
+            continue
+        requirement = advice["requirement"]
+        qid = "E-" + hashlib.sha256(requirement.encode("utf-8")).hexdigest()[:12]
+        if any(q["question_id"] == qid for q in questions):
+            continue
+        anchored = []
         for ref in advice.get("evidence_refs", []):
-            if isinstance(ref, dict) and ref.get("claim_id"):
-                referenced_claim_ids.append(str(ref["claim_id"]))
-    selected_claim_ids, blocked_claims = evidence_graph.mark_used_for_resume(referenced_claim_ids)
-    evidence_gate, evidence_blockers = evidence_graph.can_apply(selected_claim_ids)
+            match = re.match(r"(experience|projects)\[\d+\]", ref.get("source_path", ""))
+            if match and match.group() in targets and match.group() not in anchored:
+                anchored.append(match.group())
+        questions.append({"question_id": qid, "requirement": requirement,
+                          "question": advice["next_question"],
+                          "target_path": anchored[0] if len(anchored) == 1 else None,
+                          "allowed_target_paths": targets,
+                          "evidence_refs": advice.get("evidence_refs", [])})
+    prior = (session or {}).get("evidence_followup", {})
+    issued = {q["question_id"]: q for q in prior.get("questions_snapshot", [])}
+    if not issued:
+        issued = {q["question_id"]: q for q in questions[:3]}
+    responses = {a["question_id"]: dict(a) for a in prior.get("answers", [])}
+    incoming = (answers or {}).get("evidence_answers", [])
+    if not isinstance(incoming, list):
+        raise ValueError("evidence_answers must be a list")
+    seen = set()
+    for item in incoming:
+        if (not isinstance(item, dict)
+                or not isinstance(item.get("question_id"), (str, int))
+                or isinstance(item.get("question_id"), bool)
+                or item.get("question_id") not in issued):
+            raise ValueError("补证回答必须关联当前会话已发出的问题 question_id")
+        qid = item["question_id"]
+        if qid in seen:
+            raise ValueError(f"重复的补证回答: {qid}")
+        seen.add(qid)
+        text = item.get("answer", "")
+        state = item.get("status", "provided")
+        if state not in {"provided", "no_experience"}:
+            raise ValueError("补证状态只能是 provided 或 no_experience")
+        if not isinstance(text, str) or len(text) > 8000 or (state == "provided" and not text.strip()):
+            raise ValueError("补证回答必须是非空文本，最长 8000 字符")
+        target = item.get("target_path") or issued[qid].get("target_path")
+        if state == "provided" and target not in targets:
+            raise ValueError(f"请为 {qid} 指定真实经历 target_path，可选：{', '.join(targets)}")
+        responses[qid] = {"question_id": qid, "answer": text.strip(), "target_path": target,
+                          "status": state, "verification": "user_provided"}
+    for qid, item in responses.items():
+        if item["status"] == "no_experience":
+            continue
+        match = re.fullmatch(r"(experience|projects)\[(\d+)\]", item.get("target_path") or "")
+        if not match or item["target_path"] not in targets:
+            raise ValueError("补证关联的经历已不可用，请重新生成会话")
+        section, index = match.group(1), int(match.group(2))
+        bullets = tailored[section][index].get("bullets", [])
+        if item["answer"] in bullets:
+            continue
+        planned = tailored.setdefault("applied_patches", [])
+        prefix = item["target_path"] + ".bullets["
+        additions = sum(p.get("before") == "" and str(p.get("target_path", "")).startswith(prefix)
+                        and any(ref.get("source") == "user_answer" for ref in p.get("evidence_refs", []))
+                        for p in planned)
+        if any(p.get("after") == item["answer"] and str(p.get("target_path", "")).startswith(prefix) for p in planned):
+            continue
+        planned.append(ResumePatch(
+            source_claim_id=qid, target_path=f"{prefix}{len(bullets) + additions}]",
+            before="", after=item["answer"], validation_status="pending_user_confirmation",
+            evidence_refs=[{"source": "user_answer", "question_id": qid, "excerpt": item["answer"],
+                            "verification": "user_provided", "source_path": item["target_path"]}],
+            reason="用户补充原文，尚未外部核验；确认后才写入新履历",
+        ).to_dict())
+    pending = [q for q in questions if q["question_id"] not in responses][:3]
+    issued.update({q["question_id"]: q for q in pending})
+    return {"questions": pending, "questions_snapshot": list(issued.values()),
+            "answers": list(responses.values()), "pending_count": len(pending),
+            "status": "awaiting_evidence" if pending else (
+                "ready_for_confirmation" if any(p.get("before") != p.get("after")
+                    and p.get("validation_status") in {"applied", "pending_user_confirmation"}
+                    for p in tailored.get("applied_patches", [])) else "ready_for_export"),
+            "answer_template": {"evidence_answers": [
+                {"question_id": q["question_id"], "answer": "", "target_path": q["target_path"], "status": "provided"}
+                for q in pending]}}
 
+
+def build_review_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    """One outcome-focused summary shared by CLI and structured clients."""
+    goal = result["goal"]
+    match = result["match_summary"]
+    parse_report = result["input_quality"].get("profile_parse_report", {})
+    parse_warnings = parse_report.get("warnings", []) if parse_report.get("status") != "reviewed" else []
+    issues = [w["message"] for w in parse_warnings]
+    issues.extend(match.get("hard_veto_reasons", []))
+    gaps = sorted(match.get("gap_matrix", []), key=lambda g: (
+        g.get("importance") != "must_have", g.get("state", "").upper() != "REAL_GAP",
+    ))
+    for gap in gaps:
+        if match.get("hard_veto_reasons") and gap.get("category") == "threshold":
+            continue
+        if gap.get("state", "").lower() != "matched":
+            issues.append(f"{gap['requirement_name']}：{gap.get('gap_explanation', '')}")
+    patches = result["material_proposal"]["patches"]
+    pending = result.get("evidence_followup", {}).get("questions", [])
+    unanswered = [q for q in result["interview_questions"] if q["question_id"] not in {
+        f["question_id"] for f in result["answer_feedback"] if f.get("status") == "evaluated"}]
+    interview_active = goal == "interview" or (
+        goal == "review" and result["material_proposal"].get("status") in {"accepted", "rejected"}
+        and (unanswered or result.get("practice_queue"))
+    )
+    if interview_active:
+        patches = [] if result["material_proposal"].get("status") in {"accepted", "rejected"} else patches
+        followups = result.get("practice_queue", [])
+        if followups:
+            conclusion = "已根据回答生成追问。"
+            action = {"kind": "follow_up_question", "message": followups[0]["question"], "question_id": followups[0]["question_id"]}
+        elif unanswered:
+            conclusion = f"已根据当前简历准备 {len(result['interview_questions'])} 道面试问题。"
+            action = {"kind": "answer_question", "message": unanswered[0]["question_zh"], "question_id": unanswered[0]["question_id"]}
+        elif not result["interview_questions"]:
+            conclusion = "简历中还没有可用于模拟面试的具体经历。"
+            action = {"kind": "provide_resume", "message": "补充真实项目或工作经历后，再生成面试问题。"}
+        else:
+            conclusion = "本轮面试回答已复盘。"
+            action = {"kind": "practice", "message": "结合反馈练习简历中最需要补强的经历。"}
+    elif result.get("generated_resumes"):
+        conclusion = "简历已生成，请核对成品。"
+        action = {"kind": "inspect_export", "message": "打开生成的简历，核对内容完整性和实际排版。"}
+    elif result["material_proposal"].get("status") in {"accepted", "rejected"}:
+        accepted = result["material_proposal"]["status"] == "accepted"
+        patches = []
+        conclusion = "该提案已确认，已保留原确认记录。" if accepted else "该提案已拒绝，已保留原拒绝记录。"
+        action = {"kind": "resume_accepted_proposal" if accepted else "revise_source",
+                  "message": "使用已确认提案继续生成履历和导出。" if accepted else "补充或修正底稿后，重新生成提案。"}
+    elif parse_warnings:
+        conclusion = "已完成分析，原始材料仍有识别疑点。"
+        action = {"kind": "check_source", "message": "先核对解析摘要中的未归类原文和缺失字段，再继续修改。"}
+    elif pending:
+        conclusion = "已完成岗位对齐，关键事实仍需补充。"
+        action = {"kind": "provide_evidence", "message": pending[0]["question"], "question_id": pending[0]["question_id"]}
+    elif goal != "interview" and patches:
+        conclusion = f"已生成 {len(patches)} 项待确认修改，原始履历未改动。"
+        action = {"kind": "confirm_proposal", "message": "核对修改前后内容，确认选定提案后再导出简历。"}
+    elif result.get("practice_queue"):
+        followup = result["practice_queue"][0]
+        conclusion = "本轮回答已复盘，优先补强尚未闭合的事实与解释。"
+        action = {"kind": "follow_up_question", "message": followup["question"],
+                  "question_id": followup["question_id"]}
+    elif unanswered:
+        conclusion = f"已准备 {len(result['interview_questions'])} 道岗位相关问题。"
+        action = {"kind": "answer_question", "message": unanswered[0]["question_zh"], "question_id": unanswered[0]["question_id"]}
+    else:
+        conclusion = "当前没有需要确认的内容修改。"
+        action = {"kind": "export", "message": "核对公开范围后，使用默认主题导出简历。"}
+    if match.get("is_hard_vetoed") and not interview_active:
+        conclusion += " 当前材料触发了岗位硬门槛，请人工复核原文与个人条件。"
+        action = {"kind": "check_threshold", "message": "先核对岗位硬门槛与原始学历、专业、年限；底稿有误时修正底稿后重新分析，不通过补写项目绕过门槛。"}
+    return {"conclusion": conclusion, "key_issues": list(dict.fromkeys(issues))[:3],
+            "pending_change_count": len(patches),
+            "pending_changes": [{"patch_id": index, **patch} for index, patch in enumerate(patches[:3])],
+            "next_action": action}
+
+
+def answer_context(profile_hash, jd_hash, questions, evidence_questions):
+    """Bind submissions to the source version and the questions actually issued."""
+    payload = {"profile": profile_hash, "jd": jd_hash,
+               "questions": questions, "evidence_questions": evidence_questions}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _answer_context_errors(session, incoming):
+    if not (incoming.get("answers") or incoming.get("evidence_answers")):
+        return []
+    if not session.get("answer_context"):
+        return ["旧会话缺少回答版本，请先刷新会话并使用新的回答模板。"]
+    if incoming.get("answer_context") != session["answer_context"]:
+        return ["回答的材料或题目版本不匹配，请先刷新并填写当前回答模板。"]
+    return []
+
+
+def _pending_interview_feedback(q):
+    return {
+        "question_id": q["question_id"],
+        "question_zh": q["question_zh"],
+        "target_dimension": q.get("target_dimension", ""),
+        "candidate_answer": "",
+        "status": "awaiting_answer",
+        "diagnosis": "not_submitted",
+        "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
+        "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
+        "revised_answer": "",
+        "refined_answer": "",
+        "can_revise": False,
+        "verification_status": "unverified",
+        "key_takeaway": "请先提交针对该题的回答。",
+        "evidence_refs": q.get("evidence_refs", []),
+        "missing_elements": [],
+        "follow_up_questions": [],
+    }
+
+
+def _review_interview_answers(formatted_questions, answers_dict, session_data, fact_guard, wants_interview):
     debrief_engine = InterviewDebriefEngine()
     feedback_items: List[Dict[str, Any]] = []
     invalid_answers: List[Dict[str, Any]] = []
@@ -1045,7 +1365,7 @@ def run_career_review(
     # Map of previous feedback and answers from session_data
     previous_feedback_map: Dict[int, Dict[str, Any]] = {}
     previous_answers_map: Dict[int, str] = {}
-    if session_data:
+    if session_data and wants_interview:
         for f in session_data.get("answer_feedback", []):
             if isinstance(f, dict) and "question_id" in f:
                 previous_feedback_map[f["question_id"]] = f
@@ -1063,6 +1383,9 @@ def run_career_review(
         for item in provided_answers:
             if isinstance(item, dict):
                 qid = item.get("question_id")
+                if not isinstance(qid, (str, int)) or isinstance(qid, bool):
+                    invalid_answers.append({"question_id": qid, "reason": "invalid_question_id"})
+                    continue
                 try:
                     normalized_qid = int(qid)
                 except (TypeError, ValueError):
@@ -1083,7 +1406,9 @@ def run_career_review(
                 if len(txt) > 8000:
                     invalid_answers.append({"question_id": normalized_qid, "reason": "answer_too_long", "max_length": 8000})
                     continue
-                new_answers_by_id[normalized_qid] = txt
+                # Blank template fields do not erase a previously submitted answer.
+                if txt.strip() or normalized_qid not in previous_answers_map:
+                    new_answers_by_id[normalized_qid] = txt
             elif isinstance(item, str):
                 next_id = len(new_answers_by_id) + 1
                 if len(item) > 8000:
@@ -1129,47 +1454,22 @@ def run_career_review(
                     "follow_up_questions": debrief.follow_up_questions,
                 })
             else:
-                feedback_items.append({
-                    "question_id": qid,
-                    "question_zh": q["question_zh"],
-                    "target_dimension": q.get("target_dimension", ""),
-                    "candidate_answer": "",
-                    "status": "awaiting_answer",
-                    "diagnosis": "not_submitted",
-                    "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
-                    "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
-                    "revised_answer": "",
-                    "refined_answer": "",
-                    "can_revise": False,
-                    "verification_status": "unverified",
-                    "key_takeaway": "请先提交针对该题的回答。",
-                    "evidence_refs": q.get("evidence_refs", []),
-                    "missing_elements": [],
-                    "follow_up_questions": [],
-                })
+                feedback_items.append(_pending_interview_feedback(q))
         # Else if previously evaluated in session_data: retain previous feedback!
         elif qid in previous_feedback_map:
             feedback_items.append(previous_feedback_map[qid])
         # Else: awaiting answer
         else:
-            feedback_items.append({
-                "question_id": qid,
-                "question_zh": q["question_zh"],
-                "target_dimension": q.get("target_dimension", ""),
-                "candidate_answer": "",
-                "status": "awaiting_answer",
-                "diagnosis": "not_submitted",
-                "analysis": "等待候选人输入回答以开展事实核验与深度追问。",
-                "coaching_advice": "建议结合具体项目经历，给出包含因果推导与指标基线的完整陈述。",
-                "revised_answer": "",
-                "refined_answer": "",
-                "can_revise": False,
-                "verification_status": "unverified",
-                "key_takeaway": "请先提交针对该题的回答。",
-                "evidence_refs": q.get("evidence_refs", []),
-                "missing_elements": [],
-                "follow_up_questions": [],
-            })
+            feedback_items.append(_pending_interview_feedback(q))
+
+    practice_queue = [
+        {"question_id": f["question_id"], "question": question,
+         "diagnosis": f.get("diagnosis"), "evidence_refs": f.get("evidence_refs", [])}
+        for f in sorted(feedback_items, key=lambda f: (
+            f.get("verification_status") == "verified", not bool(f.get("missing_elements"))))
+        if f.get("status") == "evaluated" and f.get("diagnosis") != "well_defended"
+        for question in f.get("follow_up_questions", [])[:1]
+    ]
 
     # Prepare combined answers list for result
     combined_answers_list = [
@@ -1177,12 +1477,115 @@ def run_career_review(
         for qid, ans in sorted(combined_answers_map.items())
     ]
 
+    return feedback_items, invalid_answers, combined_answers_list, practice_queue
+
+
+def _prepare_review_session(session_data, jd_hash, profile_hash, wants_interview, answers_dict):
+    if session_data:
+        session_data = validate_review_session(session_data)
+        sess_jd_fp = session_data.get("jd_fingerprint")
+        sess_prof_fp = session_data.get("profile_fingerprint")
+        if sess_jd_fp and sess_jd_fp != jd_hash:
+            raise ValueError(f"Session JD fingerprint mismatch: expected {sess_jd_fp}, got {jd_hash}")
+        if sess_prof_fp and sess_prof_fp != profile_hash:
+            raise ValueError(f"Session Profile fingerprint mismatch: expected {sess_prof_fp}, got {profile_hash}")
+        if wants_interview and session_data.get("question_strategy") != "resume":
+            session_data = {**session_data, "questions_snapshot": [], "answers": [], "answer_feedback": []}
+            if (answers_dict or {}).get("answers"):
+                raise ValueError("面试题已切换为当前简历，请先刷新题目，再填写回答。")
+        if answers_dict:
+            context_errors = _answer_context_errors(session_data, answers_dict)
+            if context_errors:
+                raise ValueError("; ".join(context_errors))
+        formatted_questions = session_data.get("questions_snapshot", []) if wants_interview else []
+    else:
+        formatted_questions = []
+    return session_data, formatted_questions
+
+
+def run_career_review(
+    jd_text: str,
+    profile_dict: Union[Dict[str, Any], ProfileContext],
+    answers_dict: Optional[Dict[str, Any]] = None,
+    listing_age_days: int = 15,
+    build_resume: bool = False,
+    resume_theme: str = "modern-navy",
+    resume_output_dir: Optional[Union[str, Path]] = None,
+    reserve_photo: bool = True,
+    session_data: Optional[Dict[str, Any]] = None,
+    goal: str = "review",
+) -> Dict[str, Any]:
+    if goal not in {"tailor", "interview", "review"}:
+        raise ValueError("review goal must be tailor, interview, or review")
+    if answers_dict is not None and not isinstance(answers_dict, dict):
+        raise ValueError("answers must be a JSON object")
+    wants_interview = goal in {"interview", "review"}
+    wants_materials = goal in {"tailor", "review"}
+    if build_resume and not wants_materials:
+        raise ValueError("面试准备不导出简历；请选择 tailor 目标并确认材料修改。")
+    if not wants_interview and (answers_dict or {}).get("answers"):
+        raise ValueError("面试回答需要 --goal interview 或 --goal review")
+    if not wants_materials and (answers_dict or {}).get("evidence_answers"):
+        raise ValueError("材料补证需要 --goal tailor 或 --goal review")
+    if build_resume:
+        require_public_profile(profile_dict)
+    decoder = JDDecoder()
+    decoded_jd = decoder.decode(jd_text)
+
+    profile_ctx = build_profile_context(profile_dict if isinstance(profile_dict, (dict, ProfileContext)) else {})
+    cand_profile = profile_ctx.get_canonical_profile()
+    claims = list(profile_ctx.claims)
+
+    matcher = JDMatcher()
+    matcher_result = matcher.match(decoded_jd, cand_profile)
+
+    predictor = JDPredictor() if wants_interview else None
+    probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days) if predictor else None
+
+    jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
+    raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
+    profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+
+    session_data, formatted_questions = _prepare_review_session(
+        session_data, jd_hash, profile_hash, wants_interview, answers_dict,
+    )
+    if wants_interview and not formatted_questions:
+        formatted_questions = select_targeted_interview_questions(
+            decoded_jd=decoded_jd,
+            cand_profile=cand_profile,
+            claims=claims,
+            matcher_result=matcher_result,
+            predictor=predictor,
+            resume_first=True,
+        )
+
+    fact_guard = FactVerificationGuard(profile_ctx)
+    resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard) if wants_materials else []
+
+    evidence_graph = EvidenceGraph.from_profile_context(profile_ctx)
+    referenced_claim_ids: List[str] = []
+    for advice in resume_advices:
+        if not advice.get("safe_bullet"):
+            continue
+        for ref in advice.get("evidence_refs", []):
+            if isinstance(ref, dict) and ref.get("claim_id"):
+                referenced_claim_ids.append(str(ref["claim_id"]))
+    selected_claim_ids, blocked_claims = evidence_graph.mark_used_for_resume(referenced_claim_ids)
+    evidence_gate, evidence_blockers = evidence_graph.can_apply(selected_claim_ids)
+
+    feedback_items, invalid_answers, combined_answers_list, practice_queue = _review_interview_answers(
+        formatted_questions, answers_dict, session_data, fact_guard, wants_interview,
+    )
+
     tailored_profile = generate_tailored_profile_from_review(
         {"resume_advice": resume_advices, "match_summary": matcher_result},
         profile_ctx,
         fact_guard=fact_guard,
         evidence_graph=evidence_graph,
-    )
+    ) if wants_materials else copy.deepcopy(profile_ctx.normalized_profile)
+    evidence_followup = prepare_evidence_followup(
+        resume_advices, tailored_profile, answers_dict, session_data,
+    ) if wants_materials else {}
 
     evidence_snapshot = create_evidence_snapshot(
         profile=profile_ctx,
@@ -1192,15 +1595,31 @@ def run_career_review(
         notes="career-review evidence snapshot",
     )
     material_proposal = create_material_proposal(
-        {"tailored_profile": tailored_profile},
+        {"tailored_profile": tailored_profile} if wants_materials else {},
         profile_ctx,
         jd_text,
         proposal_id=f"PROP-{profile_hash}-{jd_hash}",
     )
+    # A new evidence round must not overwrite the approval of an older draft.
+    patch_revision = hashlib.sha256(json.dumps(material_proposal.patches, ensure_ascii=False,
+                                               sort_keys=True).encode("utf-8")).hexdigest()[:12]
+    material_proposal.proposal_id += f"-{patch_revision}"
+    material_proposal.proposal_hash = material_proposal.compute_hash()
 
     # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
     result = {
         "schema_version": "career-review.v1",
+        "answer_context": answer_context(profile_hash, jd_hash, formatted_questions,
+                                         evidence_followup.get("questions_snapshot", [])),
+        "goal": goal,
+        "execution": {
+            "executed_stages": ["jd_decode", "full_match"]
+                + (["resume_advice", "material_proposal", "evidence_followup"] if wants_materials else [])
+                + (["interview_questions", "answer_feedback"] if wants_interview else []),
+            "skipped_stages": ([] if wants_materials else ["resume_advice", "material_proposal", "evidence_followup"])
+                + ([] if wants_interview else ["interview_questions", "answer_feedback"]),
+            "resumed": bool(session_data),
+        },
         "jd_breakdown": {
             "job_title": decoded_jd.job_title,
             "company_or_dept": decoded_jd.company_or_dept,
@@ -1239,8 +1658,8 @@ def run_career_review(
             "is_hard_vetoed": matcher_result.is_hard_vetoed,
             "hard_veto_reasons": matcher_result.hard_veto_reasons,
             "breakthrough_advice": matcher_result.breakthrough_advice,
-            "prediction": asdict(probability_forecast),
-            "prediction_note": "基于规则和当前材料的启发式区间，不代表真实录用概率。",
+            "prediction": asdict(probability_forecast) if probability_forecast else None,
+            "prediction_note": "无经校准的招聘结果数据，暂不提供真实面试或录用概率。",
             "gap_matrix": [
                 {
                     "requirement_name": g.requirement_name,
@@ -1255,26 +1674,28 @@ def run_career_review(
             ],
         },
         "resume_advice": resume_advices,
+        "evidence_followup": evidence_followup,
         "interview_questions": formatted_questions,
         "question_generation": {
-            "strategy": "3_dimension_targeted_defense",
+            "strategy": "resume_grounded_simulation" if wants_interview else "not_requested",
             "dimensions": [
-                {"dimension": "core_responsibility", "name": "核心岗位能力与技术架构深度考查", "question_id": 1},
-                {"dimension": "project_deep_dive", "name": "候选人真实项目经历与关键成果深入追问", "question_id": 2},
-                {"dimension": "gap_boundary", "name": "技术缺口/证据不足边界与真实性防守考查", "question_id": 3},
+                {"dimension": q["target_dimension"], "name": q["dimension_name_cn"], "question_id": q["question_id"]}
+                for q in formatted_questions
             ],
             "total_questions": len(formatted_questions),
         },
         "answers": combined_answers_list,
         "answer_feedback": feedback_items,
+        "practice_queue": practice_queue,
         "input_quality": {
+            "profile_parse_report": raw_p.get("_parse_report", {}) if isinstance(raw_p, dict) else {},
             "answers": combined_answers_list,
             "invalid_answers": invalid_answers,
             "evaluated_count": len([f for f in feedback_items if f.get("status") == "evaluated"]),
             "pending_count": len([f for f in feedback_items if f.get("status") == "awaiting_answer"]),
         },
         "polish_focus": {
-            "focus_area": "interview_defense",
+            "focus_area": "interview_defense" if wants_interview else "resume_materials",
             "defense_checkpoints": [
                 f"Q{q['question_id']}: {q.get('jd_signal', '')} ({q.get('category', q.get('dimension_name_cn', ''))})"
                 for q in formatted_questions
@@ -1295,8 +1716,15 @@ def run_career_review(
         ],
     }
 
+    # A versioned template must also match when submitted without a saved session.
+    if (not session_data and answers_dict and "answer_context" in answers_dict
+            and answers_dict["answer_context"] != result["answer_context"]):
+        raise ValueError("回答的材料或题目版本不匹配，请先刷新并填写当前回答模板。")
+
     # Optional resume generation using tailored_profile
     if build_resume:
+        if material_proposal.patches:
+            raise ValueError("存在待确认修改，请先保存提案并通过 proposal accept 确认，再导出简历。")
         from core.resume_builder import ResumeBuilder
 
         if resume_output_dir is None:
@@ -1308,27 +1736,27 @@ def run_career_review(
 
         builder = ResumeBuilder(tailored_profile)
         if resume_theme == "all":
-            built_files = builder.build_all(out_dir, photo=reserve_photo)
+            built_files = {name: {kind: str(path) for kind, path in paths.items()}
+                           for name, paths in builder.build_all(out_dir, photo=reserve_photo).items()}
             primary_pdf = None
             if "modern-navy" in built_files and "pdf" in built_files["modern-navy"]:
                 primary_pdf = built_files["modern-navy"]["pdf"]
-            elif built_files:
-                first_theme = next(iter(built_files.values()))
             result["generated_resumes"] = {
                 "theme": resume_theme,
                 "pdf": primary_pdf,
                 "files": built_files,
-                "output_dir": out_dir,
+                "output_dir": str(out_dir),
             }
         else:
-            built_files = builder.build_theme(resume_theme, out_dir, photo=reserve_photo)
+            built_files = {kind: str(path) for kind, path in
+                           builder.build_theme(resume_theme, out_dir, photo=reserve_photo).items()}
             primary_pdf = built_files.get("pdf")
             result["generated_resumes"] = {
                 **built_files,
                 "theme": resume_theme,
                 "pdf": primary_pdf,
                 "html": built_files.get("html"),
-                "output_dir": out_dir,
+                "output_dir": str(out_dir),
             }
 
         cand_name = tailored_profile.get("candidate", {}).get("name") or tailored_profile.get("name") or "候选人"
@@ -1339,17 +1767,18 @@ def run_career_review(
             if primary_pdf and Path(primary_pdf).exists():
                 named_pdf = out_dir / f"{clean_name}_个人简历.pdf"
                 shutil.copy2(primary_pdf, named_pdf)
-                result["generated_resumes"]["named_pdf"] = named_pdf
+                result["generated_resumes"]["named_pdf"] = str(named_pdf)
             primary_html = result["generated_resumes"].get("html")
             if not primary_html and resume_theme == "all" and "modern-navy" in built_files:
                 primary_html = built_files["modern-navy"].get("html")
             if primary_html and Path(primary_html).exists():
                 named_html = out_dir / f"{clean_name}_个人简历.html"
                 shutil.copy2(primary_html, named_html)
-                result["generated_resumes"]["named_html"] = named_html
+                result["generated_resumes"]["named_html"] = str(named_html)
         except Exception:
             pass
 
+    result["summary"] = build_review_summary(result)
     return result
 
 
@@ -1365,24 +1794,7 @@ def create_review_session(
     profile_hash = hashlib.sha256(json.dumps(raw_p, sort_keys=True).encode("utf-8")).hexdigest()[:12]
     session_id = base_session.get("session_id") if (base_session and base_session.get("session_id")) else f"SESSION-{jd_hash}-{profile_hash}"
 
-    if base_session and base_session.get("questions_snapshot"):
-        questions_snapshot = base_session["questions_snapshot"]
-    else:
-        questions_snapshot = []
-        for q in review_result.get("interview_questions", []):
-            questions_snapshot.append({
-                "question_id": q.get("question_id"),
-                "target_dimension": q.get("target_dimension", ""),
-                "dimension_name_cn": q.get("dimension_name_cn", ""),
-                "category": q.get("category", ""),
-                "category_type": q.get("category_type", ""),
-                "requirement_id": q.get("requirement_id", ""),
-                "requirement_name": q.get("requirement_name", ""),
-                "question_zh": q.get("question_zh", ""),
-                "jd_signal": q.get("jd_signal", ""),
-                "interviewer_intent": q.get("interviewer_intent", ""),
-                "expected_elements": q.get("expected_elements", []),
-            })
+    questions_snapshot = copy.deepcopy(review_result.get("interview_questions", []))
 
     session_answers = review_result.get("answers", [])
     if not session_answers and isinstance(review_result.get("input_quality"), dict):
@@ -1392,10 +1804,26 @@ def create_review_session(
     evaluated_count = len([f for f in feedbacks if f.get("status") == "evaluated" and f.get("diagnosis") != "not_submitted"])
     total_q = len(questions_snapshot)
     status = "completed" if (total_q > 0 and evaluated_count >= total_q) else "awaiting_answer"
+    goal = review_result.get("goal", "review")
+    if goal == "tailor":
+        proposal_status = review_result.get("material_proposal", {}).get("status")
+        if proposal_status in {"accepted", "rejected"}:
+            status = "accepted" if proposal_status == "accepted" else "needs_source_revision"
+        elif review_result.get("evidence_followup", {}).get("pending_count"):
+            status = "awaiting_evidence"
+        elif review_result.get("material_proposal", {}).get("patches"):
+            status = "awaiting_confirmation"
+        else:
+            status = "ready_for_export"
 
     return {
         "session_id": session_id,
         "schema_version": "career-review-session.v1",
+        "answer_context": review_result.get("answer_context"),
+        "workflow": review_result.get("workflow", {}),
+        "goal": goal,
+        "question_strategy": "resume" if goal in {"interview", "review"} else "not_requested",
+        "execution": review_result.get("execution", {}),
         "jd_fingerprint": jd_hash,
         "profile_fingerprint": profile_hash,
         "status": status,
@@ -1407,12 +1835,61 @@ def create_review_session(
         "questions_snapshot": questions_snapshot,
         "answers": session_answers,
         "answer_feedback": feedbacks,
+        "evidence_followup": review_result.get("evidence_followup", {}),
     }
+
+
+def validate_review_session(session: Any) -> Dict[str, Any]:
+    """Validate stored JSON before workflow code dereferences nested fields."""
+    if not isinstance(session, dict):
+        raise ValueError("Session must be a JSON object")
+    session = copy.deepcopy(session)
+    for key in ("workflow", "evidence_followup"):
+        if session.get(key) is None:
+            session[key] = {}
+        if not isinstance(session[key], dict):
+            raise ValueError(f"Session {key} must be a JSON object")
+    if session.get("goal") is not None and session["goal"] not in ("tailor", "interview", "review"):
+        raise ValueError("Session goal must be tailor, interview or review")
+    workflow = session["workflow"]
+    if workflow.get("inputs") is None:
+        workflow["inputs"] = {}
+    if not isinstance(workflow["inputs"], dict):
+        raise ValueError("Session workflow.inputs must be a JSON object")
+    for key, value in workflow["inputs"].items():
+        if key in {"jd", "profile"} and value is not None and not isinstance(value, str):
+            raise ValueError(f"Session workflow.inputs.{key} must be a path string")
+    for key in ("proposal_db", "session_path", "resume_output_dir", "resume_theme", "application_id", "source_profile", "source_profile_fingerprint"):
+        if workflow.get(key) is not None and not isinstance(workflow[key], str):
+            raise ValueError(f"Session workflow.{key} must be a string")
+    for container, keys in ((session, ("questions_snapshot", "answers", "answer_feedback")),
+                            (session["evidence_followup"], ("questions", "questions_snapshot", "answers"))):
+        for key in keys:
+            values = container.get(key, [])
+            if not isinstance(values, list) or any(not isinstance(v, dict) or "question_id" not in v for v in values):
+                raise ValueError(f"Session {key} must be a list of objects with question_id")
+            for value in values:
+                if not isinstance(value["question_id"], (str, int)) or isinstance(value["question_id"], bool):
+                    raise ValueError("Session question_id must be a string or integer")
+                if "answer" in value and not isinstance(value["answer"], str):
+                    raise ValueError("Session answer must be a string")
+                if container is session and key == "questions_snapshot" and not isinstance(value.get("question_zh"), str):
+                    raise ValueError("Session question must contain question_zh text")
+                if key == "answer_feedback" and (
+                    not isinstance(value.get("follow_up_questions", []), list)
+                    or any(not isinstance(q, str) for q in value.get("follow_up_questions", []))
+                ):
+                    raise ValueError("Session follow_up_questions must be a list of strings")
+                if container is session["evidence_followup"] and key == "answers":
+                    if value.get("status") not in ("provided", "no_experience") or not isinstance(value.get("answer"), str):
+                        raise ValueError("Session evidence answer requires status and answer text")
+            container[key] = values
+    return session
 
 
 def save_review_session(session: Dict[str, Any], output_path: Union[str, Path]) -> None:
     """Atomically save review session JSON to disk using write_json_atomic."""
-    write_json_atomic(session, output_path)
+    write_json_atomic(session, output_path, allow_shadow=False)
 
 
 def load_review_session(session_path: Union[str, Path]) -> Dict[str, Any]:
@@ -1421,7 +1898,7 @@ def load_review_session(session_path: Union[str, Path]) -> Dict[str, Any]:
     if not p.exists():
         raise FileNotFoundError(f"Review session file not found: {session_path}")
     with open(p, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return validate_review_session(json.load(f))
 
 
 def validate_session_answers(
@@ -1432,6 +1909,8 @@ def validate_session_answers(
     errors = []
     if not isinstance(session, dict):
         return False, ["invalid_session_object"]
+    if isinstance(incoming_answers, dict):
+        errors.extend(_answer_context_errors(session, incoming_answers))
     valid_qids = {q.get("question_id") for q in session.get("questions_snapshot", [])}
     answers_list = incoming_answers.get("answers", []) if isinstance(incoming_answers, dict) else []
     if not isinstance(answers_list, list):
@@ -1439,12 +1918,25 @@ def validate_session_answers(
     for ans in answers_list:
         if isinstance(ans, dict):
             qid = ans.get("question_id")
-            if qid not in valid_qids:
+            if not isinstance(qid, (str, int)) or isinstance(qid, bool):
+                errors.append("invalid_question_id_type")
+            elif qid not in valid_qids:
                 errors.append(f"question_id_{qid}_not_in_session_snapshot")
         elif isinstance(ans, str):
             pass
         else:
             errors.append("invalid_answer_entry_format")
+    evidence_ids = {q.get("question_id") for q in session.get("evidence_followup", {}).get("questions_snapshot", [])}
+    evidence_answers = incoming_answers.get("evidence_answers", []) if isinstance(incoming_answers, dict) else []
+    if not isinstance(evidence_answers, list):
+        errors.append("evidence_answers_field_must_be_list")
+    else:
+        for answer in evidence_answers:
+            if (not isinstance(answer, dict)
+                    or not isinstance(answer.get("question_id"), (str, int))
+                    or isinstance(answer.get("question_id"), bool)
+                    or answer.get("question_id") not in evidence_ids):
+                errors.append("evidence_question_not_in_session_snapshot")
     return len(errors) == 0, errors
 
 

@@ -42,6 +42,7 @@ class RouteDecision:
     blocked_stages: List[str] = field(default_factory=list)
     missing_inputs: List[str] = field(default_factory=list)
     next_steps: List[str] = field(default_factory=list)
+    goal: Optional[str] = None
 
     @property
     def is_valid(self) -> bool:
@@ -96,6 +97,7 @@ class InputRouter:
         jd: Optional[Any] = None,
         profile: Optional[Any] = None,
         fail_fast: bool = False,
+        goal: Optional[str] = None,
     ) -> RouteDecision:
         """Determines the appropriate pipeline route given JD and candidate profile inputs.
 
@@ -107,6 +109,40 @@ class InputRouter:
         Returns:
             RouteDecision indicating executable and blocked pipeline stages.
         """
+        if goal is not None:
+            plans = {
+                "format": (["profile"], ["profile_audit", "resume_build"], "核对履历后导出一份默认主题简历。"),
+                "audit": (["profile"], ["profile_audit", "evidence_indexing"], "检查材料问题，优先确认影响导出的信息。"),
+                "decode": (["jd"], ["jd_decode", "requirement_extraction"], "查看岗位要求与原文依据。"),
+                "tailor": (["jd", "profile"], ["jd_decode", "full_match", "gap_analysis", "career_review", "tailored_resume"], "优先补充关键事实，再确认简历修改。"),
+                "interview": (["jd", "profile"], ["jd_decode", "full_match", "career_review", "interview_prediction"], "从最相关的问题开始作答，再逐题追问。"),
+                "review": (["jd", "profile"], ["jd_decode", "full_match", "gap_analysis", "career_review", "tailored_resume", "interview_prediction", "report_generation"], "先处理关键材料缺口，再选择后续动作。"),
+            }
+            if goal not in plans:
+                raise ValueError(f"Unknown task goal: {goal}; choose from {', '.join(plans)}")
+            required, stages, instruction = plans[goal]
+            # An unrelated JD must not block a profile-only task.
+            effective_jd = jd if "jd" in required else None
+            effective_profile = profile if "profile" in required else None
+            decision = cls.route(effective_jd, effective_profile)
+            missing = [name for name in required if not cls._is_present({"jd": jd, "profile": profile}[name])]
+            batch_blocked = "jd" in required and cls._is_multi_jd(jd)
+            decision.goal = goal
+            decision.missing_inputs = missing
+            decision.executable_stages = [] if missing or batch_blocked else stages
+            decision.blocked_stages = [s for _, plan, _ in plans.values() for s in plan
+                                       if s not in decision.executable_stages]
+            decision.blocked_stages = list(dict.fromkeys(decision.blocked_stages))
+            if not batch_blocked:
+                decision.next_steps = [f"请补充：{', '.join(missing)}。" if missing else instruction]
+            if missing:
+                decision.mode = InputMode.INVALID.value
+            if fail_fast:
+                decision.raise_if_invalid()
+                if batch_blocked:
+                    decision.raise_if_blocked(stages[0])
+            return decision
+
         has_jd = cls._is_present(jd)
         has_profile = cls._is_present(profile)
         is_multi = has_jd and cls._is_multi_jd(jd)
@@ -200,7 +236,7 @@ class InputRouter:
                 ],
                 missing_inputs=["jd"],
                 next_steps=[
-                    "已就绪阶段：简历合规审计、事实证据索引、六大主题简历构建与导出。",
+                    "可检查简历材料，或使用默认主题排版导出。",
                     "如需进行针对性岗位对齐、面试预测与一键复盘，请补充提供目标岗位 JD。",
                 ],
             )
@@ -221,7 +257,7 @@ class InputRouter:
             blocked_stages=[],
             missing_inputs=[],
             next_steps=[
-                "输入数据完备，已解锁 OfferGet 端到端全流程（JD 解码、深度匹配、闭环复盘、定制简历、策略报告）。",
+                "请根据当前目标选择定制简历、准备面试或完整复盘；材料齐全仍需核对事实与公开范围。",
             ],
         )
 
@@ -401,14 +437,15 @@ def detect_and_route_input(
     jd: Optional[Any] = None,
     profile: Optional[Any] = None,
     fail_fast: bool = False,
+    goal: Optional[str] = None,
 ) -> InputRouteResult:
     """Automatically detects and routes JD and profile inputs (filepath or raw string/dict).
 
     Can be used directly as a RouteDecision proxy or unpacked as a 3-tuple (parsed_jd, parsed_profile, decision).
     """
-    parsed_jd = parse_input(jd, expected_type="text") if jd is not None else None
-    parsed_profile = parse_input(profile, expected_type="json") if profile is not None else None
-    decision = InputRouter.route(jd=parsed_jd, profile=parsed_profile, fail_fast=fail_fast)
+    parsed_jd = parse_input(jd, expected_type="text") if jd is not None and goal not in {"format", "audit"} else None
+    parsed_profile = parse_input(profile, expected_type="json") if profile is not None and goal != "decode" else None
+    decision = InputRouter.route(jd=parsed_jd, profile=parsed_profile, fail_fast=fail_fast, goal=goal)
     return InputRouteResult(jd=parsed_jd, profile=parsed_profile, decision=decision)
 
 

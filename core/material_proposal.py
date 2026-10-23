@@ -50,6 +50,7 @@ class MaterialProposal:
     proposal_hash: str = ""
     conflict_reason: str = ""
     applied_phase: str = ""
+    recovery_source: Optional[Dict[str, Any]] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if isinstance(self.status, str):
@@ -69,10 +70,15 @@ class MaterialProposal:
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
+        data.pop("recovery_source", None)
         data["status"] = self.status.value
         data["patches"] = copy.deepcopy(self.patches)
         data["applied_phase"] = self.applied_phase
         return data
+
+    def validate_integrity(self) -> None:
+        if self.proposal_hash != self.compute_hash():
+            raise ValueError("proposal content hash mismatch; create a new revision")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MaterialProposal":
@@ -87,6 +93,7 @@ class MaterialProposal:
             proposal_hash=str(data.get("proposal_hash", "")),
             conflict_reason=str(data.get("conflict_reason", "")),
             applied_phase=str(data.get("applied_phase", "")),
+            recovery_source=copy.deepcopy(data.get("recovery_source")),
         )
 
     def check_sources(
@@ -94,6 +101,7 @@ class MaterialProposal:
         profile: Union[Dict[str, Any], ProfileContext],
         jd_text: str,
     ) -> tuple[bool, str]:
+        self.validate_integrity()
         current_profile = profile_fingerprint(profile)
         current_jd = jd_fingerprint(jd_text)
         if current_profile != self.source_profile_hash:
@@ -101,6 +109,16 @@ class MaterialProposal:
         if current_jd != self.source_jd_hash:
             return False, "source_jd_changed"
         return True, ""
+
+    def _validate_selection(self, selected: List[int]) -> None:
+        if any(not isinstance(i, int) or isinstance(i, bool) or i < 0 or i >= len(self.patches) for i in selected):
+            raise ValueError("patch_ids contains an unknown patch index")
+        selected_set = set(selected)
+        for index in selected:
+            group = self.patches[index].get("approval_group")
+            if group and any(i not in selected_set for i, patch in enumerate(self.patches)
+                             if patch.get("approval_group") == group):
+                raise ValueError(f"排序修改必须整组确认，以保留全部事实: {group}")
 
     def accept(
         self,
@@ -130,8 +148,7 @@ class MaterialProposal:
             return [copy.deepcopy(self.patches[i]) for i in self.accepted_patch_ids]
 
         selected = list(range(len(self.patches))) if patch_ids is None else list(patch_ids)
-        if any(i < 0 or i >= len(self.patches) for i in selected):
-            raise ValueError("patch_ids contains an unknown patch index")
+        self._validate_selection(selected)
         self.accepted_patch_ids = selected
         self.status = MaterialProposalStatus.ACCEPTED
         return [copy.deepcopy(self.patches[i]) for i in selected]
@@ -173,14 +190,14 @@ def apply_material_proposal(
         selected = list(proposal.accepted_patch_ids)
     else:
         selected = list(range(len(proposal.patches))) if patch_ids is None else list(patch_ids)
-        if any(i < 0 or i >= len(proposal.patches) for i in selected):
-            raise ValueError("patch_ids contains an unknown patch index")
+        proposal._validate_selection(selected)
 
     result = copy.deepcopy(
         profile.normalized_profile if isinstance(profile, ProfileContext)
         else build_profile_context(profile).normalized_profile
     )
     # Apply in proposal order even when the user selects indexes out of order.
+    proposal._validate_selection(selected)
     patches_to_apply = [copy.deepcopy(proposal.patches[i]) for i in sorted(set(selected))]
     source_lengths = {
         (section, index): len(entry["bullets"])

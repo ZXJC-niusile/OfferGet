@@ -26,7 +26,7 @@ from presentation.commands.review_cmd import (
 )
 from presentation.commands.resume_cmd import (
     cmd_resume_build,
-    cmd_resume_passthrough,
+    cmd_resume_dispatch,
 )
 from presentation.commands.academic_cmd import (
     cmd_baoyan_audit,
@@ -90,7 +90,7 @@ __all__ = [
     "cmd_offer_counter",
     "cmd_career_review",
     "cmd_resume_build",
-    "cmd_resume_passthrough",
+    "cmd_resume_dispatch",
     "cmd_baoyan_audit",
     "cmd_baoyan_compress",
     "cmd_baoyan_advisor",

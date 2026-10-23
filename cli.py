@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OfferGet Master CLI - Job Description Decoding, Match Scoring, Report Generation & ApexResume Integration.
+OfferGet Master CLI - Job Description Decoding, Match Scoring, Report Generation & Resume Generation.
 """
 
 from __future__ import annotations
@@ -24,8 +24,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from core.cli_helpers import fail_cli
+from core.resume_themes import THEMES
 from presentation.commands import (
-    cmd_advisor_match,
     cmd_anon_mask,
     cmd_anon_unmask,
     cmd_application_add,
@@ -61,7 +61,7 @@ from presentation.commands import (
     cmd_rendercv_export,
     cmd_rendercv_import,
     cmd_resume_build,
-    cmd_resume_passthrough,
+    cmd_resume_dispatch,
     cmd_selftest,
     cmd_doctor,
     cmd_diff_audit,
@@ -244,30 +244,20 @@ Examples:
     baoyan_check_parser.add_argument("--json", action="store_true", help="Output raw JSON")
 
     # `offerget review ...`
-    review_parser = subparsers.add_parser("review", help="Full-lifecycle career review pipeline (Track 2 closed-loop)")
-    review_parser.add_argument("jd_file", help="Path to JD text file")
-    review_parser.add_argument("--profile", required=True, help="Path to candidate_profile.json")
-    review_parser.add_argument("--answers", help="Optional path to interview answers JSON")
+    review_parser = subparsers.add_parser("review", help="Goal-oriented review with resumable local sessions")
+    review_parser.add_argument("jd_file", nargs="?", help="Path to JD text file; --workspace resumes saved inputs")
+    review_parser.add_argument("--profile", help="Path to candidate profile; --workspace resumes saved inputs")
+    review_parser.add_argument("--workspace", help="Review directory: automatically links session, answer template, proposal database and outputs")
+    review_parser.add_argument("--goal", choices=["tailor", "interview", "review"], help="当前目标：定制简历（默认）、面试准备、完整复盘；继续会话时沿用原目标")
+    review_parser.add_argument("--answers", help="补证或面试回答 JSON（evidence_answers / answers）；可配合 --session 继续")
+    review_parser.add_argument("--verbose", action="store_true", help="展开详细分析；默认只显示关键问题和下一步")
     review_parser.add_argument("--output", help="Optional output JSON file path")
     review_parser.add_argument("--json", action="store_true", help="Output raw JSON")
-    review_parser.add_argument("--build-resume", action="store_true", help="Directly build tailored resume PDF using review safe bullets")
+    review_parser.add_argument("--build-resume", action="store_true", help="没有待确认修改时导出简历；有修改请先 proposal accept")
     review_parser.add_argument(
         "--resume-theme",
-        default="modern-navy",
-        choices=[
-            "all",
-            "modern-navy",
-            "silicon-clean",
-            "classic-tech",
-            "asu-dense",
-            "sidebar-clean",
-            "academic-postgraduate",
-            "engineering-sb2nov",
-            "modern-corporate",
-            "ats-plain",
-            "academic-latex",
-            "academic-typst",
-        ],
+        default=None,
+        choices=("all", *THEMES),
         help="Theme for tailored resume (default: modern-navy)",
     )
     review_parser.add_argument("--resume-output-dir", default=None, help="Custom output directory for tailored resumes")
@@ -294,6 +284,8 @@ Examples:
     proposal_accept.add_argument("--profile", required=True)
     proposal_accept.add_argument("--jd", required=True)
     proposal_accept.add_argument("--output", required=True)
+    proposal_accept.add_argument("--workspace", help="将确认后的履历接回此工作目录")
+    proposal_accept.add_argument("--session", help="对应的自定义会话文件")
     proposal_accept.add_argument("--patch-ids", help="Comma-separated patch indexes; default accepts all")
     proposal_accept.add_argument("--db", help="ApplicationStore SQLite path")
     proposal_accept.add_argument("--json", action="store_true")
@@ -301,20 +293,7 @@ Examples:
     proposal_accept.add_argument(
         "--resume-theme",
         default="modern-navy",
-        choices=[
-            "modern-navy",
-            "silicon-clean",
-            "classic-tech",
-            "asu-dense",
-            "sidebar-clean",
-            "academic-postgraduate",
-            "engineering-sb2nov",
-            "modern-corporate",
-            "ats-plain",
-            "academic-latex",
-            "academic-typst",
-            "ats-docx",
-        ],
+        choices=("all", *THEMES),
     )
     proposal_accept.add_argument("--resume-output-dir")
     proposal_reject = proposal_subparsers.add_parser("reject", help="Reject a persisted material proposal")
@@ -400,9 +379,10 @@ Examples:
     profile_parse.add_argument("input_file", help="Path to resume file (.md, .txt, .json)")
     profile_parse.add_argument("--output", help="Path to save parsed profile JSON")
     profile_parse.add_argument("--json", action="store_true", help="Output raw JSON")
+    profile_parse.add_argument("--confirm-parsed", action="store_true", help="已人工核对解析结果及未归类原文，记录确认状态；不代表外部事实核验")
 
     # `offerget resume ...`
-    subparsers.add_parser("resume", help="Passthrough directly to ApexResume CLI")
+    subparsers.add_parser("resume", help="Build, render, compact, and audit resumes")
 
     # `offerget selftest`
     subparsers.add_parser("selftest", help="Run installed-runtime core smoke checks (not the developer test suite)")
@@ -438,7 +418,7 @@ def main():
         if len(sys.argv) > 2 and sys.argv[2] == "build":
             cmd_resume_build(sys.argv[3:])
             return
-        cmd_resume_passthrough(sys.argv[2:])
+        cmd_resume_dispatch(sys.argv[2:])
         return
 
     parser = build_parser()
@@ -450,7 +430,7 @@ def main():
     except json.JSONDecodeError as exc:
         fail_cli(args, "invalid_json", str(exc))
     except OSError as exc:
-        fail_cli(args, "io_error", str(exc))
+        fail_cli(args, "io_error", f"文件操作失败：{exc}。请关闭占用文件的程序，并检查目录权限和可用空间后重试原命令。")
     except ValueError as exc:
         fail_cli(args, "invalid_input", str(exc))
 

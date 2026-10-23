@@ -11,16 +11,17 @@ Validates:
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import json
-import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import pytest
 
 # Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -60,6 +61,19 @@ class TestCliHelpers(unittest.TestCase):
         raw = "This is an inline job description\nwith multiple lines"
         result = read_text(raw)
         self.assertEqual(result, raw)
+
+        long_text = "岗位要求：熟悉 Python，负责后端开发。" * 300
+        raw_json = json.dumps({"description": long_text}, ensure_ascii=False)
+        with patch("pathlib.Path.stat", side_effect=OSError(errno.ENAMETOOLONG, "long input")):
+            self.assertEqual(read_text(long_text), long_text)
+            self.assertEqual(load_json(raw_json), {"description": long_text})
+            self.assertEqual(load_json_or_text(long_text), (None, long_text))
+            self.assertEqual(load_json_or_text(raw_json)[0], {"description": long_text})
+            with self.assertRaises(OSError):
+                read_text(long_text, must_exist=True)
+            for reader in (read_text, load_json, load_json_or_text):
+                with self.assertRaises(OSError):
+                    reader("x" * 300 + ".json")
 
     def test_read_text_file_not_found(self):
         missing_path = str(self.base_path / "does_not_exist.txt")
@@ -146,6 +160,23 @@ class TestCliHelpers(unittest.TestCase):
             read_text("missing_file.txt")
         with self.assertRaises(FileNotFoundError):
             load_json_or_text("missing_profile.json")
+
+        # Read errors must escape unchanged for both string paths and Path inputs.
+        source = self.base_path / "input.json"
+        source.write_text('{"role": "Engineer"}', encoding="utf-8")
+        for reader in (read_text, load_json, load_json_or_text):
+            for value in (source, str(source)):
+                for error in (PermissionError(errno.EACCES, "denied", str(source)),
+                              OSError(errno.EIO, "read failed", str(source)),
+                              FileNotFoundError(errno.ENOENT, "removed during read", str(source))):
+                    with self.subTest(reader=reader.__name__, value=type(value).__name__, error=type(error).__name__):
+                        with patch("pathlib.Path.read_text", side_effect=error), patch("builtins.open", side_effect=error):
+                            with self.assertRaises(type(error)) as caught:
+                                reader(value)
+                            self.assertIs(caught.exception, error)
+            with patch("pathlib.Path.stat", side_effect=PermissionError("stat denied")):
+                with self.assertRaises(PermissionError):
+                    reader(str(source))
 
     def test_load_json_or_text_raises_on_corrupted_json_file(self):
         """Verifies that an explicit .json file with invalid syntax raises ValueError,
@@ -252,6 +283,7 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertIn("Available subcommands", proc.stdout)
 
     def test_cli_subcommands_help(self):
+        import cli
         cases = [
             (["jd", "decode", "--help"], ["jd_file", "--json"]),
             (["jd", "match", "--help"], ["--profile", "--json"]),
@@ -263,10 +295,12 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         ]
         for cmd_args, expected_snippets in cases:
             with self.subTest(cmd=cmd_args):
-                proc = self.run_cli(*cmd_args)
-                self.assertEqual(proc.returncode, 0, f"Failed on {cmd_args}: {proc.stderr}")
+                with patch("sys.argv", ["offerget", *cmd_args]), patch("sys.stdout", io.StringIO()) as output:
+                    with self.assertRaises(SystemExit) as stopped:
+                        cli.main()
+                self.assertEqual(stopped.exception.code, 0)
                 for snippet in expected_snippets:
-                    self.assertIn(snippet, proc.stdout)
+                    self.assertIn(snippet, output.getvalue())
 
     def test_cli_jd_decode_json_pure_stdout(self):
         """Ensure --json produces 100% pure JSON on stdout with no extra log lines."""
@@ -281,6 +315,9 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertIn("layers", data)
         self.assertIn("detected_signals", data)
         self.assertEqual(len(data["layers"]), 5)
+        audited = self.run_cli("ats", "audit", str(self.sample_profile), "--jd", str(self.sample_jd), "--json")
+        self.assertEqual(audited.returncode, 0, audited.stderr)
+        self.assertTrue({"overall_score", "skill_ledger"}.issubset(json.loads(audited.stdout)))
 
     def test_cli_jd_match_json_pure_stdout(self):
         """Ensure match --json produces valid JSON on stdout."""
@@ -315,10 +352,10 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
     def test_cli_missing_jd_json_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             missing = str(Path(tmp) / "missing.txt")
-            for command in ("decode", "match"):
+            for command in ("decode", "match", "review"):
                 with self.subTest(command=command):
-                    args = ["jd", command, missing]
-                    if command == "match":
+                    args = ["review", missing] if command == "review" else ["jd", command, missing]
+                    if command in ("match", "review"):
                         args += ["--profile", str(self.sample_profile)]
                     self.assert_json_failure(args, "input_not_found")
 
@@ -368,6 +405,18 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
             output = Path(tmp) / "parsed.json"
             self.assert_json_failure(["profile", "parse", str(path), "--output", str(output)], "invalid_json")
             self.assertFalse(output.exists())
+            proc = self.run_cli("review", str(self.sample_jd), "--profile", str(self.sample_profile),
+                                "--answers", str(path), "--json")
+            self.assertEqual(proc.returncode, 1)
+            self.assertIn(str(path), json.loads(proc.stdout)["message"])
+            self.assertNotIn("Traceback", proc.stderr)
+            self.assertEqual(path.read_text(encoding="utf-8"), "{invalid json")
+            path.write_text("[]", encoding="utf-8")
+            self.assert_json_failure(["review", str(self.sample_jd), "--profile", str(path)], "invalid_input")
+            for flag in ("--session", "--answers"):
+                with self.subTest(flag=flag):
+                    self.assert_json_failure(["review", str(self.sample_jd), "--profile", str(self.sample_profile),
+                                              flag, str(path)], "invalid_input")
 
     def test_cli_expected_error_boundary(self):
         import cli
@@ -386,6 +435,7 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "unexpected defect"):
                     cli.main()
 
+    @pytest.mark.browser
     def test_application_review_accept_and_render(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -393,22 +443,24 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
             review = tmp_path / "review.json"
             profile_out = tmp_path / "accepted_profile.json"
             resume_dir = tmp_path / "resume"
+            source = tmp_path / "source.json"
+            source.write_bytes(self.public_profile.read_bytes())
 
             add = self.run_cli("application", "add", "APP-SMOKE", "--db", str(db), "--company", "测试公司", "--role", "后端工程师", "--json")
             self.assertEqual(add.returncode, 0, add.stderr)
 
             review_proc = self.run_cli(
                 "review", "examples/sample_ai_jd.txt",
-                "--profile", str(self.public_profile),
+                "--profile", str(source),
                 "--proposal-db", str(db), "--application-id", "APP-SMOKE",
-                "--output", str(review), "--json",
+                "--workspace", str(tmp_path), "--output", str(review), "--json",
             )
             self.assertEqual(review_proc.returncode, 0, review_proc.stderr)
             proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
 
             accepted = self.run_cli(
                 "proposal", "accept", proposal_id, "--db", str(db),
-                "--profile", str(self.public_profile),
+                "--profile", str(source),
                 "--jd", "examples/sample_ai_jd.txt",
                 "--output", str(profile_out), "--build-resume",
                 "--resume-output-dir", str(resume_dir), "--json",
@@ -416,28 +468,40 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
             self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             self.assertTrue(profile_out.exists())
             generated = json.loads(accepted.stdout)["generated_resumes"]
-            for kind in ("html", "pdf"):
-                self.assertGreater(Path(generated[kind]).stat().st_size, 0)
-
-    def test_resume_version_records_artifact_hashes(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Path(tmp) / "applications.db"
-            profile_out = Path(tmp) / "profile.json"
-            resume_dir = Path(tmp) / "resume"
-            added = self.run_cli("application", "add", "APP-HASH", "--db", str(db), "--company", "验收公司", "--role", "工程师")
-            self.assertEqual(added.returncode, 0, added.stdout + added.stderr)
-            review = Path(tmp) / "review.json"
-            reviewed = self.run_cli("review", "examples/sample_ai_jd.txt", "--profile", str(self.public_profile), "--proposal-db", str(db), "--application-id", "APP-HASH", "--output", str(review), "--json")
-            self.assertEqual(reviewed.returncode, 0, reviewed.stdout + reviewed.stderr)
-            proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
-            accepted = self.run_cli("proposal", "accept", proposal_id, "--db", str(db), "--profile", str(self.public_profile), "--jd", "examples/sample_ai_jd.txt", "--output", str(profile_out), "--build-resume", "--resume-output-dir", str(resume_dir), "--json")
-            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
             payload = json.loads(accepted.stdout)
             self.assertEqual(payload["accept_phase"], "completed")
             self.assertEqual(set(payload["artifact_status"].values()), {"present"})
             self.assertTrue({"profile", "html", "pdf"}.issubset(payload["artifact_hashes"]))
             for name, path in payload["output_paths"].items():
                 self.assertEqual(payload["artifact_hashes"][name], hashlib.sha256(Path(path).read_bytes()).hexdigest())
+            repeated = self.run_cli(
+                "review", "examples/sample_ai_jd.txt", "--profile", str(source),
+                "--proposal-db", str(db), "--application-id", "APP-SMOKE", "--json",
+            )
+            self.assertEqual(repeated.returncode, 0, repeated.stdout + repeated.stderr)
+            saved = json.loads(repeated.stdout)
+            self.assertEqual(saved["material_proposal"]["status"], "accepted")
+            self.assertEqual(saved["material_proposal"]["proposal_hash"], payload["proposal"]["proposal_hash"])
+            self.assertEqual(saved["summary"]["pending_change_count"], 0)
+            for kind in ("html", "pdf"):
+                self.assertGreater(Path(generated[kind]).stat().st_size, 0)
+
+
+            import fitz
+            old_pdf = Path(generated["pdf"])
+            old_hash = hashlib.sha256(old_pdf.read_bytes()).hexdigest()
+            updated = json.loads(source.read_text(encoding="utf-8"))
+            updated["projects"] = [{"name": "UpdatedResumeMarker", "bullets": ["使用 Python 开发新版报表工具，交付团队使用。"]}]
+            source.write_text(json.dumps(updated, ensure_ascii=False), encoding="utf-8")
+            refreshed = self.run_cli("review", "--workspace", str(tmp_path), "--json")
+            self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+            current = json.loads(refreshed.stdout)
+            self.assertTrue(current["execution"]["sources_changed"])
+            self.assertEqual(Path(current["generated_resumes"]["pdf"]), old_pdf)
+            self.assertNotEqual(hashlib.sha256(old_pdf.read_bytes()).hexdigest(), old_hash)
+            with fitz.open(old_pdf) as document:
+                self.assertIn("UpdatedResumeMarker", "".join(page.get_text() for page in document))
+            self.assertEqual(len(list(resume_dir.glob("resume_modern_navy*.pdf"))), 1)
 
     def test_runtime_contract_exports_and_annotations(self):
         """Verifies core exports, submodule attributes, and typing annotations have zero runtime contract breakages."""
