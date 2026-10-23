@@ -2,7 +2,6 @@
 Tests for OfferGet Unified Output Serializer & Security Gate (tests/test_output_security.py)
 """
 
-import json
 import shutil
 import tempfile
 import unittest
@@ -148,11 +147,11 @@ class TestSecurityGateUnit(unittest.TestCase):
         clean_html = "<!DOCTYPE html><html><body><h1>Alice</h1><p>Software Engineer</p></body></html>"
         self.assertEqual(validate_output_security(clean_html, "html"), [])
 
-        # Benign photo fallback handler is allowed
+        # Inline handlers are rejected, including photo fallbacks
         benign_html = """
         <img src="data:image/png;base64,AAAA" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='flex';" />
         """
-        self.assertEqual(validate_output_security(benign_html, "html"), [])
+        self.assertTrue(validate_output_security(benign_html, "html"))
 
         # Detect <script>
         xss_script = "<div><script>alert(1)</script></div>"
@@ -168,6 +167,17 @@ class TestSecurityGateUnit(unittest.TestCase):
         xss_js_href = '<a href="javascript:alert(1)">Click</a>'
         risks = validate_output_security(xss_js_href, "html")
         self.assertTrue(any("javascript:" in r.lower() for r in risks))
+
+        for payload in (
+            '<a href="java&#x73;cript:alert(1)">x</a>',
+            '<a href="java&#9;script:alert(1)">x</a>',
+            '<svg><a xlink:href="jav&#97;script:alert(1)">x</a></svg>',
+            '<a href="safe.html" href="vbscript:msgbox(1)">x</a>',
+            '<img src="data&#58;text/html;base64,AAAA"/>',
+        ):
+            with self.subTest(payload=payload):
+                self.assertTrue(validate_output_security(payload))
+        self.assertEqual(validate_output_security('<a href="https://example.com/?q=javascript:test">x</a><img src="data:image/png;base64,AAAA"/>'), [])
 
         # Detect unreplaced placeholders
         dirty_placeholder = "<h1>Candidate</h1><div>{{SECTIONS_CONTENT}}</div>"
@@ -250,7 +260,8 @@ class TestSecurityGateIntegration(unittest.TestCase):
 
     def test_resume_builder_html_defense(self):
         """Verify ResumeBuilder HTML themes escape all malicious payloads without XSS execution risks."""
-        builder = ResumeBuilder(self.malicious_profile)
+        from tests.test_resume_builder import FastBrowserRenderer
+        builder = ResumeBuilder(self.malicious_profile, renderer=FastBrowserRenderer())
 
         for theme in ["modern-navy", "silicon-clean", "classic-tech"]:
             res = builder.build_html_theme(theme, self.test_dir, photo=True, autofit=False)
@@ -274,7 +285,8 @@ class TestSecurityGateIntegration(unittest.TestCase):
 
     def test_resume_builder_ats_plain_defense(self):
         """Verify ATS Plain single-column HTML escapes malicious inputs."""
-        builder = ResumeBuilder(self.malicious_profile)
+        from tests.test_resume_builder import FastBrowserRenderer
+        builder = ResumeBuilder(self.malicious_profile, renderer=FastBrowserRenderer())
         res = builder.build_ats_plain(self.test_dir, photo=True)
         ats_html = res["html"].read_text(encoding="utf-8")
 

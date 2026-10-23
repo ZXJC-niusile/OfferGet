@@ -31,17 +31,17 @@ def write_text_atomic(content: str, path: PathLike) -> str:
     target = ensure_parent(path)
     res = safe_save_file(target, content.encode("utf-8") if isinstance(content, str) else content)
     if not res.success:
-        raise OSError(res.error_message or f"Failed to atomically write {target}")
+        raise OSError(f"Failed to atomically write {target}: {res.error_message or 'unknown error'}")
     return str(res.final_path)
 
 
-def write_json_atomic(data: Any, path: PathLike) -> str:
+def write_json_atomic(data: Any, path: PathLike, *, allow_shadow: bool = True) -> str:
     """Serialize JSON using the repository defaults and write it atomically."""
     payload = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
     target = ensure_parent(path)
-    res = safe_save_file(target, payload)
+    res = safe_save_file(target, payload, allow_shadow=allow_shadow)
     if not res.success:
-        raise OSError(res.error_message or f"Failed to atomically write {target}")
+        raise OSError(f"Failed to atomically write {target}: {res.error_message or 'unknown error'}")
     return str(res.final_path)
 
 
