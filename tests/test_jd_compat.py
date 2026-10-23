@@ -164,17 +164,11 @@ class TestJDCompat(unittest.TestCase):
         self.assertGreaterEqual(score, 0)
         self.assertLessEqual(score, 100)
 
-        # Integer interview_prob in [0, 100]
-        prob = match_res["interview_prob"]
-        self.assertIsInstance(prob, int)
-        self.assertGreaterEqual(prob, 0)
-        self.assertLessEqual(prob, 100)
-
-        # Probability range is list of two numbers
-        prob_range = match_res["interview_probability_range"]
-        self.assertIsInstance(prob_range, list)
-        self.assertEqual(len(prob_range), 2)
-        self.assertLessEqual(prob_range[0], prob_range[1])
+        # Unknown probabilities remain JSON null, distinct from a measured 0%.
+        self.assertIsNone(match_res["interview_prob"])
+        self.assertIsNone(match_res["interview_probability_range"])
+        self.assertEqual(match_res["probability_status"], "unavailable")
+        self.assertTrue(match_res["probability_basis"])
 
         # JSON serializable
         dumped = json.dumps(match_res, ensure_ascii=False)

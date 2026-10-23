@@ -96,7 +96,7 @@ def cmd_jd_match(args):
     print(f"[*] Candidate:         {match_result['candidate_name']}")
     print(f"[*] Target Role:       {decoded['metadata']['role']}")
     print(f"[*] Overall Fit Score: {match_result['overall_match_score']}%")
-    print(f"[*] Interview Prob:    {match_result['interview_prob']}%")
+    print(f"[*] Interview Prob:    {str(match_result['interview_prob']) + '%' if match_result['interview_prob'] is not None else 'N/A (no calibrated outcome data)'}")
     bd = match_result['breakdown']
     print(f"[*] Score Breakdown:   Must-Have: {bd['must_have']}% | Nice-Have: {bd['nice_have']}% | Hidden: {bd['hidden_fit']}%")
     print("-" * 68)

@@ -364,7 +364,7 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
         "verdict_description": should_i_apply.verdict_description,
         "pros": should_i_apply.pros,
         "cons": should_i_apply.cons,
-        "probability_range": list(should_i_apply.probability_range),
+        "probability_range": list(should_i_apply.probability_range) if should_i_apply.probability_range is not None else None,
         "probability_breakdown": {k: list(v) for k, v in should_i_apply.probability_breakdown.items()},
         "next_action": should_i_apply.next_action.value,
         "action_advice": should_i_apply.action_advice,
@@ -386,12 +386,14 @@ def matcher_to_legacy(result: MatcherResult, candidate: CandidateProfile, decode
     return {
         "candidate_name": candidate.name,
         "overall_match_score": score,
-        "interview_prob": round(probability.base_max_prob),
-        "interview_probability_range": [probability.base_min_prob, probability.base_max_prob],
+        "interview_prob": None,
+        "probability_status": probability.estimate_status,
+        "probability_basis": probability.estimate_basis,
+        "interview_probability_range": None,
         "breakdown": {
-            "must_have": round(result.must_have_score * 100),
-            "nice_have": round(result.nice_to_have_score * 100),
-            "hidden_fit": round(result.hidden_signal_fit * 100),
+            "must_have": None if "must_have" in result.unavailable_dimensions else round(result.must_have_score * 100),
+            "nice_have": None if "nice_have" in result.unavailable_dimensions else round(result.nice_to_have_score * 100),
+            "hidden_fit": None if "hidden_fit" in result.unavailable_dimensions else round(result.hidden_signal_fit * 100),
         },
         "verdict": {
             "title_zh": verdict_title,

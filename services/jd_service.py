@@ -60,11 +60,15 @@ class JDService:
             "verdict_description": report.verdict_description,
             "pros": report.pros,
             "cons": report.cons,
-            "probability_range": list(report.probability_range),
+            "probability_range": list(report.probability_range) if report.probability_range is not None else None,
             "probability_breakdown": {k: list(v) for k, v in report.probability_breakdown.items()},
             "next_action": report.next_action.value,
             "action_advice": report.action_advice,
             "dimension_scores": report.dimension_scores,
+            "unavailable_dimensions": report.unavailable_dimensions,
+            "dimension_weights": report.dimension_weights,
+            "assessment_status": report.assessment_status,
+            "next_questions": report.next_questions,
             "six_week_plan": {
                 "focus_summary": report.six_week_plan.focus_summary,
                 "weeks": [
