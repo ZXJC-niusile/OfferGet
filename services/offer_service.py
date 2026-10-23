@@ -10,7 +10,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from core.artifacts import write_json_atomic
 
 
 class OfferService:
@@ -132,6 +131,8 @@ class ProposalService:
         build_resume: bool = False,
         resume_theme: str = "modern-navy",
         resume_output_dir: Optional[Union[str, Path]] = None,
+        workspace: Optional[Union[str, Path]] = None,
+        session_path: Optional[Union[str, Path]] = None,
     ) -> Dict[str, Any]:
         from core.artifacts import inspect_artifacts, write_json_atomic
         from core.material_proposal import apply_material_proposal, jd_fingerprint, profile_fingerprint
@@ -140,12 +141,23 @@ class ProposalService:
         if proposal is None:
             raise KeyError(proposal_id)
 
+        import copy
+        source_profile = profile
+        if proposal.status.value == "accepted" and proposal.recovery_source is not None:
+            source_profile = proposal.recovery_source
+
         try:
-            updated = apply_material_proposal(proposal, profile, jd_text, patch_ids=patch_ids)
+            updated = apply_material_proposal(proposal, source_profile, jd_text, patch_ids=patch_ids)
         except ValueError:
             self.save(proposal)
             raise
+        if profile_fingerprint(profile) not in {proposal.source_profile_hash, profile_fingerprint(updated)}:
+            raise ValueError("proposal source changed: source_profile_changed")
 
+        # Persist the original input before overwriting it, including crash recovery.
+        if proposal.recovery_source is None:
+            proposal.recovery_source = copy.deepcopy(source_profile)
+        self.save(proposal)
         actual_output_path = write_json_atomic(updated, output_path)
         proposal.applied_phase = "profile_written"
         self.save(proposal)
@@ -155,8 +167,14 @@ class ProposalService:
             from services.resume_service import ResumeService
 
             out_dir = Path(resume_output_dir or Path(actual_output_path).parent / "proposal_resume")
-            built = ResumeService().build_resume(updated, theme=resume_theme, output_dir=out_dir)
-            generated_resumes = {key: str(value) for key, value in built.items()}
+            renderer = ResumeService()
+            if resume_theme == "all":
+                built = renderer.build_all(updated, output_dir=out_dir)
+                generated_resumes = {f"{theme}.{kind}": str(path)
+                                     for theme, files in built.items() for kind, path in files.items()}
+            else:
+                built = renderer.build_resume(updated, theme=resume_theme, output_dir=out_dir)
+                generated_resumes = {key: str(value) for key, value in built.items()}
             proposal.applied_phase = "render_completed"
             self.save(proposal)
 
@@ -165,6 +183,24 @@ class ProposalService:
         missing = [name for name, status in artifact_status.items() if status != "present"]
         if missing:
             raise RuntimeError(f"Generated artifacts unavailable: {', '.join(missing)}")
+
+        res_payload: Dict[str, Any] = {
+            "proposal": proposal.to_dict(),
+            "profile_output": str(actual_output_path),
+            "accept_phase": proposal.applied_phase,
+            "output_paths": output_paths,
+            "artifact_status": artifact_status,
+            "artifact_hashes": artifact_hashes,
+        }
+        if generated_resumes:
+            res_payload["generated_resumes"] = generated_resumes
+
+        from services.review_service import CareerReviewService
+        workflow = CareerReviewService().activate_accepted_profile(
+            res_payload, source_profile, jd_text, self.store.db_path, workspace, session_path,
+        )
+        if workflow:
+            res_payload["workflow"] = workflow
 
         version_dict = None
         if proposal.application_id:
@@ -185,23 +221,11 @@ class ProposalService:
             self.store.save_resume_version(version)
             version_dict = self.store.get_resume_version(version.version_id).to_dict()
 
-        # Mark completed ONLY after artifacts inspection AND version registration succeed
         proposal.applied_phase = "completed"
         self.save(proposal)
-
-        res_payload: Dict[str, Any] = {
-            "proposal": proposal.to_dict(),
-            "profile_output": str(actual_output_path),
-            "accept_phase": proposal.applied_phase,
-            "output_paths": output_paths,
-            "artifact_status": artifact_status,
-            "artifact_hashes": artifact_hashes,
-        }
-        if generated_resumes:
-            res_payload["generated_resumes"] = generated_resumes
+        res_payload.update(proposal=proposal.to_dict(), accept_phase="completed")
         if version_dict:
             res_payload["resume_version"] = version_dict
-
         return res_payload
 
 

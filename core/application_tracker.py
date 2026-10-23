@@ -14,7 +14,7 @@ import json
 import sqlite3
 import time
 from dataclasses import asdict, dataclass, field, fields
-from datetime import date, datetime
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -500,7 +500,7 @@ class ApplicationStore:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         self.close()
 
-    CURRENT_SCHEMA_VERSION: int = 8
+    CURRENT_SCHEMA_VERSION: int = 9
 
     def _init_db(self) -> None:
         conn = self._get_connection()
@@ -671,6 +671,13 @@ class ApplicationStore:
             conn.execute("PRAGMA user_version = 8")
             conn.commit()
 
+        if from_version < 9:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(material_proposals)")}
+            if "recovery_source_json" not in columns:
+                conn.execute("ALTER TABLE material_proposals ADD COLUMN recovery_source_json TEXT")
+            conn.execute("PRAGMA user_version = 9")
+            conn.commit()
+
     def save(self, record: ApplicationRecord) -> None:
         """Inserts or updates an application record atomically."""
         stat_val = record.status.value if hasattr(record.status, "value") else str(record.status)
@@ -741,12 +748,32 @@ class ApplicationStore:
 
     def save_material_proposal(self, proposal: Any) -> None:
         """Create or update a serialized MaterialProposal."""
-        from core.material_proposal import MaterialProposal
+        from core.material_proposal import MaterialProposal, profile_fingerprint
 
         if not isinstance(proposal, MaterialProposal):
             raise TypeError("proposal must be a MaterialProposal")
+        proposal.validate_integrity()
         data = proposal.to_dict()
         with self._get_connection() as conn:
+            previous = conn.execute(
+                "SELECT status, proposal_hash, accepted_patch_ids_json, recovery_source_json FROM material_proposals WHERE proposal_id = ?",
+                (data["proposal_id"],),
+            ).fetchone()
+            if previous and previous["status"] in {"accepted", "rejected"} and (
+                previous["status"] != data["status"]
+                or previous["proposal_hash"] != data["proposal_hash"]
+                or json.loads(previous["accepted_patch_ids_json"]) != data["accepted_patch_ids"]
+            ):
+                raise ValueError("cannot overwrite an accepted/rejected proposal; create a new revision")
+            if previous and previous["recovery_source_json"] and proposal.recovery_source is None:
+                proposal.recovery_source = json.loads(previous["recovery_source_json"])
+            recovery_json = (json.dumps(proposal.recovery_source, ensure_ascii=False)
+                             if proposal.recovery_source is not None else None)
+            if previous and previous["recovery_source_json"] and json.loads(previous["recovery_source_json"]) != proposal.recovery_source:
+                raise ValueError("cannot overwrite proposal recovery source")
+            if proposal.recovery_source is not None:
+                if profile_fingerprint(proposal.recovery_source) != proposal.source_profile_hash:
+                    raise ValueError("invalid proposal recovery source")
             if data.get("application_id"):
                 exists = conn.execute(
                     "SELECT 1 FROM applications WHERE id = ?",
@@ -760,8 +787,8 @@ class ApplicationStore:
                 """
                 INSERT INTO material_proposals (
                     proposal_id, application_id, source_profile_hash, source_jd_hash, patches_json,
-                    status, accepted_patch_ids_json, proposal_hash, conflict_reason, applied_phase, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, accepted_patch_ids_json, proposal_hash, conflict_reason, applied_phase, recovery_source_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(proposal_id) DO UPDATE SET
                     application_id=excluded.application_id,
                     source_profile_hash=excluded.source_profile_hash,
@@ -771,14 +798,15 @@ class ApplicationStore:
                     accepted_patch_ids_json=excluded.accepted_patch_ids_json,
                     proposal_hash=excluded.proposal_hash,
                     conflict_reason=excluded.conflict_reason,
-                    applied_phase=excluded.applied_phase
+                    applied_phase=excluded.applied_phase,
+                    recovery_source_json=excluded.recovery_source_json
                 """,
                 (
                     data["proposal_id"], data.get("application_id"), data["source_profile_hash"], data["source_jd_hash"],
                     json.dumps(data["patches"], ensure_ascii=False, sort_keys=True),
                     data["status"], json.dumps(data["accepted_patch_ids"]),
                     data["proposal_hash"], data["conflict_reason"],
-                    data.get("applied_phase", ""),
+                    data.get("applied_phase", ""), recovery_json,
                     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 ),
             )
@@ -805,6 +833,7 @@ class ApplicationStore:
             "proposal_hash": data["proposal_hash"],
             "conflict_reason": data["conflict_reason"],
             "applied_phase": data.get("applied_phase", ""),
+            "recovery_source": json.loads(data["recovery_source_json"]) if data.get("recovery_source_json") else None,
         })
 
     def list_material_proposals(

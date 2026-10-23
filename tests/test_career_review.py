@@ -12,9 +12,7 @@ Testing:
 """
 
 import copy
-import html
 import json
-import os
 import subprocess
 import sys
 import unittest
@@ -85,15 +83,12 @@ class TestCareerReviewPipeline(unittest.TestCase):
         # Polish focus
         self.assertEqual(res["polish_focus"]["focus_area"], "interview_defense")
         self.assertGreaterEqual(len(res["polish_focus"]["defense_checkpoints"]), 3)
-
-    def test_02_awaiting_answer_status_when_no_answers(self):
-        """When no answers_dict is passed, all 3 questions report awaiting_answer."""
-        res = run_career_review(self.jd_text, self.profile_data)
         self.assertEqual(len(res["answer_feedback"]), 3)
-        for fb in res["answer_feedback"]:
-            self.assertEqual(fb["status"], "awaiting_answer")
-            self.assertEqual(fb["diagnosis"], "not_submitted")
-            self.assertEqual(fb["candidate_answer"], "")
+        for feedback in res["answer_feedback"]:
+            self.assertEqual(feedback["status"], "awaiting_answer")
+            self.assertEqual(feedback["diagnosis"], "not_submitted")
+            self.assertEqual(feedback["candidate_answer"], "")
+
 
     def test_03_answer_feedback_with_metric_drift(self):
         """Diagnose metric_drift when answer claims quantified gain without baseline."""
@@ -103,7 +98,11 @@ class TestCareerReviewPipeline(unittest.TestCase):
                 {"question_id": 2, "answer": "64B Dense 预训练 Baseline MFU 为 38%，我负责 Megatron-LM Sequence Parallel 通信重叠优化，从 38% 提升至 52%，测算口径为 H800 理论峰值。"}
             ]
         }
-        res = run_career_review(self.jd_text, self.profile_data, answers_dict=answers)
+        # Keep feedback validation independent from ranking unrelated resume entries.
+        profile = {"projects": [{"name": "Synthetic training evaluation", "bullets": [
+            "64B Dense 预训练 Baseline MFU 为 38%，我负责 Megatron-LM Sequence Parallel 通信重叠优化，从 38% 提升至 52%，测算口径为 H800 理论峰值。"
+        ]}]}
+        res = run_career_review(self.jd_text, profile, answers_dict=answers)
         feedbacks = res["answer_feedback"]
         self.assertEqual(len(feedbacks), 3)
 
@@ -223,6 +222,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
     def test_09_invalid_answers_are_reported(self):
         answers = {"answers": [
             {"question_id": "bad", "answer": "x"},
+            *[{"question_id": bad_id, "answer": "x"} for bad_id in ([], {}, None, True, 1.0)],
             {"question_id": 1, "answer": None},
             {"question_id": 1, "answer": "duplicate"},
             {"question_id": 99, "answer": "unknown"},
@@ -234,10 +234,12 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertIn("unknown_question_id", reasons)
         self.assertEqual(result["answer_feedback"][0]["status"], "awaiting_answer")
 
-    def test_10_listing_age_is_exposed_as_heuristic(self):
+    def test_10_listing_age_does_not_create_uncalibrated_probability(self):
         result = run_career_review(self.jd_text, self.profile_data, listing_age_days=90)
         self.assertEqual(result["match_summary"]["prediction"]["listing_age_days"], 90)
-        self.assertIn("启发式", result["match_summary"]["prediction_note"])
+        self.assertIsNone(result["match_summary"]["prediction"]["base_min_prob"])
+        self.assertIsNone(result["match_summary"]["prediction"]["base_max_prob"])
+        self.assertIn("暂不提供", result["match_summary"]["prediction_note"])
 
     def test_11_evidence_matrix_and_claim_risk_gate(self):
         profile = {
@@ -283,6 +285,12 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertIn("missing_elements", feedback)
         self.assertIn("follow_up_questions", feedback)
         self.assertTrue(feedback["follow_up_questions"])
+        self.assertEqual(result["practice_queue"][0]["question_id"], 1)
+        self.assertIn(result["practice_queue"][0]["question"], feedback["follow_up_questions"])
+        session = create_review_session(self.jd_text, self.profile_data, result)
+        resumed = run_career_review(self.jd_text, self.profile_data, session_data=session)
+        self.assertEqual(resumed["interview_questions"], result["interview_questions"])
+        self.assertEqual(resumed["practice_queue"], result["practice_queue"])
 
     def test_14_too_long_answer_is_rejected(self):
         answers = {"answers": [{"question_id": 1, "answer": "x" * 8001}]}
@@ -306,7 +314,16 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, f"CLI error: {proc.stderr}")
         data = json.loads(proc.stdout)
         self.assertEqual(data["schema_version"], "career-review.v1")
-        self.assertEqual(len(data["interview_questions"]), 3)
+        self.assertEqual(data["goal"], "tailor")
+        self.assertEqual(data["interview_questions"], [])
+        self.assertLessEqual(len(data["summary"]["key_issues"]), 3)
+        self.assertLessEqual(len(data["summary"]["pending_changes"]), 3)
+        self.assertEqual(data["summary"]["next_action"]["kind"], "check_threshold" if data["match_summary"]["is_hard_vetoed"] else "provide_evidence")
+        plain = subprocess.run(cmd[:-1], capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
+        self.assertEqual(plain.returncode, 0, plain.stderr)
+        self.assertIn("下一步：", plain.stdout)
+        self.assertNotIn("Final Match Score", plain.stdout)
+        self.assertNotIn("Exactly 3", plain.stdout)
 
     def test_16_cli_output_and_json_keeps_stdout_machine_readable(self):
         import tempfile
@@ -330,17 +347,18 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertTrue(output_path.exists())
             self.assertIn("written to", proc.stderr)
 
-    def test_17_career_review_build_resume_e2e(self):
-        """Test run_career_review with build_resume=True end-to-end closed loop."""
+    def test_career_review_build_resume_wiring_and_default_theme(self):
+        """API wiring and facts; real PDF acceptance is owned by the CLI workflow."""
         import tempfile
-        with tempfile.TemporaryDirectory() as tmpdir:
+        from unittest.mock import patch
+        from tests.test_resume_builder import FastBrowserRenderer
+        with tempfile.TemporaryDirectory() as tmpdir, patch("core.resume_builder.BrowserRenderer", FastBrowserRenderer):
             out_dir = Path(tmpdir) / "resumes"
             res = run_career_review(
                 self.jd_text,
                 self.public_profile_data,
                 build_resume=True,
                 resume_output_dir=out_dir,
-                resume_theme="modern-navy",
                 reserve_photo=True,
             )
             # 1. Verify generated_resumes structure and PDF file
@@ -348,6 +366,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertIn("tailored_profile", res)
 
             gen = res["generated_resumes"]
+            self.assertEqual(gen["theme"], "modern-navy")
             self.assertIn("pdf", gen)
             self.assertIn("html", gen)
             pdf_path = Path(gen["pdf"])
@@ -378,6 +397,15 @@ class TestCareerReviewPipeline(unittest.TestCase):
             html_text = html_path.read_text(encoding="utf-8")
             self.assertTrue("预留证件照" in html_text or "photo-placeholder" in html_text)
             self.assertTrue(res["tailored_profile"]["candidate"].get("reserve_photo", False))
+            from services.review_service import CareerReviewService
+            updated = copy.deepcopy(self.public_profile_data)
+            updated["projects"] = [{"name": "UpdatedNamedResumeMarker", "bullets": ["使用 Python 开发新版报表工具。"]}]
+            CareerReviewService().refresh_resume(res, updated, "modern-navy", out_dir)
+            current = res["generated_resumes"]
+            for kind in ("html", "pdf"):
+                self.assertEqual(Path(current[f"named_{kind}"]), Path(gen[f"named_{kind}"]))
+                self.assertEqual(Path(current[f"named_{kind}"]).read_bytes(), Path(current[kind]).read_bytes())
+            self.assertIn("UpdatedNamedResumeMarker", Path(current["named_html"]).read_text(encoding="utf-8"))
 
     def test_18_generate_tailored_profile_from_review_unit(self):
         """Test unit behavior of generate_tailored_profile_from_review with ResumePatch gates."""
@@ -549,6 +577,233 @@ class TestCareerReviewPipeline(unittest.TestCase):
                     self.assertEqual(repeated["applied_patches"][0]["validation_status"], "already_applied")
                     self.assertEqual(profile, original)
 
+    def test_goal_skips_unrelated_work_and_retains_interview_evidence_on_resume(self):
+        from unittest.mock import patch
+        with patch("core.job_flow.select_targeted_interview_questions") as questions:
+            tailored = run_career_review(self.jd_text, self.profile_data, goal="tailor")
+            questions.assert_not_called()
+        self.assertEqual(tailored["interview_questions"], [])
+        self.assertEqual(tailored["question_generation"]["dimensions"], [])
+        self.assertEqual(create_review_session(self.jd_text, self.profile_data, tailored)["status"], "awaiting_evidence")
+        with patch("core.job_flow.generate_tailored_profile_from_review") as material, \
+                patch("core.jd_analyst.predictor.InterviewTop20Predictor.predict") as legacy_questions:
+            interview = run_career_review(self.jd_text, self.profile_data, goal="interview")
+            material.assert_not_called()
+            legacy_questions.assert_not_called()
+        session = create_review_session(self.jd_text, self.profile_data, interview)
+        self.assertEqual(session["questions_snapshot"][0]["evidence_refs"], interview["interview_questions"][0]["evidence_refs"])
+        resumed = run_career_review(self.jd_text, self.profile_data, goal="interview", session_data=session)
+        self.assertEqual(resumed["interview_questions"], interview["interview_questions"])
+        self.assertEqual(resumed["material_proposal"]["patches"], [])
+        for question in interview["interview_questions"]:
+            self.assertTrue(question["evidence_refs"])
+            self.assertIn(question["evidence_refs"][0]["excerpt"][:45], question["question_zh"])
+        for status in ("accepted", "rejected"):
+            from core.job_flow import build_review_summary
+            interview["material_proposal"]["status"] = status
+            self.assertEqual(build_review_summary(interview)["next_action"]["kind"], "answer_question")
+        empty = run_career_review("简历面试", {"candidate": {"name": "Synthetic"}}, goal="interview")
+        self.assertEqual(empty["interview_questions"], [])
+        self.assertEqual(empty["summary"]["next_action"]["kind"], "provide_resume")
+
+    def test_evidence_answers_resume_and_require_explicit_proposal_acceptance(self):
+        from core.material_proposal import MaterialProposal, apply_material_proposal
+        profile = {"candidate": {"name": "Synthetic"}, "projects": [{"name": "报表", "bullets": ["Python"]}]}
+        jd = "后端工程师\n岗位要求：熟悉 Python，负责开发接口服务。"
+        first = run_career_review(jd, profile)
+        self.assertLessEqual(len(first["evidence_followup"]["questions"]), 3)
+        question = first["evidence_followup"]["questions"][0]
+        session = create_review_session(jd, profile, first)
+        text = "负责使用 Python 开发报表工具，交付业务团队采用。"
+        answers = {"answer_context": session["answer_context"], "evidence_answers": [{"question_id": question["question_id"], "target_path": "projects[0]", "answer": text}]}
+        self.assertTrue(validate_session_answers(session, answers)[0])
+        with self.assertRaisesRegex(ValueError, "question_id"):
+            run_career_review(jd, profile, answers_dict={"evidence_answers": [{"question_id": [], "answer": text}]})
+        result = run_career_review(jd, profile, answers_dict=answers, session_data=session)
+        self.assertNotEqual(result["material_proposal"]["proposal_id"], first["material_proposal"]["proposal_id"])
+        self.assertEqual(profile["projects"][0]["bullets"], ["Python"])
+        self.assertNotIn(text, result["tailored_profile"]["projects"][0]["bullets"])
+        proposal = MaterialProposal.from_dict(result["material_proposal"])
+        applied = apply_material_proposal(proposal, profile, jd)
+        self.assertIn(text, applied["projects"][0]["bullets"])
+        resumed = run_career_review(jd, profile, session_data=create_review_session(jd, profile, result, session))
+        self.assertEqual(resumed["evidence_followup"]["answers"], result["evidence_followup"]["answers"])
+        self.assertEqual(len(resumed["material_proposal"]["patches"]), len(proposal.patches))
+        self.assertEqual(resumed["material_proposal"]["proposal_id"], result["material_proposal"]["proposal_id"])
+        with self.assertRaisesRegex(ValueError, "question_id"):
+            run_career_review(jd, profile, answers_dict={"answer_context": session["answer_context"], "evidence_answers": [{"question_id": "foreign", "answer": text}]}, session_data=session)
+        import tempfile
+        from services.review_service import CareerReviewService
+        from services.offer_service import ProposalService
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "source.json"
+            jd_file = root / "jd.txt"
+            source.write_text(json.dumps(profile, ensure_ascii=False), encoding="utf-8")
+            jd_file.write_text(jd, encoding="utf-8")
+            db = root / "proposals.db"
+            review_service = CareerReviewService()
+            result["workflow"] = review_service.prepare_workflow(result, root, jd_file, source,
+                session_path=root / "session.json", proposal_db=db)
+            review_service.save_session(create_review_session(jd, profile, result), root / "session.json")
+            # Corrupt templates must remain intact and name a concrete recovery step.
+            answer_file = root / "answers.json"
+            original_answers = answer_file.read_bytes()
+            answer_file.write_text('{"answers":', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "answers.json.*JSON"):
+                review_service.prepare_workflow(result, root, jd_file, source,
+                    session_path=root / "session.json", proposal_db=db)
+            self.assertEqual(answer_file.read_text(encoding="utf-8"), '{"answers":')
+            answer_file.write_bytes(original_answers)
+            original_source = source.read_bytes()
+            with ProposalService(db) as service:
+                service.save(MaterialProposal.from_dict(result["material_proposal"]))
+                from unittest.mock import patch
+                session_before = (root / "session.json").read_bytes()
+                with patch.object(CareerReviewService, "save_session", side_effect=PermissionError("session locked")):
+                    with self.assertRaises(PermissionError):
+                        service.accept(result["material_proposal"]["proposal_id"], profile, jd,
+                                       root / "approved-custom-name.json")
+                self.assertEqual((root / "session.json").read_bytes(), session_before)
+                self.assertNotEqual(service.get(result["material_proposal"]["proposal_id"]).applied_phase, "completed")
+                for binding in ({"session_path": root / "missing-session.json"},
+                                {"workspace": root / "missing-workspace"},
+                                {"session_path": root}):
+                    with self.subTest(binding=binding), self.assertRaisesRegex(FileNotFoundError, "会话文件"):
+                        service.accept(result["material_proposal"]["proposal_id"],
+                            json.loads((root / "approved-custom-name.json").read_text(encoding="utf-8")), jd,
+                            root / "approved-custom-name.json", **binding)
+                    self.assertNotEqual(service.get(result["material_proposal"]["proposal_id"]).applied_phase, "completed")
+                    self.assertEqual((root / "session.json").read_bytes(), session_before)
+                accepted = service.accept(result["material_proposal"]["proposal_id"],
+                    json.loads((root / "approved-custom-name.json").read_text(encoding="utf-8")), jd,
+                    root / "approved-custom-name.json")
+            self.assertEqual(accepted["workflow"]["inputs"]["profile"], str((root / "approved-custom-name.json").resolve()))
+            self.assertEqual(source.read_bytes(), original_source)
+            activated = review_service.load_session(root / "session.json")
+            activated["answers"] = [{"question_id": 1, "answer": "Preserve on retry"}]
+            review_service.save_session(activated, root / "session.json")
+            with ProposalService(db) as service:
+                service.accept(result["material_proposal"]["proposal_id"],
+                    json.loads((root / "approved-custom-name.json").read_text(encoding="utf-8")), jd,
+                    root / "approved-custom-name.json")
+            self.assertEqual(review_service.load_session(root / "session.json")["answers"], activated["answers"])
+            activated["answers"] = []
+            review_service.save_session(activated, root / "session.json")
+            self.assertEqual(activated["answers"], [])
+            self.assertFalse(any(activated["evidence_followup"].values()))
+            self.assertNotIn("--answers", activated["workflow"]["next_command_args"])
+            for goal in ("interview", "review"):
+                resumed_cli = subprocess.run([sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--workspace", str(root),
+                    "--goal", goal, "--json"], capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+                self.assertEqual(resumed_cli.returncode, 0, resumed_cli.stdout + resumed_cli.stderr)
+                active = json.loads(resumed_cli.stdout)
+                self.assertEqual(len(active["interview_questions"]), 3)
+                self.assertTrue(all(text in q["question_zh"] for q in active["interview_questions"]))
+                self.assertEqual(active["workflow"]["inputs"]["profile"], str((root / "approved-custom-name.json").resolve()))
+                self.assertEqual(active["answers"], [])
+            # Identical question IDs must not select a filled template from another material version.
+            old_answers = json.dumps({"answers": [{"question_id": 1, "answer": "Previous material answer"}]})
+            (root / "answers.json").write_text(old_answers, encoding="utf-8")
+            approved_file = root / "approved-custom-name.json"
+            previous_round = review_service.prepare_workflow(active, root, jd_file, approved_file,
+                session_path=root / "session.json", proposal_db=db)
+            Path(previous_round["answer_path"]).write_text(old_answers, encoding="utf-8")
+            updated_profile = json.loads(approved_file.read_text(encoding="utf-8"))
+            updated_profile["skills"] = ["Python", "SQL"]
+            approved_file.write_text(json.dumps(updated_profile), encoding="utf-8")
+            next_round = review_service.prepare_workflow(active, root, jd_file, approved_file,
+                session_path=root / "session.json", proposal_db=db)
+            self.assertNotEqual(previous_round["answer_path"], next_round["answer_path"])
+            self.assertEqual(Path(previous_round["answer_path"]).read_text(encoding="utf-8"), old_answers)
+            self.assertTrue(all(not answer["answer"] for answer in
+                               json.loads(Path(next_round["answer_path"]).read_text(encoding="utf-8"))["answers"]))
+            unrelated = root / "unrelated"
+            unrelated.mkdir()
+            wrong_session = create_review_session(jd, profile, result)
+            wrong_session["workflow"]["proposal_db"] = str(unrelated / "other.db")
+            review_service.save_session(wrong_session, unrelated / "session.json")
+            self.assertIsNone(review_service.activate_accepted_profile(accepted, profile, jd, db, unrelated))
+            self.assertEqual(review_service.load_session(unrelated / "session.json")["workflow"]["inputs"]["profile"], str(source.resolve()))
+            # Custom session and output locations are linked explicitly by the generated accept command.
+            bound = root / "bound"
+            custom_session = root / "custom-session.json"
+            result["workflow"] = review_service.prepare_workflow(result, bound, jd_file, source,
+                session_path=custom_session, proposal_db=db)
+            review_service.save_session(create_review_session(jd, profile, result), custom_session)
+            with ProposalService(db) as service:
+                accepted = service.accept(result["material_proposal"]["proposal_id"], profile, jd,
+                    root / "elsewhere" / "approved.json", workspace=bound, session_path=custom_session)
+            command = accepted["workflow"]["next_command_args"]
+            self.assertIn(str(custom_session.resolve()), command)
+            resumed_cli = subprocess.run(command + ["--goal", "interview", "--json"],
+                capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(resumed_cli.returncode, 0, resumed_cli.stdout + resumed_cli.stderr)
+            self.assertEqual(json.loads(resumed_cli.stdout)["workflow"]["inputs"]["profile"],
+                             str((root / "elsewhere" / "approved.json").resolve()))
+
+    def test_relevance_order_requires_atomic_approval_and_preserves_source(self):
+        from core.material_proposal import apply_material_proposal, create_material_proposal
+        profile = {"candidate": {"name": "Synthetic"}, "projects": [{
+            "bullets": ["维护内部文档。", "使用 Python 开发报表工具并交付业务采用。"],
+        }]}
+        original = copy.deepcopy(profile)
+        advice = {"resume_advice": [{"requirement": "Python", "jd_requirement": {"importance": "must_have"}}]}
+        tailored = generate_tailored_profile_from_review(advice, profile)
+        proposal = create_material_proposal({"tailored_profile": tailored}, profile, "Python", "order")
+        self.assertEqual(len(proposal.patches), 2)
+        with self.assertRaisesRegex(ValueError, "整组"):
+            proposal.accept(profile, "Python", [0])
+        with self.assertRaisesRegex(ValueError, "整组"):
+            apply_material_proposal(proposal, profile, "Python", [0])
+        applied = apply_material_proposal(proposal, profile, "Python")
+        self.assertEqual(applied["projects"][0]["bullets"], list(reversed(original["projects"][0]["bullets"])))
+        self.assertEqual(profile, original)
+        repeated = generate_tailored_profile_from_review(advice, applied)
+        self.assertEqual(repeated["applied_patches"], [])
+
+        for term, bullets, expected in (
+            ("Go", ["Developed a Django service.", "Developed a Go service."], ["Developed a Go service.", "Developed a Django service."]),
+            ("Go", ["Developed a Django service.", "Wrote documentation."], ["Developed a Django service.", "Wrote documentation."]),
+            ("PyTorch", ["维护内部文档。", "使用 torch 开发模型。"], ["使用 torch 开发模型。", "维护内部文档。"]),
+        ):
+            with self.subTest(term=term, bullets=bullets):
+                profile = {"projects": [{"bullets": bullets}]}
+                ordered = generate_tailored_profile_from_review({"resume_advice": [
+                    {"requirement": term, "jd_requirement": {"importance": "must_have"}}
+                ]}, profile)
+                self.assertEqual(ordered["projects"][0]["bullets"], expected)
+
+    def test_grounded_polish_keeps_qualifications_and_combines_with_sorting(self):
+        from core.job_flow import _polish_grounded_bullet
+        from core.material_proposal import create_material_proposal, apply_material_proposal
+        source = "在该项目中，协助团队使用 Python 开发报表工具，仅负责数据导出。"
+        polished = "协助团队使用 Python 开发报表工具，仅负责数据导出。"
+        self.assertEqual(_polish_grounded_bullet(source), polished)
+        self.assertEqual(_polish_grounded_bullet("尚未独立主导，协助团队验证。"), "尚未独立主导，协助团队验证。")
+        profile = {"candidate": {"name": "Synthetic"}, "projects": [{"bullets": ["维护内部文档。", source]}]}
+        claims = iter_profile_claims(profile)
+        decoded = JDDecoder().decode("后端工程师\n要求熟悉 Python，负责开发接口。")
+        advice = generate_resume_advice(decoded, JDMatcher().match(decoded, build_candidate_profile(profile)), claims)
+        rewritten = next(a for a in advice if a["action"] == "rewrite")
+        self.assertEqual(rewritten["original_bullet"], source)
+        self.assertEqual(rewritten["safe_bullet"], polished)
+        self.assertEqual(rewritten["evidence_refs"][0]["excerpt"], source)
+        tailored = generate_tailored_profile_from_review({"resume_advice": advice}, profile)
+        proposal = create_material_proposal({"tailored_profile": tailored}, profile, "Python", "polish")
+        self.assertTrue(proposal.patches)
+        self.assertEqual({p["approval_group"] for p in proposal.patches}, {"reorder:projects[0]"})
+        with self.assertRaisesRegex(ValueError, "整组"):
+            apply_material_proposal(proposal, profile, "Python", [0])
+        applied = apply_material_proposal(proposal, profile, "Python")
+        self.assertEqual(applied["projects"][0]["bullets"], [polished, "维护内部文档。"])
+        self.assertEqual(profile["projects"][0]["bullets"], ["维护内部文档。", source])
+        full = run_career_review("后端工程师\n要求熟悉 Python，负责开发接口。", profile, goal="tailor")
+        self.assertEqual(full["tailored_profile"]["projects"][0]["bullets"], [polished, "维护内部文档。"])
+        self.assertTrue(all(p["validation_status"] == "pending_user_confirmation"
+                            for p in full["material_proposal"]["patches"]))
+        self.assertEqual(profile["projects"][0]["bullets"], ["维护内部文档。", source])
+
     def test_project_rewrite_still_rejects_unsupported_metrics(self):
         profile = {"candidate": {"name": "Synthetic"}, "projects": [
             {"bullets": ["Implemented parser."]},
@@ -561,17 +816,6 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(tailored["applied_patches"][0]["validation_status"], "rejected")
         self.assertIn("fact_guard_rejected", tailored["applied_patches"][0]["reason"])
 
-    def test_19_career_review_default_build_resume(self):
-        """Test run_career_review with default build_resume=True parameters."""
-        import tempfile
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_dir = Path(tmpdir) / "default_resumes"
-            res = run_career_review(self.jd_text, self.public_profile_data, build_resume=True, resume_output_dir=out_dir)
-            self.assertIn("generated_resumes", res)
-            pdf_path = Path(res["generated_resumes"]["pdf"])
-            self.assertTrue(pdf_path.exists())
-            self.assertTrue(pdf_path.stat().st_size > 0)
-            self.assertEqual(res["generated_resumes"]["theme"], "modern-navy")
 
     def test_20_synthetic_sqlite_case_interview_and_resume(self):
         """
@@ -656,8 +900,8 @@ class TestCareerReviewPipeline(unittest.TestCase):
         q1 = qs[0]
         self.assertEqual(q1["question_id"], 1)
         self.assertEqual(q1["target_dimension"], "core_responsibility")
-        self.assertEqual(q1["dimension_name_cn"], "核心岗位能力与技术架构深度考查")
-        self.assertEqual(q1["category_type"], "ARCHITECTURE")
+        self.assertEqual(q1["dimension_name_cn"], "简历经历与个人贡献")
+        self.assertEqual(q1["category_type"], "DEEP_DIVE")
         self.assertTrue(len(q1["requirement_name"]) > 0)
         self.assertGreaterEqual(len(q1["expected_elements"]), 4)
 
@@ -665,7 +909,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
         q2 = qs[1]
         self.assertEqual(q2["question_id"], 2)
         self.assertEqual(q2["target_dimension"], "project_deep_dive")
-        self.assertEqual(q2["dimension_name_cn"], "候选人真实项目经历与关键成果深入追问")
+        self.assertEqual(q2["dimension_name_cn"], "方案选择与问题解决")
         self.assertEqual(q2["category_type"], "DEEP_DIVE")
         self.assertTrue(len(q2["requirement_name"]) > 0)
         self.assertGreaterEqual(len(q2["expected_elements"]), 4)
@@ -674,10 +918,49 @@ class TestCareerReviewPipeline(unittest.TestCase):
         q3 = qs[2]
         self.assertEqual(q3["question_id"], 3)
         self.assertEqual(q3["target_dimension"], "gap_boundary")
-        self.assertEqual(q3["dimension_name_cn"], "技术缺口/证据不足边界与真实性防守考查")
-        self.assertEqual(q3["category_type"], "BQ")
+        self.assertEqual(q3["dimension_name_cn"], "结果依据与贡献边界")
+        self.assertEqual(q3["category_type"], "DEEP_DIVE")
         self.assertTrue(len(q3["requirement_name"]) > 0)
         self.assertGreaterEqual(len(q3["expected_elements"]), 4)
+        independent = run_career_review(self.jd_text, self.profile_data, goal="interview")
+        self.assertEqual(qs, independent["interview_questions"])
+        self.assertEqual(res["question_generation"]["strategy"], "resume_grounded_simulation")
+        self.assertTrue(all(q["evidence_refs"] and not q["gap_refs"] for q in qs))
+        from core.job_flow import _resume_interview_questions
+        from core.profile_adapter import EvidenceClaim
+        candidates = [
+            EvidenceClaim("a", "projects[0].bullets[0]", "开发 API 接口并完成异常处理和上线验证", "project"),
+            EvidenceClaim("duplicate", "projects[0].bullets[1]", "开发 API 接口并完成异常处理和上线验证", "project"),
+            EvidenceClaim("same-entry", "projects[0].bullets[2]", "维护数据库索引并记录查询性能", "project"),
+            EvidenceClaim("b", "projects[1].bullets[0]", "开展模型评测实验并记录不同方案的结果", "project"),
+            EvidenceClaim("c", "experience[0].bullets[0]", "组织用户增长活动并记录转化率提升 20%", "experience"),
+        ]
+        diverse = _resume_interview_questions(candidates)
+        self.assertEqual([q["evidence_claim_ids"] for q in diverse], [["a"], ["b"], ["c"]])
+        self.assertIn("实验", diverse[1]["question_zh"])
+        self.assertIn("观察周期", diverse[2]["question_zh"])
+        self.assertIn("基线", diverse[2]["question_zh"])
+        self.assertEqual(diverse, _resume_interview_questions(candidates))
+        for claim, decision, verification in ((candidates[0], "故障", "运行记录"),
+                                               (candidates[3], "实验", "复现"),
+                                               (candidates[4], "目标用户", "观察周期")):
+            with self.subTest(claim=claim.claim_id):
+                single = _resume_interview_questions([claim])
+                self.assertEqual(len(single), 3)
+                self.assertEqual(len({q["question_zh"] for q in single}), 3)
+                self.assertIn(decision, single[1]["question_zh"])
+                self.assertIn(verification, single[2]["question_zh"])
+                self.assertTrue(all(q["evidence_refs"][0]["excerpt"] == claim.text for q in single))
+        self.assertEqual(_resume_interview_questions([]), [])
+        legacy = create_review_session(self.jd_text, self.profile_data, res)
+        legacy["question_strategy"] = "jd"
+        legacy["answers"] = [{"question_id": 1, "answer": "Old answer must not be reused."}]
+        migrated = run_career_review(self.jd_text, self.profile_data, goal="review", session_data=legacy)
+        self.assertEqual(migrated["interview_questions"], qs)
+        self.assertEqual(migrated["answers"], [])
+        with self.assertRaisesRegex(ValueError, "刷新题目"):
+            run_career_review(self.jd_text, self.profile_data, goal="review", session_data=legacy,
+                              answers_dict={"answers": legacy["answers"]})
 
     def test_22_session_lifecycle_and_answer_validation(self):
         """Verify review session creation, atomic serialization, and answer validation."""
@@ -691,16 +974,38 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(len(session["questions_snapshot"]), 3)
 
         # Validate answers: valid question IDs pass
-        valid_answers = {"answers": [{"question_id": 1, "answer": "回答内容"}]}
+        valid_answers = {"answer_context": session["answer_context"], "answers": [{"question_id": 1, "answer": "回答内容"}]}
         is_valid, errors = validate_session_answers(session, valid_answers)
         self.assertTrue(is_valid)
         self.assertEqual(len(errors), 0)
+        for invalid_context in (None, "older-version"):
+            with self.subTest(context=invalid_context):
+                stale = {**valid_answers, "answer_context": invalid_context}
+                self.assertFalse(validate_session_answers(session, stale)[0])
+                with self.assertRaisesRegex(ValueError, "版本不匹配"):
+                    run_career_review(self.jd_text, self.profile_data, answers_dict=stale, session_data=session)
+                with self.assertRaisesRegex(ValueError, "版本不匹配"):
+                    run_career_review(self.jd_text, self.profile_data, answers_dict=stale)
+        legacy_session = {k: v for k, v in session.items() if k != "answer_context"}
+        self.assertFalse(validate_session_answers(legacy_session, valid_answers)[0])
+        refreshed = run_career_review(self.jd_text, self.profile_data, session_data=legacy_session)
+        self.assertTrue(refreshed["answer_context"])
 
         # Nonexistent question ID fails validation
         invalid_answers = {"answers": [{"question_id": 99, "answer": "不存在的题目"}]}
         is_valid, errors = validate_session_answers(session, invalid_answers)
         self.assertFalse(is_valid)
         self.assertTrue(any("99" in e for e in errors))
+
+        for field in ("answers", "evidence_answers"):
+            for bad_id in ([], {}, None, True, 1.0):
+                with self.subTest(field=field, bad_id=bad_id):
+                    valid, errors = validate_session_answers(session, {
+                        "answer_context": session["answer_context"],
+                        field: [{"question_id": bad_id, "answer": "Invalid ID"}],
+                    })
+                    self.assertFalse(valid)
+                    self.assertTrue(errors)
 
         # Save and load roundtrip
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -712,55 +1017,87 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertEqual(loaded["session_id"], session["session_id"])
             self.assertEqual(len(loaded["questions_snapshot"]), 3)
 
-    def test_23_cli_session_flags_e2e(self):
-        """Test CLI flags --save-session and --session end-to-end."""
+    def test_23_cli_workspace_resumes_inputs_and_preserves_written_answers(self):
+        """One directory manages the loop; explicit legacy session flags are covered below."""
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
-            session_out = Path(tmpdir) / "session.json"
-            cmd_save = [
-                sys.executable,
-                str(PROJECT_ROOT / "cli.py"),
-                "review",
-                str(self.jd_path),
-                "--profile",
-                str(self.profile_path),
-                "--save-session",
-                str(session_out),
-                "--json",
-            ]
-            proc = subprocess.run(cmd_save, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
-            self.assertEqual(proc.returncode, 0, f"CLI error: {proc.stderr}")
-            self.assertTrue(session_out.exists())
+            workspace = Path(tmpdir) / "review space"
+            profile_path = Path(tmpdir) / "source.json"
+            profile_path.write_text(json.dumps(self.profile_data, ensure_ascii=False), encoding="utf-8")
+            command = [sys.executable, str(PROJECT_ROOT / "cli.py"), "review",
+                       str(self.jd_path), "--profile", str(profile_path),
+                       "--goal", "interview", "--workspace", str(workspace), "--json"]
+            proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            first = json.loads(proc.stdout)
+            self.assertTrue((workspace / "session.json").is_file())
+            self.assertTrue((workspace / "proposals.db").is_file())
+            self.assertEqual(json.loads((workspace / "review.json").read_text(encoding="utf-8")), first)
+            answer_path = Path(first["workflow"]["answer_path"])
+            answer = {**first["workflow"]["answer_template"], "answers": [{"question_id": 1, "answer": "我协助优化，吞吐提升 50%。"}]}
+            answer_path.write_text(json.dumps(answer, ensure_ascii=False), encoding="utf-8")
+            original = answer_path.read_bytes()
+            command = [sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--workspace", str(workspace),
+                       "--answers", str(answer_path), "--json"]
+            proc = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            resumed = json.loads(proc.stdout)
+            self.assertEqual(resumed["goal"], "interview")
+            self.assertTrue(resumed["execution"]["resumed"])
+            self.assertEqual(resumed["interview_questions"], first["interview_questions"])
+            self.assertEqual(resumed["answers"], answer["answers"])
+            self.assertEqual(answer_path.read_bytes(), original)
+            self.assertNotEqual(resumed["workflow"]["answer_path"], str(answer_path))
+            self.assertTrue(Path(resumed["workflow"]["answer_path"]).is_file())
+            self.assertIn("--workspace", resumed["workflow"]["next_command"])
+            self.assertIn("--answers", resumed["workflow"]["next_command"])
+            session = json.loads((workspace / "session.json").read_text(encoding="utf-8"))
+            self.assertEqual(session["workflow"], resumed["workflow"])
 
-            with open(session_out, "r", encoding="utf-8") as f:
-                saved_sess = json.load(f)
-            self.assertEqual(saved_sess["schema_version"], "career-review-session.v1")
-            self.assertEqual(len(saved_sess["questions_snapshot"]), 3)
-
-            # Now submit answers against the saved session
-            answers_file = Path(tmpdir) / "answers.json"
-            with open(answers_file, "w", encoding="utf-8") as f:
-                json.dump({"answers": [{"question_id": 1, "answer": "主导集群训练，MFU从40%提升到54.2%。"}]}, f)
-
-            session_out2 = Path(tmpdir) / "session2.json"
-            cmd_resume = [
-                sys.executable,
-                str(PROJECT_ROOT / "cli.py"),
-                "review",
-                str(self.jd_path),
-                "--profile",
-                str(self.profile_path),
-                "--session",
-                str(session_out),
-                "--answers",
-                str(answers_file),
-                "--save-session",
-                str(session_out2),
-                "--json",
-            ]
-            proc2 = subprocess.run(cmd_resume, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
-            self.assertEqual(proc2.returncode, 0, f"CLI error: {proc2.stderr}")
-            self.assertTrue(session_out2.exists())
+            updated_profile = {"candidate": {"name": "Synthetic"}, "projects": [{"name": "Rust 工具", "bullets": [
+                "使用 Rust 实现日志解析工具并交付团队使用。"]}]}
+            profile_path.write_text(json.dumps(updated_profile, ensure_ascii=False), encoding="utf-8")
+            refreshed = subprocess.run([sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--workspace", str(workspace), "--json"],
+                                       capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
+            current = json.loads(refreshed.stdout)
+            self.assertTrue(current["execution"]["sources_changed"])
+            self.assertEqual(current["answers"], [])
+            self.assertTrue(all("Rust" in q["question_zh"] for q in current["interview_questions"]))
+            self.assertEqual(answer_path.read_bytes(), original)
+            self.assertNotEqual(current["interview_questions"], first["interview_questions"])
+            # Even after refresh, an explicitly selected old answer file must be rejected.
+            before_reject = (workspace / "session.json").read_bytes()
+            rejected = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("版本不匹配", json.loads(rejected.stdout)["message"])
+            self.assertEqual((workspace / "session.json").read_bytes(), before_reject)
+            current_answers = current["workflow"]["answer_template"]
+            current_answers["answers"][0]["answer"] = "我实现了 Rust 日志解析工具。"
+            Path(current["workflow"]["answer_path"]).write_text(json.dumps(current_answers), encoding="utf-8")
+            accepted = subprocess.run(current["workflow"]["next_command_args"] + ["--json"],
+                                      capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
+            # A JD is optional for resume-based simulation.
+            resume_only = subprocess.run([sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--profile", str(profile_path),
+                                          "--goal", "interview", "--json"], capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(resume_only.returncode, 0, resume_only.stdout + resume_only.stderr)
+            self.assertEqual(len(json.loads(resume_only.stdout)["interview_questions"]), 3)
+            session_path = workspace / "session.json"
+            saved = json.loads(session_path.read_text(encoding="utf-8"))
+            for malformed in ([], "invalid", {"inputs": []}, {"inputs": {"profile": 123}}):
+                with self.subTest(workflow=malformed):
+                    session_path.write_text(json.dumps({**saved, "workflow": malformed}), encoding="utf-8")
+                    failed = subprocess.run([sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--workspace", str(workspace), "--json"],
+                                            capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+                    self.assertNotEqual(failed.returncode, 0)
+                    self.assertEqual(json.loads(failed.stdout)["error_type"], "invalid_input")
+                    self.assertEqual(failed.stderr, "")
+            session_path.write_text(json.dumps({**saved, "workflow": None}), encoding="utf-8")
+            failed = subprocess.run([sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--workspace", str(workspace), "--json"],
+                                    capture_output=True, text=True, encoding="utf-8", cwd=PROJECT_ROOT)
+            self.assertEqual(json.loads(failed.stdout)["error_type"], "invalid_input")
+            self.assertNotIn("Traceback", failed.stderr)
 
     def test_24_session_multi_round_preserves_history(self):
         """Test that submitting Q1 in round 1 and Q2 in round 2 retains both answers and feedbacks."""
@@ -775,7 +1112,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
 
             # Round 2: load sess1, answer Q2
             loaded_sess1 = load_review_session(sess_path1)
-            ans2 = {"answers": [{"question_id": 2, "answer": "64B Dense 预训练 Baseline MFU 为 38%，负责 Megatron-LM Sequence Parallel，提升至 52%，测算口径为 H800 理论峰值。"}]}
+            ans2 = {"answer_context": loaded_sess1["answer_context"], "answers": [{"question_id": 2, "answer": "64B Dense 预训练 Baseline MFU 为 38%，负责 Megatron-LM Sequence Parallel，提升至 52%，测算口径为 H800 理论峰值。"}]}
             res2 = run_career_review(self.jd_text, self.profile_data, answers_dict=ans2, session_data=loaded_sess1)
             sess2 = create_review_session(self.jd_text, self.profile_data, res2, base_session=loaded_sess1)
 
@@ -793,6 +1130,10 @@ class TestCareerReviewPipeline(unittest.TestCase):
             # 4. Progress metrics
             self.assertTrue(sess2.get("minimum_loop_completed", False))
             self.assertGreaterEqual(sess2.get("evaluated_questions_count", 0), 2)
+            blank_template = {"answer_context": sess2["answer_context"], "answers": [{"question_id": 1, "answer": ""}]}
+            res3 = run_career_review(self.jd_text, self.profile_data, answers_dict=blank_template, session_data=sess2)
+            self.assertEqual(res3["answers"], res2["answers"])
+            self.assertEqual(res3["answer_feedback"], res2["answer_feedback"])
 
     def test_25_session_cli_validation_and_fingerprint_rejection(self):
         """CLI must exit non-zero and not overwrite session when answers are invalid or fingerprints mismatch."""
@@ -817,7 +1158,9 @@ class TestCareerReviewPipeline(unittest.TestCase):
             ]
             proc_bad = subprocess.run(cmd_bad_ans, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
             self.assertNotEqual(proc_bad.returncode, 0, "CLI must reject unknown question_id with non-zero exit code")
-            self.assertIn("question_id_999_not_in_session_snapshot", proc_bad.stderr)
+            self.assertEqual(proc_bad.stderr, "")
+            self.assertEqual(json.loads(proc_bad.stdout)["error_type"], "invalid_answers")
+            self.assertIn("question_id_999_not_in_session_snapshot", json.loads(proc_bad.stdout)["message"])
 
             # Case B: mismatched JD with old session must fail
             other_jd_file = Path(tmpdir) / "other_jd.txt"
@@ -829,6 +1172,8 @@ class TestCareerReviewPipeline(unittest.TestCase):
             ]
             proc_mismatch = subprocess.run(cmd_mismatch, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=str(PROJECT_ROOT))
             self.assertNotEqual(proc_mismatch.returncode, 0, "CLI must reject mismatched JD fingerprint with non-zero exit code")
+            self.assertEqual(proc_mismatch.stderr, "")
+            self.assertEqual(json.loads(proc_mismatch.stdout)["error_type"], "session_conflict")
 
     def test_26_targeted_questions_role_adaptation_and_no_name_as_project(self):
         """Test Q1 adapts to non-engineering roles and Q2 does not quote candidate name/degree as project."""
@@ -856,6 +1201,22 @@ class TestCareerReviewPipeline(unittest.TestCase):
         q1 = qs[0]
         self.assertNotIn("架构设计", q1["question_zh"], "Operations role Q1 should not mention architecture design")
         self.assertNotIn("高并发", q1["question_zh"], "Operations role Q1 should not mention high concurrency")
+
+        from core.jd_analyst.models import CoreResponsibility, CoreSkill, GapItem, GapState
+        dec.core_responsibilities = [CoreResponsibility("辅助", "整理周报", "general", 0.1),
+                                    CoreResponsibility("核心", "内容增长策略", "general", 2.0)]
+        matcher_res.gap_matrix = [
+            GapItem("技能-辅助", "skill", "nice_to_have", GapState.REAL_GAP, 0, "", "", ""),
+            GapItem("技能-内容增长", "skill", "must_have", GapState.INSUFFICIENT_EVIDENCE, 0, "", "", ""),
+        ]
+        ranked = select_targeted_interview_questions(dec, p_canon, list(ctx.claims), matcher_res, pred)
+        self.assertEqual(ranked[0]["requirement_name"], "内容增长策略")
+        self.assertEqual(ranked[2]["requirement_name"], "技能-内容增长")
+        dec.core_responsibilities = []
+        dec.core_skills = [CoreSkill("H100", "hardware", "nice_to_have", "general"),
+                           CoreSkill("Python", "language", "must_have", "general")]
+        ranked = select_targeted_interview_questions(dec, p_canon, list(ctx.claims), matcher_res, pred)
+        self.assertEqual(ranked[0]["requirement_name"], "Python")
 
         # Scenario B: Profile with only candidate info (no experience/project) must NOT use name/degree in Q2
         empty_exp_profile = {

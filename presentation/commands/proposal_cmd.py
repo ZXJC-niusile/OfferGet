@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from core.application_tracker import ApplicationStore
-from core.cli_helpers import emit_json, fail_cli, load_json, open_application_store, read_text
+from core.cli_helpers import emit_json, fail_cli, load_profile, open_application_store, read_text
 from services.offer_service import ProposalService
 
 
@@ -49,7 +49,9 @@ def cmd_proposal_accept(args) -> None:
     jd_path = Path(args.jd)
     if not profile_path.exists() or not jd_path.exists():
         fail_cli(args, "input_not_found", "Profile or JD file not found")
-    profile = load_json(str(profile_path))
+    profile = load_profile(str(profile_path))
+    if not isinstance(profile, dict):
+        fail_cli(args, "invalid_input", "Profile must be a JSON object or a parseable resume")
     jd_text = read_text(str(jd_path))
     patch_ids = None
     if args.patch_ids:
@@ -70,6 +72,7 @@ def cmd_proposal_accept(args) -> None:
             build_resume=getattr(args, "build_resume", False),
             resume_theme=getattr(args, "resume_theme", "modern-navy"),
             resume_output_dir=getattr(args, "resume_output_dir", None),
+            workspace=getattr(args, "workspace", None), session_path=getattr(args, "session", None),
         )
     except KeyError:
         fail_cli(args, "proposal_not_found", f"Proposal not found: {args.proposal_id}")
@@ -85,5 +88,7 @@ def cmd_proposal_accept(args) -> None:
         emit_json(payload)
     else:
         print(f"Proposal accepted; new profile written to {actual_profile_path}")
+        if payload.get("workflow", {}).get("next_command"):
+            print(f"下一步：{payload['workflow']['next_command']}")
         for kind, path in payload.get("generated_resumes", {}).items():
             print(f"  {kind}: {path}")
