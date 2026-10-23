@@ -40,6 +40,7 @@ def cmd_resume_build(args_list=None):
             "academic-postgraduate",
             "engineering-sb2nov",
             "modern-corporate",
+            "modern-career",
             "ats-plain",
             "academic-latex",
             "academic-typst",
