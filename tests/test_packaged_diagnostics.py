@@ -64,6 +64,7 @@ def _run(command, cwd, env):
     return result.stdout
 
 
+@pytest.mark.package
 def test_wheel_installed_diagnostics_outside_source_tree(tmp_path):
     # Build without downloads. The build backend must already be provisioned,
     # as it is in CI (pip install setuptools wheel before the test suite).
@@ -88,9 +89,12 @@ def test_wheel_installed_diagnostics_outside_source_tree(tmp_path):
         assert not any(name.startswith(("examples/", "tests/")) for name in names)
 
     installation = tmp_path / "isolated"
-    venv.EnvBuilder(with_pip=True).create(installation)
+    # Host pip can install into a fresh pip-free interpreter. This retains a
+    # real isolated wheel installation without copying/hashing pip's own tree.
+    venv.EnvBuilder(with_pip=False).create(installation)
     python = installation / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    _run([str(python), "-I", "-m", "pip", "install", "--no-index", "--no-deps", str(wheel)], tmp_path, env)
+    _run([sys.executable, "-m", "pip", "--python", str(python), "install",
+          "--no-index", "--no-deps", str(wheel)], tmp_path, env)
     site = Path(_run([str(python), "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"], tmp_path, env).strip())
     # Forbid network access and package writes, including on privileged hosts
     # where chmod alone would not model a read-only system installation.

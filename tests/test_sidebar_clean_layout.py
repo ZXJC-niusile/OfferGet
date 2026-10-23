@@ -26,7 +26,11 @@ def rendered(case, template=TEMPLATE):
     return HtmlThemeRenderer().render(vm, "sidebar-clean", template_content=template)
 
 
-@pytest.mark.parametrize("case", fixtures("sidebar-clean"), ids=lambda case: case["name"])
+# Mode does not affect rendered(); shared renderer and real-pipeline tests own
+# the mode/photo matrix. Keep ordinary, long, exam, and professional structures.
+@pytest.mark.parametrize("case", [case for case in fixtures("sidebar-clean") if case["name"] in {
+    "short-none", "long-embedded", "exam-long-reserved", "professional-none",
+}], ids=lambda case: case["name"])
 def test_sidebar_section_order_and_body_class_are_preserved(case):
     html = rendered(case)
     expected_sections = ["education", "experience", "projects", "skills"]

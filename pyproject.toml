@@ -42,6 +42,10 @@ offerget = "cli:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "browser: real browser/PDF integration; included in the default full run",
+    "package: isolated wheel installation; included in the default full run",
+]
 
 [tool.setuptools]
 py-modules = ["cli"]

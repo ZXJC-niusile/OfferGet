@@ -23,9 +23,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.qa_common import squash
+from core.resume_themes import HTML_THEMES as THEMES
+
 DEFAULT_THEME = "modern-navy"
-THEMES = ("modern-navy", "modern-corporate", "classic-tech", "silicon-clean",
-          "asu-dense", "sidebar-clean", "academic-postgraduate", "engineering-sb2nov")
 
 
 def theme_path(theme=DEFAULT_THEME):
@@ -38,7 +38,19 @@ def changed_themes(paths):
     """Select actual edited themes; renderer changes must exercise every theme."""
     paths = set(paths)
     rendering_sources = {"core/resume_view_model.py", "core/resume_builder.py",
-                         "core/browser_renderer.py", "core/autofit.py", "core/layout_solver.py"}
+                         "core/browser_renderer.py", "core/autofit.py", "core/layout_solver.py",
+                         "core/resume_themes.py",
+                         "core/profile_adapter.py",
+                         "core/resume_photo.py",
+                         "core/security_gate.py",
+                         "core/anonymizer.py",
+                         "core/atomic_writer.py",
+                         "core/artifacts.py",
+                         "core/paths.py",
+                         "core/asu_modeler.py",
+                         "pyproject.toml",
+                         "requirements.txt",
+                         }
     if paths & rendering_sources:
         return list(THEMES)
     selected = {theme for theme in THEMES if theme_path(theme).as_posix() in paths}
@@ -851,7 +863,7 @@ def pdf_column_streams(lines, geometry):
         scale = line["pageWidth"] / geometry["pageWidth"]
         position = (line["page"], line["bbox"][1])
         for char in line["chars"]:
-            value, (x0, y0, x1, y1) = char["c"], char["bbox"]
+            value, (x0, _y0, x1, _y1) = char["c"], char["bbox"]
             if not value.strip():
                 continue
             if position < start:
