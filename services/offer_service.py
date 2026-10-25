@@ -154,6 +154,12 @@ class ProposalService:
         if profile_fingerprint(profile) not in {proposal.source_profile_hash, profile_fingerprint(updated)}:
             raise ValueError("proposal source changed: source_profile_changed")
 
+        from services.review_service import CareerReviewService
+        review_service = CareerReviewService()
+        review_service.check_accepted_profile_session(
+            source_profile, updated, output_path, jd_text, self.store.db_path, workspace, session_path,
+        )
+
         # Persist the original input before overwriting it, including crash recovery.
         if proposal.recovery_source is None:
             proposal.recovery_source = copy.deepcopy(source_profile)
@@ -195,8 +201,7 @@ class ProposalService:
         if generated_resumes:
             res_payload["generated_resumes"] = generated_resumes
 
-        from services.review_service import CareerReviewService
-        workflow = CareerReviewService().activate_accepted_profile(
+        workflow = review_service.activate_accepted_profile(
             res_payload, source_profile, jd_text, self.store.db_path, workspace, session_path,
         )
         if workflow:
