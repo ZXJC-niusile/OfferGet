@@ -343,7 +343,8 @@ class TestResumeViewModel(unittest.TestCase):
         self.assertNotIn("onerror=", ats_html_2)
 
         ats_md_2 = renderer_ats.render_markdown(vm_photo)
-        self.assertIn(str(self.sample_photo_path), ats_md_2)
+        # The photo resolver expands Windows short paths to their canonical path.
+        self.assertIn(str(self.sample_photo_path.resolve()), ats_md_2)
 
         # Scenario 3: reserve_photo=False explicitly
         vm_no_photo = ResumeViewModel.from_profile(self.sample_profile, reserve_photo=False)
