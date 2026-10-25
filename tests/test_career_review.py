@@ -1113,7 +1113,8 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertEqual(len(json.loads(resume_only.stdout)["interview_questions"]), 3)
             session_path = workspace / "session.json"
             saved = json.loads(session_path.read_text(encoding="utf-8"))
-            for malformed in ([], "invalid", {"inputs": []}, {"inputs": {"profile": 123}}):
+            for malformed in ([], "invalid", {"inputs": []}, {"inputs": {"profile": 123}},
+                              {"workspace": 123}, {"workspace": {}}, {"workspace": []}):
                 with self.subTest(workflow=malformed):
                     session_path.write_text(json.dumps({**saved, "workflow": malformed}), encoding="utf-8")
                     failed = subprocess.run([sys.executable, str(PROJECT_ROOT / "cli.py"), "review", "--workspace", str(workspace), "--json"],
