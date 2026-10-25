@@ -177,7 +177,7 @@ class CareerReviewService:
                 if sys.platform == "win32" else shlex.join(command))
 
     def check_accepted_profile_session(self, source_profile, current, output_path, jd_text, db_path,
-                                  workspace=None, session_path=None):
+                                       workspace=None, session_path=None, *, artifact_hash=None):
         """Read and validate session binding without writing files or proposal state."""
         import hashlib
         import json
@@ -208,6 +208,13 @@ class CareerReviewService:
                 )
             return None
         output = Path(output_path).resolve()
+        # Activation reads artifacts only after establishing the session binding.
+        # Preflight supplies the proposed profile directly, before any output exists.
+        if current is None:
+            content = output.read_bytes()
+            if hashlib.sha256(content).hexdigest() != artifact_hash:
+                raise ValueError("已确认履历文件发生变化，请重新确认后继续。")
+            current = json.loads(content.decode("utf-8"))
         current_hash = hashlib.sha256(json.dumps(current, sort_keys=True).encode()).hexdigest()[:12]
         if session.get("profile_fingerprint") != source_hash:
             # A retry after successful activation must preserve subsequent answers.
@@ -224,16 +231,12 @@ class CareerReviewService:
     def activate_accepted_profile(self, payload, source_profile, jd_text, db_path,
                                   workspace=None, session_path=None):
         """Bind an approved output to its matching review session, never by filename alone."""
-        import hashlib
-        import json
         import sys
 
         output = Path(payload["profile_output"]).resolve()
-        if hashlib.sha256(output.read_bytes()).hexdigest() != payload["artifact_hashes"]["profile"]:
-            raise ValueError("已确认履历文件发生变化，请重新确认后继续。")
-        current = json.loads(output.read_text(encoding="utf-8"))
         binding = self.check_accepted_profile_session(
-            source_profile, current, output, jd_text, db_path, workspace, session_path,
+            source_profile, None, output, jd_text, db_path, workspace, session_path,
+            artifact_hash=payload["artifact_hashes"]["profile"],
         )
         if binding is None:
             return None
