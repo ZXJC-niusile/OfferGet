@@ -1859,7 +1859,7 @@ def validate_review_session(session: Any) -> Dict[str, Any]:
     for key, value in workflow["inputs"].items():
         if key in {"jd", "profile"} and value is not None and not isinstance(value, str):
             raise ValueError(f"Session workflow.inputs.{key} must be a path string")
-    for key in ("proposal_db", "session_path", "resume_output_dir", "resume_theme", "application_id", "source_profile", "source_profile_fingerprint"):
+    for key in ("workspace", "proposal_db", "session_path", "resume_output_dir", "resume_theme", "application_id", "source_profile", "source_profile_fingerprint"):
         if workflow.get(key) is not None and not isinstance(workflow[key], str):
             raise ValueError(f"Session workflow.{key} must be a string")
     for container, keys in ((session, ("questions_snapshot", "answers", "answer_feedback")),
