@@ -54,7 +54,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -e ".[all]" "playwright==1.62.0"
-          python -m playwright install --with-deps chromium
+      - name: Install pinned Linux Chromium
+        if: runner.os == 'Linux'
+        run: python -m playwright install --with-deps chromium
       - name: Configure Linux Chromium sandbox
         if: runner.os == 'Linux'
         shell: bash
@@ -72,10 +74,18 @@ jobs:
         run: |
           python - <<'PY'
           import os
-          from playwright.sync_api import sync_playwright
-          with sync_playwright() as runtime:
-              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
-                  output.write("BROWSER_PATH=" + runtime.chromium.executable_path + "\n")
+          if os.name == "nt":
+              # Use the stable browser supported by the production discovery path.
+              # Downloaded Chromium hangs in CLI print-to-PDF on Windows runners.
+              from core.browser_renderer import BrowserRenderer
+              browser_path = BrowserRenderer.find_browser()
+          else:
+              from playwright.sync_api import sync_playwright
+              with sync_playwright() as runtime:
+                  browser_path = runtime.chromium.executable_path
+          print("Selected browser:", browser_path)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
+              output.write("BROWSER_PATH=" + browser_path + "\n")
           PY
       - name: Environment diagnostics
         run: python cli.py doctor
