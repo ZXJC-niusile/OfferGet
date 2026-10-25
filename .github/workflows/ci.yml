@@ -55,6 +55,18 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install -e ".[all]" "playwright==1.62.0"
           python -m playwright install --with-deps chromium
+      - name: Configure Linux Chromium sandbox
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Ubuntu restricts user namespaces for downloaded Chromium builds.
+          # Use the packaged Chrome helper without disabling the browser sandbox.
+          sandbox=/opt/google/chrome/chrome-sandbox
+          if [[ ! -x "$sandbox" || ! -u "$sandbox" ]]; then
+            echo "::error::The runner is missing the packaged Chrome setuid sandbox: $sandbox"
+            exit 1
+          fi
+          echo "CHROME_DEVEL_SANDBOX=$sandbox" >> "$GITHUB_ENV"
       - name: Select the installed browser
         shell: bash
         run: |
