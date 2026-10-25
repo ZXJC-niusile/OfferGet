@@ -203,6 +203,10 @@ class CareerReviewService:
         jd_hash = hashlib.sha256(jd_text.strip().encode()).hexdigest()[:12]
         if (not workflow.get("proposal_db") or Path(workflow["proposal_db"]).resolve() != Path(db_path).resolve()
                 or session.get("jd_fingerprint") != jd_hash):
+            if workspace or session_path:
+                raise ValueError(
+                    f"指定会话的提案数据库或岗位版本不匹配：{session_file}。请修正 --session / --workspace 路径，或使用该会话对应的数据库与 JD 后重试。"
+                )
             return None
         output = Path(payload["profile_output"]).resolve()
         if hashlib.sha256(output.read_bytes()).hexdigest() != payload["artifact_hashes"]["profile"]:
@@ -218,6 +222,10 @@ class CareerReviewService:
             if (session.get("profile_fingerprint") == current_hash
                     and Path(workflow["inputs"].get("profile", "")).resolve() == output):
                 return workflow
+            if workspace or session_path:
+                raise ValueError(
+                    f"指定会话的履历版本不匹配：{session_file}。请刷新对应工作区并确认当前材料，或修正 --session 路径后重试。"
+                )
             return None
         inputs = workflow["inputs"]
         workflow.setdefault("source_profile", inputs.get("profile"))

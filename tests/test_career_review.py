@@ -660,6 +660,22 @@ class TestCareerReviewPipeline(unittest.TestCase):
                 service.save(MaterialProposal.from_dict(result["material_proposal"]))
                 from unittest.mock import patch
                 session_before = (root / "session.json").read_bytes()
+                original_session = review_service.load_session(root / "session.json")
+                for mismatch in ("database", "jd", "profile"):
+                    with self.subTest(mismatch=mismatch):
+                        wrong = copy.deepcopy(original_session)
+                        if mismatch == "database":
+                            wrong["workflow"]["proposal_db"] = str(root / "other.db")
+                        else:
+                            wrong[mismatch + "_fingerprint"] = "stale-version"
+                        review_service.save_session(wrong, root / "session.json")
+                        conflicting_bytes = (root / "session.json").read_bytes()
+                        with self.assertRaisesRegex(ValueError, "指定会话.*不匹配"):
+                            service.accept(result["material_proposal"]["proposal_id"], profile, jd,
+                                           root / "approved-custom-name.json", workspace=root)
+                        self.assertNotEqual(service.get(result["material_proposal"]["proposal_id"]).applied_phase, "completed")
+                        self.assertEqual((root / "session.json").read_bytes(), conflicting_bytes)
+                (root / "session.json").write_bytes(session_before)
                 with patch.object(CareerReviewService, "save_session", side_effect=PermissionError("session locked")):
                     with self.assertRaises(PermissionError):
                         service.accept(result["material_proposal"]["proposal_id"], profile, jd,
@@ -723,7 +739,11 @@ class TestCareerReviewPipeline(unittest.TestCase):
             wrong_session = create_review_session(jd, profile, result)
             wrong_session["workflow"]["proposal_db"] = str(unrelated / "other.db")
             review_service.save_session(wrong_session, unrelated / "session.json")
-            self.assertIsNone(review_service.activate_accepted_profile(accepted, profile, jd, db, unrelated))
+            with self.assertRaisesRegex(ValueError, "指定会话.*不匹配"):
+                review_service.activate_accepted_profile(accepted, profile, jd, db, unrelated)
+            # An unrelated session discovered implicitly must not prevent standalone acceptance.
+            implicit = {**accepted, "profile_output": str(unrelated / "approved.json")}
+            self.assertIsNone(review_service.activate_accepted_profile(implicit, profile, jd, db))
             self.assertEqual(review_service.load_session(unrelated / "session.json")["workflow"]["inputs"]["profile"], str(source.resolve()))
             # Custom session and output locations are linked explicitly by the generated accept command.
             bound = root / "bound"
