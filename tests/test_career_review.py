@@ -742,6 +742,11 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertEqual(Path(previous_round["answer_path"]).read_text(encoding="utf-8"), old_answers)
             self.assertTrue(all(not answer["answer"] for answer in
                                json.loads(Path(next_round["answer_path"]).read_text(encoding="utf-8"))["answers"]))
+            # Matching sessions still reject a changed artifact before activation.
+            session_before_hash_error = (root / "session.json").read_bytes()
+            with self.assertRaisesRegex(ValueError, "已确认履历文件发生变化"):
+                review_service.activate_accepted_profile(accepted, profile, jd, db, root)
+            self.assertEqual((root / "session.json").read_bytes(), session_before_hash_error)
             unrelated = root / "unrelated"
             unrelated.mkdir()
             wrong_session = create_review_session(jd, profile, result)
