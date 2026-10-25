@@ -92,9 +92,9 @@ jobs:
       max-parallel: 4
       matrix:
         theme: ${{ fromJSON(needs.select-themes.outputs.themes) }}
-    env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/offerget-browsers
     steps:
+      - name: Set isolated browser cache directory
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/offerget-browsers" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
