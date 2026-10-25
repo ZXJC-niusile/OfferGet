@@ -176,14 +176,13 @@ class CareerReviewService:
         return ("& " + " ".join("'" + arg.replace("'", "''") + "'" for arg in command)
                 if sys.platform == "win32" else shlex.join(command))
 
-    def activate_accepted_profile(self, payload, source_profile, jd_text, db_path,
+    def check_accepted_profile_session(self, source_profile, current, output_path, jd_text, db_path,
                                   workspace=None, session_path=None):
-        """Bind an approved output to its matching review session, never by filename alone."""
+        """Read and validate session binding without writing files or proposal state."""
         import hashlib
         import json
-        import sys
 
-        root = Path(workspace or Path(payload["profile_output"]).parent).resolve()
+        root = Path(workspace or Path(output_path).parent).resolve()
         session_file = Path(session_path or root / "session.json")
         if not session_file.is_file():
             if workspace or session_path:
@@ -208,25 +207,44 @@ class CareerReviewService:
                     f"指定会话的提案数据库或岗位版本不匹配：{session_file}。请修正 --session / --workspace 路径，或使用该会话对应的数据库与 JD 后重试。"
                 )
             return None
-        output = Path(payload["profile_output"]).resolve()
-        if hashlib.sha256(output.read_bytes()).hexdigest() != payload["artifact_hashes"]["profile"]:
-            raise ValueError("已确认履历文件发生变化，请重新确认后继续。")
-        current = json.loads(output.read_text(encoding="utf-8"))
+        output = Path(output_path).resolve()
         current_hash = hashlib.sha256(json.dumps(current, sort_keys=True).encode()).hexdigest()[:12]
-        if (workflow.get("accepted_proposal_id") == payload["proposal"]["proposal_id"]
-                and session.get("profile_fingerprint") == current_hash
-                and Path(workflow["inputs"].get("profile", "")).resolve() == output):
-            return workflow
         if session.get("profile_fingerprint") != source_hash:
             # A retry after successful activation must preserve subsequent answers.
             if (session.get("profile_fingerprint") == current_hash
-                    and Path(workflow["inputs"].get("profile", "")).resolve() == output):
-                return workflow
+                    and Path(workflow["inputs"].get("profile") or "").resolve() == output):
+                return session_file, root, session, source_hash, jd_hash, current_hash, True
             if workspace or session_path:
                 raise ValueError(
                     f"指定会话的履历版本不匹配：{session_file}。请刷新对应工作区并确认当前材料，或修正 --session 路径后重试。"
                 )
             return None
+        return session_file, root, session, source_hash, jd_hash, current_hash, False
+
+    def activate_accepted_profile(self, payload, source_profile, jd_text, db_path,
+                                  workspace=None, session_path=None):
+        """Bind an approved output to its matching review session, never by filename alone."""
+        import hashlib
+        import json
+        import sys
+
+        output = Path(payload["profile_output"]).resolve()
+        if hashlib.sha256(output.read_bytes()).hexdigest() != payload["artifact_hashes"]["profile"]:
+            raise ValueError("已确认履历文件发生变化，请重新确认后继续。")
+        current = json.loads(output.read_text(encoding="utf-8"))
+        binding = self.check_accepted_profile_session(
+            source_profile, current, output, jd_text, db_path, workspace, session_path,
+        )
+        if binding is None:
+            return None
+        session_file, root, session, source_hash, jd_hash, current_hash, already_active = binding
+        workflow = session["workflow"]
+        if already_active or (
+            workflow.get("accepted_proposal_id") == payload["proposal"]["proposal_id"]
+            and session.get("profile_fingerprint") == current_hash
+            and Path(workflow["inputs"].get("profile") or "").resolve() == output
+        ):
+            return workflow
         inputs = workflow["inputs"]
         workflow.setdefault("source_profile", inputs.get("profile"))
         workflow.setdefault("source_profile_fingerprint", source_hash)

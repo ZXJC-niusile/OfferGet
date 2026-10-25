@@ -661,6 +661,10 @@ class TestCareerReviewPipeline(unittest.TestCase):
                 from unittest.mock import patch
                 session_before = (root / "session.json").read_bytes()
                 original_session = review_service.load_session(root / "session.json")
+                proposal_before = service.get(result["material_proposal"]["proposal_id"]).to_dict()
+                output_file = root / "approved-custom-name.json"
+                output_file.write_bytes(b"existing output must survive rejection")
+                output_before = output_file.read_bytes()
                 for mismatch in ("database", "jd", "profile"):
                     with self.subTest(mismatch=mismatch):
                         wrong = copy.deepcopy(original_session)
@@ -670,10 +674,14 @@ class TestCareerReviewPipeline(unittest.TestCase):
                             wrong[mismatch + "_fingerprint"] = "stale-version"
                         review_service.save_session(wrong, root / "session.json")
                         conflicting_bytes = (root / "session.json").read_bytes()
-                        with self.assertRaisesRegex(ValueError, "指定会话.*不匹配"):
-                            service.accept(result["material_proposal"]["proposal_id"], profile, jd,
-                                           root / "approved-custom-name.json", workspace=root)
-                        self.assertNotEqual(service.get(result["material_proposal"]["proposal_id"]).applied_phase, "completed")
+                        with patch("services.resume_service.ResumeService.build_resume") as render:
+                            with self.assertRaisesRegex(ValueError, "指定会话.*不匹配"):
+                                service.accept(result["material_proposal"]["proposal_id"], profile, jd,
+                                               output_file, workspace=root, build_resume=True)
+                            render.assert_not_called()
+                        self.assertEqual(service.get(result["material_proposal"]["proposal_id"]).to_dict(), proposal_before)
+                        self.assertEqual(output_file.read_bytes(), output_before)
+                        self.assertEqual(source.read_bytes(), original_source)
                         self.assertEqual((root / "session.json").read_bytes(), conflicting_bytes)
                 (root / "session.json").write_bytes(session_before)
                 with patch.object(CareerReviewService, "save_session", side_effect=PermissionError("session locked")):
