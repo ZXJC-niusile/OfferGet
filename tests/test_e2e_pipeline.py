@@ -54,11 +54,15 @@ from core.advisor_matcher import AdvisorMatcher
 from core.browser_renderer import BrowserRenderer
 
 
+# ignore_cleanup_errors was added in Python 3.10.
+TEMP_DIRECTORY_OPTIONS = {"ignore_cleanup_errors": True} if sys.version_info >= (3, 10) else {}
+
+
 class TestE2EIndustryCareerPipeline(unittest.TestCase):
     """E2E Test 1: Full industry career workflow from JD decoding to multi-offer matrix."""
 
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.temp_dir = tempfile.TemporaryDirectory(**TEMP_DIRECTORY_OPTIONS)
         self.work_dir = Path(self.temp_dir.name)
         self.jd_path = PROJECT_ROOT / "examples" / "sample_ai_jd.txt"
         self.profile_path = PROJECT_ROOT / "examples" / "candidate_profile.json"
@@ -156,7 +160,7 @@ class TestE2EResumeRenderingAndAutofitPipeline(unittest.TestCase):
     """E2E Test 2: Full resume layout, micro-typography, HTML/PDF rendering, safe I/O, and Diff Ledger."""
 
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.temp_dir = tempfile.TemporaryDirectory(**TEMP_DIRECTORY_OPTIONS)
         self.work_dir = Path(self.temp_dir.name)
 
     def tearDown(self):
@@ -358,7 +362,7 @@ class TestE2EInterviewDebriefAndDefensePipeline(unittest.TestCase):
     """E2E Test 4: Interview debrief, fact guard grilling, and multi-turn session persistence."""
 
     def setUp(self):
-        self.temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.temp_dir = tempfile.TemporaryDirectory(**TEMP_DIRECTORY_OPTIONS)
         self.work_dir = Path(self.temp_dir.name)
 
     def tearDown(self):
