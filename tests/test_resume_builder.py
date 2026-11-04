@@ -172,12 +172,16 @@ class TestResumeBuilder(unittest.TestCase):
             self.assertFalse(raw_path.exists())
 
     def test_build_all(self):
-        # Uses FastBrowserRenderer to verify multi-theme dispatch across all 11 themes cleanly
+        # Verify dispatch and distinct per-theme reports without a real browser.
         builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
         results = builder.build_all(self.test_dir, photo=True, autofit=True)
         self.assertEqual(len(results), len(builder.PDF_THEMES))
         for theme_name, files in results.items():
             self.assertTrue(files["pdf"].exists(), f"{theme_name} PDF must exist")
+            self.assertEqual(files["diff_ledger_json"].name,
+                             f"resume_{theme_name.replace('-', '_')}_diff_ledger.json")
+        ledgers = [files["diff_ledger_json"] for files in results.values()]
+        self.assertEqual(len(set(ledgers)), len(results))
 
     def test_default_photo_reservation_placeholder(self):
         """Test default behavior: perfectly preserves dashed photo reservation placeholder box."""
