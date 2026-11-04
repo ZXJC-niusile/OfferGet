@@ -7,7 +7,7 @@ OfferGet native strongly-typed resume view model and decoupled renderers:
    - Pre-escaped strings and safe markdown bold conversions (preventing runtime XSS).
    - Clean factory `from_profile` supporting both Track 1 (SSOT) and Track 2 (minimal) profiles.
 2. HtmlThemeRenderer:
-   - Modular assembly of HTML resume themes (modern-navy, silicon-clean, classic-tech).
+   - Modular assembly of HTML resume themes (modern-navy, classic-tech).
    - Independent section renderers (header, education, experience, projects, skills).
 3. AtsPlainRenderer:
    - Decoupled single-column clean HTML and plain text Markdown renderer for ATS parsing.
@@ -549,7 +549,7 @@ class HtmlThemeRenderer:
 
     # Stylesheet-owned themes opt in after their templates have migrated. The
     # existing inline defaults stay intact for every other theme.
-    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "silicon-clean", "modern-career", "executive-mckinsey", "awesome-cv", "wall-street-classic"})
+    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "modern-career", "executive-mckinsey", "awesome-cv", "wall-street-classic"})
 
     @classmethod
     def _style(cls, css: str, theme_name: str = "") -> str:
@@ -758,19 +758,6 @@ class HtmlThemeRenderer:
             "skills": self.render_skills(vm, theme_name),
             "publications": self.render_publications(vm, theme_name),
         }
-        if theme_name == "silicon-clean" and theme_name in self.SEMANTIC_THEMES:
-            opening = "\n".join(sections[key] for key in ("postgraduate-exam", "education") if sections[key])
-            left = sections["experience"]
-            right = "\n".join(sections[key] for key in ("projects", "publications") if sections[key])
-            columns = []
-            if left:
-                columns.append(f'<div class="resume-column" data-column="left">{left}</div>')
-            if right:
-                columns.append(f'<div class="resume-column" data-column="right">{right}</div>')
-            # Reserve a two-column body only when both editorial lanes have facts.
-            body_class = "resume-columns" if left and right else "resume-single-column"
-            body = f'<div class="{body_class}">{"".join(columns)}</div>' if columns else ""
-            return f'<div class="resume-sections" data-layout="balanced-columns">{opening}{body}{sections["skills"]}</div>'
         content = "\n".join(section for section in sections.values() if section)
         if theme_name in self.SEMANTIC_THEMES:
             layout = "date-rail" if theme_name == "classic-tech" else "label-gutter"

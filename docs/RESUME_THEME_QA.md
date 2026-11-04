@@ -2,10 +2,10 @@
 
 The shared harness compares the same explicitly synthetic input against an
 isolated exact baseline and the working tree. New themes absent from the baseline
-receive initial-layout checks only, recorded as `initial-layout-only` in the report. It supports all twelve HTML themes:
+receive initial-layout checks only, recorded as `initial-layout-only` in the report. It supports all ten HTML themes:
 `executive-mckinsey`, `awesome-cv`, `wall-street-classic`,
-`modern-navy`, `modern-corporate`, `modern-career`, `classic-tech`, `silicon-clean`, `asu-dense`,
-`sidebar-clean`, `academic-postgraduate`, and `engineering-sb2nov`.
+`modern-navy`, `modern-corporate`, `modern-career`, `classic-tech`, `asu-dense`,
+`academic-postgraduate`, and `engineering-sb2nov`.
 
 ```bash
 BASE_SHA="<exact comparison commit>"
@@ -94,18 +94,15 @@ profiles when needed; the theme does not silently change that global ladder.
 ## Structural pilot and photo-mode migration
 
 The structural pilots are explicitly allowlisted: Modern Navy (`label-gutter`,
-18/82 section labels), Classic Tech (`date-rail`), and Silicon Clean
-(`balanced-columns`). Silicon has full-width identity/exam/education, equal body
-columns (experience left, projects/publications right), and full-width skills at
-the end. The QA harness does not let an arbitrary template opt itself into a
-relaxed comparison by adding a marker.
+18/82 section labels) and Classic Tech (`date-rail`). The QA harness does not let
+an arbitrary template opt itself into a relaxed comparison by adding a marker.
 
 All original sixteen common cases remain. The matrix is additive: 26 cases per
-pilot, 24 for other ordinary themes, and 30 for Academic Postgraduate and Sidebar Clean. Every
+pilot, 24 for other ordinary themes, and 30 for Academic Postgraduate. Every
 original no-photo shape has a real embedded-portrait counterpart through the
 same raw, compact, solver, or production-builder path. Placeholder cases remain
 separate. Two additional source-photo cases put a local image in the input while
-requesting authoritative no-photo, through raw and production paths. The three
+requesting authoritative no-photo, through raw and production paths. The two
 pilots also exercise every displayed projection, including exam and publication
 fields, with/without the portrait. The 120×160 portrait is a code-drawn
 head-and-shoulders illustration with a registration border, never a real person;

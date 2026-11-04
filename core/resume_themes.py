@@ -2,10 +2,8 @@
 
 HTML_THEMES = (
     "modern-navy",
-    "silicon-clean",
     "classic-tech",
     "asu-dense",
-    "sidebar-clean",
     "academic-postgraduate",
     "engineering-sb2nov",
     "modern-corporate",

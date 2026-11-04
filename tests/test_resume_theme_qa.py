@@ -30,12 +30,12 @@ SOURCE_CASES = [(theme, case) for theme in THEMES for case in fixtures(theme)
 # Every template's photo/no-photo facts are compared in test_resume_photo_contract.
 # Reserved slots exercise the semantic header and both legacy header variants.
 SOURCE_CASES += [(theme, next(case for case in fixtures(theme) if case["name"] == "professional-reserved"))
-                 for theme in ("modern-navy", "sidebar-clean", "engineering-sb2nov")]
+                 for theme in ("modern-navy", "academic-postgraduate", "engineering-sb2nov")]
 # Distinct shared-model branches not exercised by professional profiles: a
 # single string skill value and exam markup in a stylesheet-owned theme.
 SOURCE_CASES += [
     ("modern-navy", next(case for case in fixtures() if case["name"] == "skills-long-raw-none")),
-    ("modern-navy", next(case for case in fixtures("sidebar-clean") if case["name"] == "exam-long-none")),
+    ("modern-navy", next(case for case in fixtures("academic-postgraduate") if case["name"] == "exam-long-none")),
 ]
 
 
@@ -85,7 +85,7 @@ def test_theme_autofit_tokens_and_repeatable_print_gutters(theme):
         assert re.findall(re.escape(name) + r":\s*([^;]+);", tuned) == [value]
     assert "margin: var(--page-padding-y) 0;" in tuned
     assert "min-height: calc(297mm - 2 * var(--page-padding-y));" in tuned
-    if theme in {"classic-tech", "silicon-clean"}:
+    if theme == "classic-tech":
         assert "break-after: avoid;" in tuned
 
 
@@ -97,8 +97,8 @@ def test_default_fixture_matrix_remains_compatible_with_modern_navy():
 
 def test_changed_themes_selects_changed_files_and_shared_regression_coverage():
     assert changed_themes(["themes/classic-tech.html"]) == ["classic-tech"]
-    assert changed_themes(["themes/modern-corporate.html", "themes/sidebar-clean.html"]) == [
-        "sidebar-clean", "modern-corporate"]
+    assert changed_themes(["themes/modern-corporate.html", "themes/classic-tech.html"]) == [
+        "classic-tech", "modern-corporate"]
     assert changed_themes(["themes/modern-corporate.html", "scripts/qa_modern_navy_layout.py"]) == [
         "modern-navy", "modern-corporate"]
     workflow = (ROOT / ".github/workflows/resume-visual.yml").read_text(encoding="utf-8")
@@ -142,7 +142,7 @@ def test_corporate_presentation_has_plain_entries_and_keeps_wrapping_contracts()
     assert "overflow: hidden" not in template
 
 
-@pytest.mark.parametrize("theme", ["academic-postgraduate", "sidebar-clean"])
+@pytest.mark.parametrize("theme", ["academic-postgraduate"])
 def test_academic_exam_fixtures_cover_every_field_and_long_subjects(theme):
     cases = [case for case in fixtures(theme) if case["name"].startswith("exam-")]
     assert len(fixtures(theme)) == 30
@@ -215,10 +215,10 @@ def test_stress_builder_can_report_real_multi_page_branch_without_single_page_au
         assert result["trace"]["autofit"] == []
 
 
-def test_sidebar_exam_coverage_does_not_expand_unrelated_themes():
+def test_academic_exam_coverage_does_not_expand_unrelated_themes():
     for theme in THEMES:
         cases = fixtures(theme)
-        has_exam = theme in {"academic-postgraduate", "sidebar-clean"}
+        has_exam = theme == "academic-postgraduate"
         assert len(cases) == (30 if has_exam else 26 if theme in STRUCTURAL_LAYOUTS else 24)
         assert any(case["name"].startswith("exam-") for case in cases) == has_exam
 

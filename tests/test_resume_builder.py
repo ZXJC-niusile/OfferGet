@@ -161,7 +161,7 @@ class TestResumeBuilder(unittest.TestCase):
 
         # 2. Test multi-theme template population & cleanup with fast renderer to avoid redundant Chromium launches
         fast_builder = ResumeBuilder(self.minimal_profile, renderer=self.fast_renderer)
-        for theme in ["silicon-clean", "classic-tech"]:
+        for theme in ["classic-tech"]:
             res = fast_builder.build_html_theme(theme, self.test_dir, photo=True, autofit=True)
             self.assertTrue(res["html"].exists())
             self.assertTrue(res["pdf"].exists())

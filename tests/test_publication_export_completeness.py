@@ -28,7 +28,7 @@ SOURCE_FACTS = {
     "individual_contribution": "only validation ContributionV2",
 }
 THEMES = (
-    "modern-navy", "silicon-clean", "classic-tech", "asu-dense", "sidebar-clean",
+    "modern-navy", "classic-tech", "asu-dense",
     "academic-postgraduate", "engineering-sb2nov", "modern-corporate", "modern-career",
 )
 FORMATS = THEMES + ("ats-markdown", "ats-html", "docx", "latex", "typst", "academic-html")

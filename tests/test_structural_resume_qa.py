@@ -9,8 +9,8 @@ from PIL import Image
 
 from scripts.qa_modern_navy_layout import (
     STRUCTURAL_LAYOUTS, SECTION_LABELS, SemanticDocument, audit_html, coverage_errors,
-    expected_field_order, expected_presentation, expected_sections, field_section,
-    final_failures, fixtures, ordered_field_errors, pdf_column_streams, pdf_line_overlaps,
+    expected_field_order, field_section,
+    final_failures, fixtures, pdf_line_overlaps,
     source_ledger, synthetic_portrait_png, unchanged_content,
 )
 from tests.test_modern_navy_layout import valid_metrics
@@ -58,12 +58,7 @@ def marked_html(case):
         parts.append(f'<span data-field="{key}">{escape(ledger[key])}</span>')
     parts.append('••</header><main data-layout="' + STRUCTURAL_LAYOUTS[theme] + '">')
     sections = ['education', 'experience', 'projects', 'skills']
-    if theme == 'silicon-clean':
-        sections = ['education', 'experience', 'projects', 'skills']
     for section in sections:
-        column = 'left' if section == 'experience' else 'right'
-        if theme == 'silicon-clean' and section in ('experience', 'projects'):
-            parts.append(f'<div data-column="{column}">')
         parts.append(f'<section id="{section}"><h2>{SECTION_LABELS[section]}</h2>')
         keys = [key for key in ledger if field_section(key) == section]
         if theme == 'classic-tech' and section != 'skills':
@@ -77,8 +72,6 @@ def marked_html(case):
             parts.append('：')
         parts.append('</div>')
         parts.append('</section>')
-        if theme == 'silicon-clean' and section in ('experience', 'projects'):
-            parts.append('</div>')
     return ''.join(parts) + '</main></body></html>'
 
 
@@ -131,12 +124,6 @@ def test_duplicate_values_still_require_each_source_occurrence():
     assert coverage_errors('Engineer', {'a': 'Engineer', 'b': 'Engineer'}, '')
 
 
-def test_wrong_column_is_rejected_even_with_complete_text():
-    case = manual_case('silicon-clean')
-    html = marked_html(case).replace('data-column="left"', 'data-column="right"', 1)
-    assert any('wrong column' in error for error in audit_html(html, case)['errors'])
-
-
 def test_legacy_equality_remains_strict_and_photo_normalization_is_narrow():
     before = '<body>Source fact 17.<div class="photo-placeholder">预留证件照<br>一寸 / 二寸</div>Second fact.</body>'
     after = '<body>Source fact 17.<div class="photo-placeholder"><img src="data:image/png;base64,x"></div>Second fact.</body>'
@@ -155,7 +142,7 @@ def test_no_photo_rejects_image_uri_without_an_img_tag():
 
 
 def test_all_original_cases_remain_and_portrait_pairs_share_exact_sources():
-    for theme in ['modern-navy', 'classic-tech', 'silicon-clean', 'modern-corporate', 'academic-postgraduate']:
+    for theme in ['modern-navy', 'classic-tech', 'modern-corporate', 'academic-postgraduate']:
         cases = {case['name']: case for case in fixtures(theme)}
         assert ORIGINAL_CASES <= cases.keys()
         for case in cases.values():
@@ -183,22 +170,6 @@ def glyph_line(text, page, x, y):
             'text': text, 'chars': [{'c': char, 'bbox': (x + i * 4, y, x + i * 4 + 3, y + 10)} for i, char in enumerate(text)]}
 
 
-def test_pdf_reading_is_column_aware_across_continuation_pages():
-    geometry = {'pageWidth': 600, 'headerBottom': 50, 'printPaddingMm': 0,
-                'columns': [{'name': 'left', 'left': 30, 'right': 270}, {'name': 'right', 'left': 320, 'right': 570}]}
-    lines = [glyph_line('Name', 1, 30, 20), glyph_line('实习经历', 1, 30, 65), glyph_line('校园与实践经历', 1, 320, 65), glyph_line('Left one', 1, 30, 80),
-             glyph_line('Right one', 1, 320, 80), glyph_line('Left two', 2, 30, 40),
-             glyph_line('Right two', 2, 320, 40), glyph_line('专业技能', 2, 30, 90), glyph_line('Skills', 2, 30, 105)]
-    streams, errors = pdf_column_streams(lines, geometry)
-    assert errors == []
-    assert streams == {'opening': 'Name', 'left': '实习经历LeftoneLefttwo', 'right': '校园与实践经历RightoneRighttwo', 'ending': '专业技能Skills'}
-    ledger = {'one': 'Left one', 'two': 'Left two'}
-    assert ordered_field_errors(streams['left'], ['one', 'two'], ledger) == []
-    assert ordered_field_errors('Left two Left one', ['one', 'two'], ledger)
-    assert pdf_column_streams(lines, {})[1]
-    assert pdf_column_streams(lines + [glyph_line('Lost', 2, 290, 60)], geometry)[1]
-
-
 def test_pdf_collisions_cannot_be_hidden_by_dom_geometry():
     first = glyph_line('First text', 1, 30, 40)
     assert not pdf_line_overlaps([first, glyph_line('Next text', 1, 30, 60)])
@@ -206,7 +177,7 @@ def test_pdf_collisions_cannot_be_hidden_by_dom_geometry():
     assert not pdf_line_overlaps([first, glyph_line('Other page', 2, 30, 40)])
 
 
-@pytest.mark.parametrize('regression', ['source', 'pdf_source', 'pdf_overlap', 'pdf_column', 'hidden', 'photo_slot', 'photo_image', 'photo_padding'])
+@pytest.mark.parametrize('regression', ['source', 'pdf_source', 'pdf_overlap', 'hidden', 'photo_slot', 'photo_image', 'photo_padding'])
 def test_new_failures_are_wired_into_final_gate(regression):
     metrics = valid_metrics()
     case = {'name': 'manual-none', 'photo': 'none', 'max_pages': 1}
@@ -216,8 +187,6 @@ def test_new_failures_are_wired_into_final_gate(regression):
         metrics['pdf']['sourceErrors'] = ['duplicate claim']
     elif regression == 'pdf_overlap':
         metrics['pdf']['overlaps'] = [{}]
-    elif regression == 'pdf_column':
-        metrics['pdf']['columnErrors'] = ['ambiguous glyph']
     elif regression == 'hidden':
         metrics['screen']['fields'] = [{'id': 'identity.name', 'text': 'Name', 'visible': False}]
     else:
