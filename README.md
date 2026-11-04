@@ -90,7 +90,7 @@ python cli.py resume build examples/sample_resume.md --anonymize strict
 
 ## 主题
 
-共 13 款，使用 `--theme` 选择。
+共 14 款，使用 `--theme` 选择。
 
 | 主题 | 格式 | 风格 |
 | --- | --- | --- |
@@ -106,9 +106,10 @@ python cli.py resume build examples/sample_resume.md --anonymize strict
 | `academic-latex` | LaTeX/PDF | 原生 LaTeX |
 | `academic-typst` | Typst/PDF | 原生 Typst |
 | `ats-plain` | 文本/HTML/PDF | 简单文本布局 |
+| `executive-mckinsey` | 咨询高管风，衬线字体与罗马数字章节 | HTML/PDF |
 | `ats-docx` | Word | DOCX 文档 |
 
-`--theme all` 批量生成 12 个 PDF 主题，Word 需单独导出。
+`--theme all` 批量生成 13 个 PDF 主题，Word 需单独导出。
 
 ## 其他功能
 
