@@ -596,7 +596,26 @@ class TestCareerReviewPipeline(unittest.TestCase):
             graph.assert_not_called()
         session = create_review_session(self.jd_text, self.profile_data, interview)
         self.assertEqual(session["questions_snapshot"][0]["evidence_refs"], interview["interview_questions"][0]["evidence_refs"])
-        resumed = run_career_review(self.jd_text, self.profile_data, goal="interview", session_data=session)
+        # Round-trip through JSON, as separate CLI invocations do.
+        session = json.loads(json.dumps(session))
+        with patch("core.job_flow.JDDecoder.decode", side_effect=AssertionError("decoded twice")), \
+                patch("core.job_flow.JDMatcher.match", side_effect=AssertionError("matched twice")):
+            resumed = run_career_review(self.jd_text, self.profile_data, goal="interview", session_data=session)
+        self.assertEqual(resumed["execution"]["reused_stages"], ["jd_decode", "full_match"])
+        self.assertEqual(resumed["match_summary"], interview["match_summary"])
+        for invalidation in ("missing", "damaged", "engine_changed"):
+            stale = copy.deepcopy(session)
+            if invalidation == "missing":
+                stale.pop("analysis_cache")
+            elif invalidation == "damaged":
+                stale["analysis_cache"]["payload"]["decoded_jd"]["job_title"] = "damaged"
+            else:
+                stale["analysis_cache"]["key"] = "old-engine"
+            with patch("core.job_flow.JDDecoder.decode", wraps=JDDecoder().decode) as decode:
+                refreshed = run_career_review(self.jd_text, self.profile_data, goal="interview", session_data=stale)
+                decode.assert_called_once()
+            self.assertEqual(refreshed["execution"]["reused_stages"], [])
+            self.assertEqual(refreshed["match_summary"], interview["match_summary"])
         self.assertEqual(resumed["interview_questions"], interview["interview_questions"])
         self.assertEqual(resumed["material_proposal"], {})
         for question in interview["interview_questions"]:

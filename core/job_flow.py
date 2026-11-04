@@ -1529,18 +1529,9 @@ def run_career_review(
         raise ValueError("材料补证需要 --goal tailor 或 --goal review")
     if build_resume:
         require_public_profile(profile_dict)
-    decoder = JDDecoder()
-    decoded_jd = decoder.decode(jd_text)
-
     profile_ctx = build_profile_context(profile_dict if isinstance(profile_dict, (dict, ProfileContext)) else {})
     cand_profile = profile_ctx.get_canonical_profile()
     claims = list(profile_ctx.claims)
-
-    matcher = JDMatcher()
-    matcher_result = matcher.match(decoded_jd, cand_profile)
-
-    predictor = JDPredictor() if wants_interview else None
-    probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days) if predictor else None
 
     jd_hash = hashlib.sha256(jd_text.strip().encode("utf-8")).hexdigest()[:12]
     raw_p = profile_dict.raw_profile if isinstance(profile_dict, ProfileContext) else profile_dict
@@ -1549,6 +1540,18 @@ def run_career_review(
     session_data, formatted_questions = _prepare_review_session(
         session_data, jd_hash, profile_hash, wants_interview, answers_dict,
     )
+    from core.review_analysis import analysis_key, load_analysis, save_analysis
+
+    key = analysis_key(jd_text, raw_p)
+    cached = load_analysis((session_data or {}).get("analysis_cache"), key)
+    if cached is None:
+        decoded_jd = JDDecoder().decode(jd_text)
+        matcher_result = JDMatcher().match(decoded_jd, cand_profile)
+    else:
+        decoded_jd, matcher_result = cached
+    analysis_cache = save_analysis(key, decoded_jd, matcher_result)
+    predictor = JDPredictor() if wants_interview else None
+    probability_forecast = predictor.prob_calc.calculate(matcher_result, listing_age_days=listing_age_days) if predictor else None
     if wants_interview and not formatted_questions:
         formatted_questions = select_targeted_interview_questions(
             decoded_jd=decoded_jd,
@@ -1609,16 +1612,18 @@ def run_career_review(
     # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
     result = {
         "schema_version": "career-review.v1",
+        "analysis_cache": analysis_cache,
         "answer_context": answer_context(profile_hash, jd_hash, formatted_questions,
                                          evidence_followup.get("questions_snapshot", [])),
         "goal": goal,
         "execution": {
-            "executed_stages": ["jd_decode", "full_match"]
+            "executed_stages": ([] if cached is not None else ["jd_decode", "full_match"])
                 + (["resume_advice", "material_proposal", "evidence_followup"] if wants_materials else [])
                 + (["interview_questions", "answer_feedback"] if wants_interview else []),
             "skipped_stages": ([] if wants_materials else ["resume_advice", "material_proposal", "evidence_followup"])
                 + ([] if wants_interview else ["interview_questions", "answer_feedback"]),
             "resumed": bool(session_data),
+            "reused_stages": ["jd_decode", "full_match"] if cached is not None else [],
         },
         "jd_breakdown": {
             "job_title": decoded_jd.job_title,
@@ -1819,6 +1824,7 @@ def create_review_session(
     return {
         "session_id": session_id,
         "schema_version": "career-review-session.v1",
+        "analysis_cache": copy.deepcopy(review_result.get("analysis_cache", {})),
         "answer_context": review_result.get("answer_context"),
         "workflow": review_result.get("workflow", {}),
         "goal": goal,
