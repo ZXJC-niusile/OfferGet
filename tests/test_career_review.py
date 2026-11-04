@@ -1087,7 +1087,8 @@ class TestCareerReviewPipeline(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             first = json.loads(proc.stdout)
             self.assertTrue((workspace / "session.json").is_file())
-            self.assertTrue((workspace / "proposals.db").is_file())
+            self.assertFalse((workspace / "proposals.db").exists())
+            self.assertEqual(first["material_proposal"], {})
             self.assertEqual(json.loads((workspace / "review.json").read_text(encoding="utf-8")), first)
             answer_path = Path(first["workflow"]["answer_path"])
             answer = {**first["workflow"]["answer_template"], "answers": [{"question_id": 1, "answer": "我协助优化，吞吐提升 50%。"}]}
@@ -1100,6 +1101,7 @@ class TestCareerReviewPipeline(unittest.TestCase):
             resumed = json.loads(proc.stdout)
             self.assertEqual(resumed["goal"], "interview")
             self.assertTrue(resumed["execution"]["resumed"])
+            self.assertEqual(resumed["execution"]["reused_stages"], ["jd_decode", "full_match"])
             self.assertEqual(resumed["interview_questions"], first["interview_questions"])
             self.assertEqual(resumed["answers"], answer["answers"])
             self.assertEqual(answer_path.read_bytes(), original)
