@@ -22,7 +22,6 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "RunContext": ("core.run_context", "RunContext"),
     "compute_fingerprint": ("core.run_context", "compute_fingerprint"),
     "sanitize_trace_payload": ("core.run_context", "sanitize_trace_payload"),
-    "DeterministicCache": ("core.run_context", "DeterministicCache"),
 
     # core.resume_view_model
     "ResumeViewModel": ("core.resume_view_model", "ResumeViewModel"),
@@ -212,7 +211,6 @@ __all__ = [
     "RunContext",
     "compute_fingerprint",
     "sanitize_trace_payload",
-    "DeterministicCache",
     "cli_helpers",
     "services",
     "registry",
