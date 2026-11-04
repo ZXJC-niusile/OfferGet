@@ -118,6 +118,8 @@ class CareerReviewService:
         from core.material_proposal import MaterialProposal
         from core.job_flow import build_review_summary
 
+        if not result.get("material_proposal"):
+            return
         data = dict(result["material_proposal"])
         data["application_id"] = application_id
         proposal = MaterialProposal.from_dict(data)
