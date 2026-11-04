@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Resume - Wall Street Classic</title>
+  <style>
+    :root {
+      --font-sans: Arial, "Helvetica Neue", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --color-primary: #294A68;
+      --color-primary-dark: #202830;
+      --color-accent: #294A68;
+      --color-text: #202830;
+      --color-muted: #4A5660;
+      --color-border: #A8B3BD;
+      --color-bg-subtle: #F8FAFC;
+      --color-todo-bg: #FEF3C7;
+      --color-todo-text: #92400E;
+      /* The six established AutoFit tokens remain unique and editable. */
+      --page-padding-y: 12.7mm;
+      --page-padding-x: 14mm;
+      --body-font-size: 13.333px;
+      --body-line-height: 1.5;
+      --item-gap: 4px;
+      --section-gap: 13px;
+    }
+    @page { size: A4 portrait; margin: var(--page-padding-y) 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-sans);
+      font-size: var(--body-font-size);
+      line-height: var(--body-line-height);
+      color: var(--color-text);
+      background: #FFFFFF;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      padding: var(--page-padding-y) var(--page-padding-x);
+      margin: 0 auto;
+      background: #FFFFFF;
+    }
+    a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+    a:hover { text-decoration: underline; }
+    code, .cli { font-family: var(--font-mono); font-size: 0.95em; overflow-wrap: anywhere; }
+    .resume-header { display: flex; align-items: flex-start; gap: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--color-primary); }
+    .resume-identity { flex: 1; min-width: 0; }
+    .header-top { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+    .header-top > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .resume-name { font-size: 28px; font-weight: 700; line-height: 1.2; color: var(--color-primary); }
+    .resume-title { font-size: 1em; font-weight: 400; color: var(--color-text); }
+    .resume-contacts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; margin-top: 5px; font-size: 0.9em; color: var(--color-muted); }
+    .resume-contacts span, .resume-contacts a { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .resume-sections section { margin-top: var(--section-gap); min-width: 0; }
+    .section-header { margin-bottom: 5px; }
+    h2 { font-size: 1.05em; font-weight: 700; line-height: 1.4; color: var(--color-primary); overflow-wrap: anywhere; }
+    .rule { display: none; }
+    .resume-section-body, .resume-entry, .entry-content { min-width: 0; }
+    .resume-entry + .resume-entry { margin-top: 9px; }
+    .entry-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 12px; margin-bottom: 3px; }
+    .entry-identity { display: flex; flex-direction: column; flex: 1 1 18em; min-width: 0; }
+    .entry-identity > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .entry-title { font-size: 1em; font-weight: 700; }
+    .entry-role { font-size: 0.96em; color: var(--color-text); }
+    .entry-date { min-width: 0; max-width: 100%; margin-left: auto; font-size: 0.9em; color: var(--color-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .edu-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px 10px; margin-top: 4px; font-size: 0.92em; color: var(--color-muted); }
+    .edu-grid[data-columns="2"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .edu-grid[data-columns="3"] { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); }
+    .edu-grid > div { min-width: 0; overflow-wrap: anywhere; }
+    ul { list-style: disc; padding-left: 17px; }
+    li { padding-left: 1px; margin-bottom: var(--item-gap); text-align: start; overflow-wrap: anywhere; }
+    li::marker { color: var(--color-text); font-size: 0.85em; }
+    .skills-list { list-style: none; padding-left: 0; }
+    .skill-row { padding-left: 0; }
+    .skill-label { font-weight: 700; }
+    .skill-value, .skill-label { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .publication-title { font-weight: 700; }
+    .exam-target-bar { flex-wrap: wrap; gap: 3px 10px; }
+    .exam-target-bar > span { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .exam-score-table { table-layout: fixed; }
+    .exam-score-table th, .exam-score-table td { overflow-wrap: anywhere; }
+    b, strong { font-weight: 700; color: var(--color-text); }
+    .todo { background: var(--color-todo-bg); color: var(--color-todo-text); padding: 0 3px; border: 1px dashed var(--color-todo-text); }
+    /* Wall Street-inspired single column with compact serif typography. */
+    :root {
+      --font-sans: "Times New Roman", "Noto Serif CJK SC", "Songti SC", SimSun, serif;
+      --color-primary: #111111; --color-primary-dark: #111111;
+      --color-text: #111111; --color-accent: #111111;
+      --color-border: #111111; --color-muted: #333333;
+      --page-padding-x: 12.7mm; --page-padding-y: 12.7mm;
+      --body-line-height: 1.4; --section-gap: 11px; --item-gap: 3px;
+    }
+    .resume-header { border-bottom: 1px solid #111111; padding-bottom: 7px; }
+    .resume-identity { text-align: center; }
+    .header-top { align-items: center; gap: 2px; }
+    .resume-name { font-size: 28px; }
+    .resume-title { font-size: 0.95em; }
+    .resume-contacts { justify-content: center; font-size: 0.9em; margin-top: 3px; }
+    .section-header { border-bottom: 1px solid #111111; padding-bottom: 2px; margin-bottom: 4px; }
+    h2 { font-size: 1.05em; text-transform: uppercase; letter-spacing: 0.3px; }
+    .resume-entry + .resume-entry { margin-top: 7px; }
+    .entry-role { font-style: italic; }
+    .entry-date { font-weight: 700; color: #111111; }
+    .edu-grid { font-style: italic; }
+    /* The shared solver injects important legacy rules after the template.
+       These scoped exceptions keep dates wrapping and one owner for section gaps. */
+    .resume-sections .entry-date { white-space: normal !important; }
+    .resume-sections .section-header, .resume-sections h2 { margin-top: 0 !important; }
+    @media print {
+      .page {
+        min-height: calc(297mm - 2 * var(--page-padding-y));
+        padding-top: 0;
+        padding-bottom: 0;
+      }
+      .resume-header, .section-header, .entry-header { break-inside: avoid; break-after: avoid; }
+      .resume-sections section, .resume-entry, .resume-column { break-inside: auto; }
+      .resume-sections .entry-bullets, .resume-sections .publication-list, .resume-sections .skills-list {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+      }
+      li { break-inside: avoid; orphans: 2; widows: 2; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header></header>
+    {{SECTIONS_CONTENT}}
+  </div>
+</body>
+</html>
