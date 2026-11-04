@@ -1,7 +1,8 @@
 # HTML resume theme visual QA
 
 The shared harness compares the same explicitly synthetic input against an
-isolated exact baseline and the working tree. It supports all nine HTML themes:
+isolated exact baseline and the working tree. New themes absent from the baseline
+receive initial-layout checks only, recorded as `initial-layout-only` in the report. It supports all twelve HTML themes:
 `executive-mckinsey`, `awesome-cv`, `wall-street-classic`,
 `modern-navy`, `modern-corporate`, `modern-career`, `classic-tech`, `silicon-clean`, `asu-dense`,
 `sidebar-clean`, `academic-postgraduate`, and `engineering-sb2nov`.
