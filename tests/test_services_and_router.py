@@ -657,10 +657,10 @@ class TestServices(unittest.TestCase):
 
             self.assertEqual(result["schema_version"], "career-review.v1")
             self.assertIn("run_context", result)
-            self.assertIn("telemetry", result)
+            self.assertNotIn("telemetry", result)
             self.assertIn("execution_timestamp", result)
 
-            telemetry = result["telemetry"]
+            telemetry = result["run_context"]
             self.assertIn("run_id", telemetry)
             self.assertIn("fingerprint", telemetry)
             self.assertIn("traces", telemetry)

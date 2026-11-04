@@ -1,12 +1,11 @@
 """
-Unit tests for OfferGet Run Context, Trace Desensitization, and Deterministic Cache (tests/test_run_context.py)
+Unit tests for OfferGet Run Context and Trace Desensitization (tests/test_run_context.py)
 """
 
 import unittest
 from dataclasses import dataclass
 
 from core.run_context import (
-    DeterministicCache,
     RunContext,
     StageTrace,
     compute_fingerprint,
@@ -128,37 +127,6 @@ class TestRunContext(unittest.TestCase):
         self.assertNotIn("recruiter@deepseek.com", cleaned)
         self.assertIn("138****5678", cleaned)
         self.assertIn("r***r@deepseek.com", cleaned)
-
-    def test_deterministic_cache_operations(self):
-        cache = DeterministicCache()
-        self.assertEqual(cache.size(), 0)
-
-        stage = "matcher"
-        fp = "abcdef1234567890"
-        data = {"score": 88, "verdict": "STRONG_FIT"}
-
-        # Miss
-        self.assertFalse(cache.has(stage, fp))
-        self.assertIsNone(cache.get(stage, fp))
-
-        # Set & Hit
-        cache.set(stage, fp, data)
-        self.assertTrue(cache.has(stage, fp))
-        self.assertEqual(cache.size(), 1)
-        self.assertEqual(cache.get(stage, fp), data)
-        self.assertTrue((stage, fp) in cache)
-
-        # Delete
-        self.assertTrue(cache.delete(stage, fp))
-        self.assertFalse(cache.has(stage, fp))
-        self.assertEqual(cache.size(), 0)
-
-        # Clear
-        cache.set(stage, "fp1", 1)
-        cache.set(stage, "fp2", 2)
-        self.assertEqual(cache.size(), 2)
-        cache.clear()
-        self.assertEqual(cache.size(), 0)
 
 
 class TestArtifactsAndPaths(unittest.TestCase):

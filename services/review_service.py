@@ -101,7 +101,6 @@ class CareerReviewService:
             self.persist_proposal(result, proposal_db, application_id)
 
         # Attach telemetry, execution timestamp, and run context to result
-        result["telemetry"] = run_ctx.to_dict()
         result["execution_timestamp"] = datetime.now().isoformat()
         result["run_context"] = run_ctx.to_dict()
         result["task_plan"] = {"goal": goal, "stages": route_decision.executable_stages,

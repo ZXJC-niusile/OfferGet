@@ -88,7 +88,7 @@ def test_supported_single_jd_inputs_remain_unmodified(kind, tmp_path):
         assert pipeline.call_args.kwargs["jd_text"] == JD
         assert pipeline.call_args.kwargs["profile_dict"] == PROFILE
         assert result["schema_version"] == "synthetic"
-        assert result["telemetry"]["traces"][0]["stage_name"] == "career_review"
+        assert result["run_context"]["traces"][0]["stage_name"] == "career_review"
 
 
 def test_real_single_jd_review_still_succeeds():
