@@ -144,29 +144,9 @@ class CareerReviewService:
         from services.resume_service import ResumeService
         from core.job_flow import build_review_summary
 
-        service = ResumeService()
-        if theme == "all":
-            files = {name: {kind: str(path) for kind, path in paths.items()}
-                     for name, paths in service.build_all(profile, output_dir=output_dir).items()}
-            generated = {"files": files, **files.get("modern-navy", {})}
-        else:
-            generated = {kind: str(path) for kind, path in
-                         service.build_resume(profile, theme=theme, output_dir=output_dir).items()}
-        # Older review exports also expose a human-readable filename. Refresh an
-        # existing same-candidate copy so it cannot silently retain stale content.
-        import re
-        from core.atomic_writer import safe_save_file
-        candidate = profile.get("candidate", {}) if isinstance(profile, dict) else {}
-        name = candidate.get("name") or profile.get("name") or "候选人"
-        name = re.sub(r'[\\/:*?"<>|]', "_", str(name).strip()) or "个人"
-        for kind in ("pdf", "html"):
-            named = Path(output_dir) / f"{name}_个人简历.{kind}"
-            if generated.get(kind) and named.is_file():
-                saved = safe_save_file(named, Path(generated[kind]).read_bytes())
-                if not saved.success:
-                    raise OSError(saved.error_message)
-                generated[f"named_{kind}"] = str(saved.final_path)
-        result["generated_resumes"] = {**generated, "theme": theme, "output_dir": str(output_dir)}
+        result["generated_resumes"] = ResumeService().export_review_resume(
+            profile, theme, output_dir, existing_names_only=True,
+        )
         result["summary"] = build_review_summary(result)
 
     @staticmethod

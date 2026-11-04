@@ -93,6 +93,13 @@ class ResumeService:
             include_docx=include_docx,
         )
 
+    def export_review_resume(self, profile, theme, output_dir, *, photo=True, existing_names_only=False):
+        from core.resume_builder import ResumeBuilder
+
+        return ResumeBuilder(profile).export_review_resume(
+            theme, output_dir, photo=photo, existing_names_only=existing_names_only,
+        )
+
     def audit_resume(self, html_path: Union[str, Path]) -> Dict[str, Any]:
         """Audits generated resume HTML quality, layout health, and security."""
         from core.resume_builder import audit_resume_quality
