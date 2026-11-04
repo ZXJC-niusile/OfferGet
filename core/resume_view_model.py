@@ -528,11 +528,15 @@ class HtmlThemeRenderer:
       </div>
             """
 
+        name_html = vm.name
+        if theme_name == "awesome-cv":
+            first, separator, last = vm.name.rpartition(" ")
+            name_html = f"{first}{separator}<strong>{last}</strong>"
         return f"""
     <header class="resume-header"{self._style(header_style, theme_name)}>
       <div class="resume-identity"{self._style(f"flex:1; padding-right:{12 if photo_html else 0}px;", theme_name)}>
         <div class="header-top"{self._style("display:flex; align-items:baseline; justify-content:space-between; border-bottom:none; margin-bottom:0; padding-bottom:0;", theme_name)}>
-          <h1 class="resume-name" data-field="identity.name"{self._style(name_style, theme_name)}>{vm.name}</h1>
+          <h1 class="resume-name" data-field="identity.name"{self._style(name_style, theme_name)}>{name_html}</h1>
           {title_html}
         </div>
         <div class="contacts resume-contacts"{self._style("display:flex; gap:8px; font-size:11.2px; color:var(--color-muted, #64748B); margin-top:3px;", theme_name)}>
@@ -545,7 +549,7 @@ class HtmlThemeRenderer:
 
     # Stylesheet-owned themes opt in after their templates have migrated. The
     # existing inline defaults stay intact for every other theme.
-    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "silicon-clean", "modern-career", "executive-mckinsey"})
+    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "silicon-clean", "modern-career", "executive-mckinsey", "awesome-cv"})
 
     @classmethod
     def _style(cls, css: str, theme_name: str = "") -> str:
