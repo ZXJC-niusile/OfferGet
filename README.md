@@ -1,11 +1,12 @@
 # OfferGet
 
-本地运行的求职工具：分析岗位要求、检查简历、生成 PDF、准备面试，也支持保研材料和 Offer 分析。
-核心流程无需上传个人材料。
+**English** | [简体中文](README.zh-CN.md)
 
-## 安装
+A local toolkit for organizing career materials, building resumes, tailoring them to a job description, and practicing interviews. The core CLI uses local rules and does not require uploading your materials or calling a paid model API.
 
-需要 Python 3.9 或以上版本。生成 PDF 还需要 Chrome、Edge 或 Chromium。
+## Install
+
+Requires Python 3.9+. PDF rendering also needs Chrome, Edge, or Chromium.
 
 ```bash
 git clone https://github.com/ZXJC-niusile/OfferGet.git
@@ -14,141 +15,158 @@ pip install -e ".[render]"
 python cli.py doctor
 ```
 
-导出 Word 需安装 `.[docs]`；使用 LaTeX、Typst 主题需安装相应编译器。
+For Word export, also install `.[docs]`. Native LaTeX and Typst output requires the corresponding compiler. Run commands from the repository root and quote paths containing spaces.
 
-## 生成简历
+## Choose a workflow
 
-支持 Markdown、文本和 JSON 输入，可参考 [简历示例](examples/sample_resume.md)。
+| Workflow | Start with | Result |
+| --- | --- | --- |
+| [A. Organize materials](#a-organize-materials) | Notes, an old resume, project records, or publication details | A reviewed, reusable profile |
+| [B. Build from existing materials](#b-build-from-existing-materials) | A prepared Markdown, text, or JSON resume | Rendered resume files |
+| [C. Complete workflow](#c-complete-workflow) | Your materials and a target job description | Reviewed changes, an exported resume, and interview practice |
+
+Use the route you need. Formatting an existing resume does not require a job description or an interview session. Commands below use synthetic examples; replace their paths with your own files.
+
+## A. Organize materials
+
+1. Collect education, work and project history, personal responsibilities, results, skills, and publications in a Markdown draft. Keep each experience together with its outcomes and supporting links. For research, explain the problem, method, your contribution, and reported results; retain author order and publication status.
+2. Add evidence where available: project repositories, merged PRs, papers, reports, or measurement records. Resolve conflicting dates and metrics before using them. The CLI parses supplied files; it does **not** automatically research GitHub or fill missing facts. Research and substantive rewriting require a separate review of the sources.
+3. Parse the draft into a separate JSON profile:
 
 ```bash
-# 默认使用 modern-navy，输出到桌面“个人简历”文件夹
-python cli.py resume build examples/sample_resume.md
+python cli.py profile parse examples/sample_resume.md --output output/profile.json
+```
 
-# 指定主题和页数；无法在可读范围内压到一页时会报错
-python cli.py resume build examples/sample_resume.md --theme classic-tech --pages 1
+Inspect the recognized sections, warnings, and unclassified source lines. Correct the JSON against your materials, then record your review:
 
-# 指定输出目录
+```bash
+python cli.py profile parse output/profile.json --confirm-parsed --output output/reviewed-profile.json
+```
+
+`--confirm-parsed` records your review of the parsing; it is not independent fact verification. Keep private evidence and unresolved notes in your master materials, and use a separate profile containing only approved public content for export. See the [profile example](examples/candidate_profile_minimal.json).
+
+**Next:** use the reviewed profile in Workflow B or C. No rendering is required just to organize your materials.
+
+## B. Build from existing materials
+
+Use a prepared `.md`, `.txt`, or `.json` file. For imported text, check that parsing preserves your facts before sharing the result.
+
+```bash
+# One resume, using the default modern-navy theme
 python cli.py resume build examples/sample_resume.md --output-dir output/resume
+
+# A reviewed JSON profile with a different theme
+python cli.py resume build output/reviewed-profile.json --theme classic-tech --output-dir output/resume
 ```
 
-## 按岗位调整简历
+Open the returned files and check text, links, page breaks, clipping, and photo placement. Without `--output-dir`, output goes to the desktop folder named `个人简历`.
 
-先准备 JD 文件和个人履历，再开始分析：
+Useful options:
+
+| Option | Purpose |
+| --- | --- |
+| `--pages auto` | Default page handling |
+| `--pages 1` or `--pages 2` | Explicit PDF page budget; fails if the final PDF exceeds it |
+| `--photo-path "photo.jpg"` | Include a local photo |
+| `--no-photo` | Exclude photos and reserved photo slots |
+| `--theme ats-docx` | Export Word; use the default `--pages auto` |
+| `--theme all` | Build all 13 PDF themes for comparison; Word is separate |
+| `--anonymize strict` | Produce an anonymized export; inspect it before sharing |
+
+This route formats supplied content. It does not invent achievements or verify claims against external sources.
+
+## C. Complete workflow
+
+### 1. Prepare your source and target
+
+Use the reviewed profile from Workflow A, or an existing profile you have already checked. Save the target job description as a text file.
 
 ```bash
-python cli.py review examples/sample_ai_jd.txt --profile examples/candidate_profile_minimal.json --workspace output/job-review
+python cli.py review examples/sample_ai_jd.txt --profile output/reviewed-profile.json --goal review --workspace output/job-review
 ```
 
-程序会显示关键问题、修改前后和下一步命令。需要补充经历时，填写本轮提示的回答文件，再执行提示中的命令。例如：
+The workspace links the source paths, session, answer templates, proposals, and output files. Use `--goal tailor` instead if you only want resume tailoring.
+
+### 2. Supply missing evidence
+
+Read the issues and proposed changes. If more information is needed, fill the answer file printed by the command and run the suggested next command. On the first round, it may look like this:
 
 ```bash
-# 请将路径替换为本轮显示的回答文件，后续轮次的文件名可能不同
 python cli.py review --workspace output/job-review --answers output/job-review/answers.json
 ```
 
-回答文件中的版本标识需要保留。修改履历或 JD 后，先不带 `--answers` 运行一次以刷新分析，再填写新模板；旧会话也按此方式刷新。
-材料未变时，续填回答会复用已有岗位解码和匹配结果。
+Keep the template's version identifier. Later rounds may use different filenames, so use the **actual path printed for that round**. If the source profile or JD changes, first refresh without submitting old answers:
 
-核对修改后，执行提示中的 `proposal accept` 命令。确认后的履历会接入后续面试，旧回答文件保留。更新材料时，已有简历默认在原输出目录覆盖；新的内容修改仍需确认。
+```bash
+python cli.py review --workspace output/job-review
+```
 
-目前自动调整包括内容排序和去除句首套语。新增经历来自用户补充，应用前需要确认。
-`--verbose` 查看详情，`--json` 输出 JSON。
+Unchanged JD decoding and matching are reused when continuing a session.
 
-## 准备面试
+### 3. Review, approve, and export
+
+Inspect the before/after edits, then run the exact `proposal accept` command printed by OfferGet when you approve them. It includes the proposal ID, source/JD paths, database, workspace, and export options. If there are no pending edits, follow the printed export command instead.
+
+Content changes require approval. Current automatic edits include relevance ordering and removing introductory filler; new facts must come from your supplied evidence. The accepted profile becomes the input for subsequent interview work. Source updates refresh existing resume outputs in the configured directory; keep a separate copy if you need historical rendered versions.
+
+### 4. Practice from the current resume
+
+Continue the same workspace in interview mode:
+
+```bash
+python cli.py review --workspace output/job-review --goal interview
+```
+
+For interview practice without tailoring or a JD:
 
 ```bash
 python cli.py review --profile examples/candidate_profile_minimal.json --goal interview --workspace output/interview
 ```
 
-根据当前简历中的项目和工作经历生成三类问题：个人贡献、方案选择、结果依据。有多段经历时优先覆盖不同项目，避免重复引用同一句话；方案与验证问题会按经历内容调整。可额外提供 JD；填写回答后，按提示继续，获取反馈和追问。
-`--goal review` 可同时进行简历调整和面试复盘，面试题同样依据当前简历生成。
+Questions cover your contribution, design choices, and evidence for results, grounded in the current resume. Fill the printed answer template and follow the next command for feedback and follow-up questions. Interview-only runs do not create material proposals or export resumes.
 
-## 出错后如何继续
+Use `--verbose` for details and `--json` for structured output. Match scores describe coverage of job requirements, not interview or hiring probabilities.
 
-- 文件无法读取：检查提示中的路径、权限或占用程序，处理后重试。读取失败会停止分析。
-- 回答 JSON 损坏：修复文件，或先改名备份，再运行工作区命令生成模板。
-- 指定的会话丢失：恢复会话文件或修正 `--session` / `--workspace` 路径，再重试。
-- 确认材料后生成或保存失败：修复报错原因后重试原命令。程序会校验材料并继续处理，不重复登记相同版本，也不清空已接续的回答。
+## Templates — still being refined
 
-## 岗位分析与简历检查
+**Templates are under active refinement.** Typography, spacing, pagination, and consistency across themes are still being optimized. Inspect the rendered files before using them for an application.
 
-```bash
-# 提取岗位要求
-python cli.py jd decode examples/sample_ai_jd.txt
+There are 14 themes, selected with `--theme`:
 
-# 检查岗位匹配和技能缺口
-python cli.py jd match examples/sample_ai_jd.txt --profile examples/sample_resume.md
-
-# 检查简历结构、表达和指标
-python cli.py ats audit examples/sample_resume.md --jd examples/sample_ai_jd.txt
-
-# 导出脱敏版本
-python cli.py resume build examples/sample_resume.md --anonymize strict
-```
-
-匹配分表示材料对岗位要求的覆盖程度，不预测面试或录用概率。
-脱敏不能保证识别所有个人信息，分享前请检查文件内容和元数据。
-
-## 主题
-
-共 14 款，使用 `--theme` 选择。
-
-| 主题 | 格式 | 风格 |
-| --- | --- | --- |
-| `modern-navy`（默认） | HTML/PDF | 海军蓝 |
-| `classic-tech` | HTML/PDF | 经典黑白 |
-| `asu-dense` | HTML/PDF | 紧凑双列 |
-| `modern-corporate` | HTML/PDF | 商务风格 |
-| `modern-career` | HTML/PDF | 通用职业简历 |
-| `academic-postgraduate` | HTML/PDF | 中文学术简历 |
-| `engineering-sb2nov` | HTML/PDF | 单列工程简历 |
-| `academic-latex` | LaTeX/PDF | 原生 LaTeX |
-| `academic-typst` | Typst/PDF | 原生 Typst |
-| `ats-plain` | 文本/HTML/PDF | 简单文本布局 |
-| `executive-mckinsey` | 咨询高管风，衬线字体与罗马数字章节 | HTML/PDF |
-| `awesome-cv` | AwesomeCV 风，红色章节标记与轻重姓名 | HTML/PDF |
-| `wall-street-classic` | 华尔街经典风，黑白衬线与紧凑单栏 | HTML/PDF |
-| `ats-docx` | Word | DOCX 文档 |
-
-`--theme all` 批量生成 13 个 PDF 主题，各主题的差异和排版报告分别保存，Word 需单独导出。
-
-## 其他功能
-
-使用 `--help` 查看参数和示例：
-
-| 功能 | 命令入口 |
+| Theme | Format / style |
 | --- | --- |
-| 解析履历 | `python cli.py profile parse --help` |
-| 核对事实 | `python cli.py fact verify --help` |
-| 对比修改 | `python cli.py diff audit --help` |
-| 模拟追问 | `python cli.py defense simulate --help` |
-| 保研材料检查 | `python cli.py baoyan --help` |
-| Offer 分析 | `python cli.py offer --help` |
-| 投递记录 | `python cli.py application --help` |
+| `modern-navy` (default) | HTML/PDF, navy |
+| `classic-tech` | HTML/PDF, black and white |
+| `asu-dense` | HTML/PDF, compact two-column |
+| `modern-corporate` | HTML/PDF, corporate |
+| `modern-career` | HTML/PDF, general career |
+| `academic-postgraduate` | HTML/PDF, Chinese academic |
+| `engineering-sb2nov` | HTML/PDF, single-column engineering |
+| `academic-latex` | LaTeX/PDF |
+| `academic-typst` | Typst/PDF |
+| `ats-plain` | Text/HTML/PDF |
+| `executive-mckinsey` | HTML/PDF, consulting style |
+| `awesome-cv` | HTML/PDF, red accents |
+| `wall-street-classic` | HTML/PDF, compact serif |
+| `ats-docx` | Word/DOCX |
 
-## 开发与测试
+Batch exports save separate difference and layout reports for each theme. See [template QA](docs/RESUME_THEME_QA.md) and [photo options](docs/RESUME_PHOTO_MODES.md).
+
+## Resume after an error
+
+Fix unreadable paths, permissions, or file locks, then retry. If answer JSON is invalid, repair it or rename it as a backup before regenerating a template. Restore a missing session or correct its path. After an interrupted approval/export, retry the original command: recovery checks preserve the accepted version and already-connected answers.
+
+## More commands and development
+
+Use `python cli.py --help` or a command's `--help` for JD analysis (`jd`), resume checks (`ats`), fact/difference checks (`fact`, `diff`), academic applications (`baoyan`), offers (`offer`), and application tracking (`application`).
 
 ```bash
 pip install -e ".[all]"
-
-# 日常检查
 python -m pytest tests -m "not browser and not package"
-
-# 完整测试，包含真实浏览器和隔离安装
+# Full suite, including real browser and isolated package checks
 python -m pytest tests
 ```
 
-日常 CI 运行 Linux/Python 3.9、Linux/Python 3.13 和 Windows/Python 3.13 三组快速检查，浏览器及隔离安装单独运行。发布前可手动运行 CI 并开启 `full-matrix`，检查两个平台的 Python 3.9–3.13。具体通过情况以对应版本的运行结果为准。
+Daily CI uses Linux/Python 3.9, Linux/Python 3.13, and Windows/Python 3.13, with separate browser/package jobs. Run CI manually with `full-matrix` enabled for both platforms across Python 3.9–3.13. Check the actual run results for validation status.
 
-视觉检查方法见 [主题 QA](docs/RESUME_THEME_QA.md)。排版结果仍需打开成品核对。
-
-## 资料
-
-- [示例文件](examples/)
-- [项目结构](docs/ARCHITECTURE.md)
-- [照片设置](docs/RESUME_PHOTO_MODES.md)
-- [智能体使用说明](SKILL.md)
-
-## 许可证
-
-[CC BY-NC-SA 4.0](LICENSE)。
+[Examples](examples/) · [Architecture](docs/ARCHITECTURE.md) · [Agent instructions](SKILL.md) · [License: CC BY-NC-SA 4.0](LICENSE)
