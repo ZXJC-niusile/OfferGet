@@ -176,7 +176,7 @@ def cmd_career_review(args):
         review_service.refresh_resume(review_result, profile_data, resume_theme, resume_dir)
 
     proposal_db = getattr(args, "proposal_db", None)
-    if proposal_db:
+    if proposal_db and review_result.get("material_proposal"):
         if workspace:
             workspace.mkdir(parents=True, exist_ok=True)
         try:

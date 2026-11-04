@@ -586,15 +586,19 @@ class TestCareerReviewPipeline(unittest.TestCase):
         self.assertEqual(tailored["question_generation"]["dimensions"], [])
         self.assertEqual(create_review_session(self.jd_text, self.profile_data, tailored)["status"], "awaiting_evidence")
         with patch("core.job_flow.generate_tailored_profile_from_review") as material, \
-                patch("core.jd_analyst.predictor.InterviewTop20Predictor.predict") as legacy_questions:
+                patch("core.jd_analyst.predictor.InterviewTop20Predictor.predict") as legacy_questions, \
+                patch("core.job_flow.create_material_proposal") as proposal, \
+                patch("core.job_flow.EvidenceGraph.from_profile_context") as graph:
             interview = run_career_review(self.jd_text, self.profile_data, goal="interview")
             material.assert_not_called()
             legacy_questions.assert_not_called()
+            proposal.assert_not_called()
+            graph.assert_not_called()
         session = create_review_session(self.jd_text, self.profile_data, interview)
         self.assertEqual(session["questions_snapshot"][0]["evidence_refs"], interview["interview_questions"][0]["evidence_refs"])
         resumed = run_career_review(self.jd_text, self.profile_data, goal="interview", session_data=session)
         self.assertEqual(resumed["interview_questions"], interview["interview_questions"])
-        self.assertEqual(resumed["material_proposal"]["patches"], [])
+        self.assertEqual(resumed["material_proposal"], {})
         for question in interview["interview_questions"]:
             self.assertTrue(question["evidence_refs"])
             self.assertIn(question["evidence_refs"][0]["excerpt"][:45], question["question_zh"])

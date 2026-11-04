@@ -1258,7 +1258,7 @@ def build_review_summary(result: Dict[str, Any]) -> Dict[str, Any]:
             continue
         if gap.get("state", "").lower() != "matched":
             issues.append(f"{gap['requirement_name']}：{gap.get('gap_explanation', '')}")
-    patches = result["material_proposal"]["patches"]
+    patches = result.get("material_proposal", {}).get("patches", [])
     pending = result.get("evidence_followup", {}).get("questions", [])
     unanswered = [q for q in result["interview_questions"] if q["question_id"] not in {
         f["question_id"] for f in result["answer_feedback"] if f.get("status") == "evaluated"}]
@@ -1562,7 +1562,7 @@ def run_career_review(
     fact_guard = FactVerificationGuard(profile_ctx)
     resume_advices = generate_resume_advice(decoded_jd, matcher_result, claims, fact_guard=fact_guard) if wants_materials else []
 
-    evidence_graph = EvidenceGraph.from_profile_context(profile_ctx)
+    evidence_graph = EvidenceGraph.from_profile_context(profile_ctx) if wants_materials else None
     referenced_claim_ids: List[str] = []
     for advice in resume_advices:
         if not advice.get("safe_bullet"):
@@ -1570,8 +1570,8 @@ def run_career_review(
         for ref in advice.get("evidence_refs", []):
             if isinstance(ref, dict) and ref.get("claim_id"):
                 referenced_claim_ids.append(str(ref["claim_id"]))
-    selected_claim_ids, blocked_claims = evidence_graph.mark_used_for_resume(referenced_claim_ids)
-    evidence_gate, evidence_blockers = evidence_graph.can_apply(selected_claim_ids)
+    selected_claim_ids, blocked_claims = evidence_graph.mark_used_for_resume(referenced_claim_ids) if evidence_graph else ([], [])
+    evidence_gate, evidence_blockers = evidence_graph.can_apply(selected_claim_ids) if evidence_graph else (True, [])
 
     feedback_items, invalid_answers, combined_answers_list, practice_queue = _review_interview_answers(
         formatted_questions, answers_dict, session_data, fact_guard, wants_interview,
@@ -1593,18 +1593,18 @@ def run_career_review(
         matcher_result=matcher_result,
         evidence_graph=evidence_graph,
         notes="career-review evidence snapshot",
-    )
-    material_proposal = create_material_proposal(
-        {"tailored_profile": tailored_profile} if wants_materials else {},
-        profile_ctx,
-        jd_text,
-        proposal_id=f"PROP-{profile_hash}-{jd_hash}",
-    )
-    # A new evidence round must not overwrite the approval of an older draft.
-    patch_revision = hashlib.sha256(json.dumps(material_proposal.patches, ensure_ascii=False,
-                                               sort_keys=True).encode("utf-8")).hexdigest()[:12]
-    material_proposal.proposal_id += f"-{patch_revision}"
-    material_proposal.proposal_hash = material_proposal.compute_hash()
+    ) if wants_materials else {}
+    material_proposal = None
+    if wants_materials:
+        material_proposal = create_material_proposal(
+            {"tailored_profile": tailored_profile}, profile_ctx, jd_text,
+            proposal_id=f"PROP-{profile_hash}-{jd_hash}",
+        )
+        # A new evidence round must not overwrite an older draft's approval.
+        patch_revision = hashlib.sha256(json.dumps(material_proposal.patches, ensure_ascii=False,
+                                                   sort_keys=True).encode("utf-8")).hexdigest()[:12]
+        material_proposal.proposal_id += f"-{patch_revision}"
+        material_proposal.proposal_hash = material_proposal.compute_hash()
 
     # Overall pipeline result dictionary strictly conforming to career-review.v1 schema
     result = {
@@ -1702,7 +1702,7 @@ def run_career_review(
             ],
         },
         "tailored_profile": tailored_profile,
-        "evidence_graph": evidence_graph.audit_snapshot(claim_ids=selected_claim_ids),
+        "evidence_graph": evidence_graph.audit_snapshot(claim_ids=selected_claim_ids) if evidence_graph else {},
         "evidence_gate": {
             "is_ready": evidence_gate,
             "selected_claim_ids": selected_claim_ids,
@@ -1710,7 +1710,7 @@ def run_career_review(
             "blockers": evidence_blockers,
         },
         "evidence_snapshot": evidence_snapshot,
-        "material_proposal": material_proposal.to_dict(),
+        "material_proposal": material_proposal.to_dict() if material_proposal else {},
         "resume_patches": [
             adv["patch"] for adv in resume_advices if adv.get("patch")
         ],
