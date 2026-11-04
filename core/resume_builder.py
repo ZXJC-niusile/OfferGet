@@ -895,6 +895,31 @@ class ResumeBuilder:
             )
         return results
 
+    def export_review_resume(self, theme, output_dir, *, photo=True, existing_names_only=False):
+        """Export a review result and maintain its human-readable copies once."""
+        import re
+        from core.atomic_writer import safe_save_file
+
+        if theme == "all":
+            files = {name: {kind: str(path) for kind, path in paths.items()}
+                     for name, paths in self.build_all(output_dir=output_dir, photo=photo).items()}
+            generated = {"files": files, **files.get("modern-navy", {})}
+        else:
+            generated = {kind: str(path) for kind, path in
+                         self.build_theme(theme, output_dir=output_dir, photo=photo).items()}
+        profile = self.profile
+        candidate = profile.get("candidate", {})
+        name = candidate.get("name") or profile.get("name") or "候选人"
+        name = re.sub(r'[\\/:*?"<>|]', "_", str(name).strip()) or "个人"
+        for kind in ("pdf", "html"):
+            named = Path(output_dir) / f"{name}_个人简历.{kind}"
+            if generated.get(kind) and (not existing_names_only or named.is_file()):
+                saved = safe_save_file(named, Path(generated[kind]).read_bytes())
+                if not saved.success:
+                    raise OSError(saved.error_message)
+                generated[f"named_{kind}"] = str(saved.final_path)
+        return {**generated, "theme": theme, "output_dir": str(output_dir)}
+
     def audit_resume_quality(self, html_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
         """Audits generated resume HTML quality, layout health, security, and completeness."""
         target_path = html_path if html_path is not None else self

@@ -1730,58 +1730,13 @@ def run_career_review(
     if build_resume:
         if material_proposal.patches:
             raise ValueError("存在待确认修改，请先保存提案并通过 proposal accept 确认，再导出简历。")
+        from core.paths import get_default_resume_output_dir
         from core.resume_builder import ResumeBuilder
 
-        if resume_output_dir is None:
-            from core.paths import get_default_resume_output_dir
-            out_dir = get_default_resume_output_dir()
-        else:
-            out_dir = Path(resume_output_dir).resolve()
-            out_dir.mkdir(parents=True, exist_ok=True)
-
-        builder = ResumeBuilder(tailored_profile)
-        if resume_theme == "all":
-            built_files = {name: {kind: str(path) for kind, path in paths.items()}
-                           for name, paths in builder.build_all(out_dir, photo=reserve_photo).items()}
-            primary_pdf = None
-            if "modern-navy" in built_files and "pdf" in built_files["modern-navy"]:
-                primary_pdf = built_files["modern-navy"]["pdf"]
-            result["generated_resumes"] = {
-                "theme": resume_theme,
-                "pdf": primary_pdf,
-                "files": built_files,
-                "output_dir": str(out_dir),
-            }
-        else:
-            built_files = {kind: str(path) for kind, path in
-                           builder.build_theme(resume_theme, out_dir, photo=reserve_photo).items()}
-            primary_pdf = built_files.get("pdf")
-            result["generated_resumes"] = {
-                **built_files,
-                "theme": resume_theme,
-                "pdf": primary_pdf,
-                "html": built_files.get("html"),
-                "output_dir": str(out_dir),
-            }
-
-        cand_name = tailored_profile.get("candidate", {}).get("name") or tailored_profile.get("name") or "候选人"
-        try:
-            import re
-            import shutil
-            clean_name = re.sub(r'[\/:*?"<>|]', '_', str(cand_name).strip()) or "个人"
-            if primary_pdf and Path(primary_pdf).exists():
-                named_pdf = out_dir / f"{clean_name}_个人简历.pdf"
-                shutil.copy2(primary_pdf, named_pdf)
-                result["generated_resumes"]["named_pdf"] = str(named_pdf)
-            primary_html = result["generated_resumes"].get("html")
-            if not primary_html and resume_theme == "all" and "modern-navy" in built_files:
-                primary_html = built_files["modern-navy"].get("html")
-            if primary_html and Path(primary_html).exists():
-                named_html = out_dir / f"{clean_name}_个人简历.html"
-                shutil.copy2(primary_html, named_html)
-                result["generated_resumes"]["named_html"] = str(named_html)
-        except Exception:
-            pass
+        out_dir = Path(resume_output_dir).resolve() if resume_output_dir else get_default_resume_output_dir()
+        result["generated_resumes"] = ResumeBuilder(tailored_profile).export_review_resume(
+            resume_theme, out_dir, photo=reserve_photo,
+        )
 
     result["summary"] = build_review_summary(result)
     return result

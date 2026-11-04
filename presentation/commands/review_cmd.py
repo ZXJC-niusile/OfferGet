@@ -170,9 +170,10 @@ def cmd_career_review(args):
         fail_cli(args, "invalid_input", str(e))
 
     review_result["execution"]["sources_changed"] = sources_changed
-    if sources_changed and resume_dir and Path(resume_dir).is_dir() and any(
+    if (sources_changed and goal != "interview" and not review_result.get("generated_resumes")
+            and resume_dir and Path(resume_dir).is_dir() and any(
         path.suffix.lower() in {".pdf", ".html", ".docx"} for path in Path(resume_dir).iterdir()
-    ):
+    )):
         review_service.refresh_resume(review_result, profile_data, resume_theme, resume_dir)
 
     proposal_db = getattr(args, "proposal_db", None)
