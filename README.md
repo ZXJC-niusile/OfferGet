@@ -47,6 +47,7 @@ python cli.py review --workspace output/job-review --answers output/job-review/a
 ```
 
 回答文件中的版本标识需要保留。修改履历或 JD 后，先不带 `--answers` 运行一次以刷新分析，再填写新模板；旧会话也按此方式刷新。
+材料未变时，续填回答会复用已有岗位解码和匹配结果。
 
 核对修改后，执行提示中的 `proposal accept` 命令。确认后的履历会接入后续面试，旧回答文件保留。更新材料时，已有简历默认在原输出目录覆盖；新的内容修改仍需确认。
 
@@ -109,7 +110,7 @@ python cli.py resume build examples/sample_resume.md --anonymize strict
 | `wall-street-classic` | 华尔街经典风，黑白衬线与紧凑单栏 | HTML/PDF |
 | `ats-docx` | Word | DOCX 文档 |
 
-`--theme all` 批量生成 13 个 PDF 主题，Word 需单独导出。
+`--theme all` 批量生成 13 个 PDF 主题，各主题的差异和排版报告分别保存，Word 需单独导出。
 
 ## 其他功能
 
@@ -137,7 +138,7 @@ python -m pytest tests -m "not browser and not package"
 python -m pytest tests
 ```
 
-CI 配置覆盖 Windows、Linux 和 Python 3.9–3.13；浏览器及隔离安装测试单独运行。具体通过情况以对应版本的运行结果为准。
+日常 CI 运行 Linux/Python 3.9、Linux/Python 3.13 和 Windows/Python 3.13 三组快速检查，浏览器及隔离安装单独运行。发布前可手动运行 CI 并开启 `full-matrix`，检查两个平台的 Python 3.9–3.13。具体通过情况以对应版本的运行结果为准。
 
 视觉检查方法见 [主题 QA](docs/RESUME_THEME_QA.md)。排版结果仍需打开成品核对。
 

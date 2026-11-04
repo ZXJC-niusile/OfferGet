@@ -3,6 +3,7 @@ name: ATS DOCX visual QA
 on:
   pull_request:
     paths:
+      - '.github/actions/setup-offerget/action.yml'
       - 'core/ats_docx_renderer.py'
       - 'core/resume_view_model.py'
       - 'core/profile_adapter.py'
@@ -21,6 +22,10 @@ on:
       - '.github/workflows/ats-docx-layout.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -30,14 +35,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-offerget
         with:
           python-version: '3.12'
       - name: Install real document renderer and fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y libreoffice-writer fonts-noto-cjk fonts-liberation
-          python -m pip install -e '.[all]'
       - name: Check DOCX source and structure
         run: python -m pytest tests/test_ats_docx_design.py tests/test_ats_checker.py tests/test_resume_builder.py -k 'docx or Docx' -v
       - name: Render synthetic DOCX resumes and verify PDF text and geometry

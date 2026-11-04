@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - '.github/actions/setup-offerget/action.yml'
       - 'themes/*.html'
       - 'core/resume_view_model.py'
       - 'core/resume_themes.py'
@@ -28,6 +29,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/actions/setup-offerget/action.yml'
       - 'themes/*.html'
       - 'core/resume_view_model.py'
       - 'core/resume_themes.py'
@@ -49,6 +51,10 @@ on:
       - 'tests/test_modern_navy_layout.py'
       - 'tests/test_resume_theme_qa.py'
       - '.github/workflows/resume-visual.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -93,25 +99,17 @@ jobs:
       matrix:
         theme: ${{ fromJSON(needs.select-themes.outputs.themes) }}
     steps:
-      - name: Set isolated browser cache directory
-        run: echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/offerget-browsers" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-offerget
         with:
           python-version: '3.12'
-          cache: pip
-      - name: Cache pinned Chromium
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
-          key: ${{ runner.os }}-offerget-playwright-1.62.0
-      - name: Install isolated visual-test dependencies
+          extras: render
+          browser: chromium
+      - name: Install CJK fonts
         run: |
-          python -m pip install -e '.[render]' 'playwright==1.62.0'
-          python -m playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
       - name: Materialize the exact comparison revision
