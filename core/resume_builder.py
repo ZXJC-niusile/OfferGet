@@ -142,6 +142,7 @@ class ResumeBuilder:
         self.photo_path = Path(photo_path).resolve() if photo_path else None
         self.deanon_map: Dict[str, str] = {}
         self._vm_cache: Dict[tuple, ResumeViewModel] = {}
+        self._fact_check_cache: Dict[str, Any] = {}
         self._strict_profile_fingerprints = set()
         self._anonymized_raw_profiles: Dict[str, Dict[str, Any]] = {}
         self._strict_photo_warning_emitted = False
@@ -318,6 +319,16 @@ class ResumeBuilder:
         vm = self._get_view_model(profile=profile, photo_path=photo_path, reserve_photo=photo)
         return self.html_renderer.render_header(vm, theme_name=theme_name)
 
+    def _verify_build_facts(self, baseline, profile):
+        """Reuse content checks within this builder; layout remains theme-specific."""
+        from core.fingerprints import content_fingerprint
+        from core.fact_guard import FactVerificationGuard
+
+        key = content_fingerprint({"baseline": baseline, "profile": profile})
+        if key not in self._fact_check_cache:
+            self._fact_check_cache[key] = FactVerificationGuard(baseline).verify_facts(profile)
+        return copy.deepcopy(self._fact_check_cache[key])
+
     def build_html_theme(
         self,
         theme_name: str,
@@ -492,9 +503,7 @@ class ResumeBuilder:
             }
             fact_guard_res = None
             try:
-                from core.fact_guard import FactVerificationGuard
-                guard = FactVerificationGuard(effective_baseline)
-                fact_guard_res = guard.verify_facts(prof)
+                fact_guard_res = self._verify_build_facts(effective_baseline, prof)
             except Exception:
                 pass
 
@@ -505,7 +514,7 @@ class ResumeBuilder:
                 candidate_name=cand_name,
                 layout_metadata=layout_meta,
             )
-            saved = ledger.save(out_dir, base_name="resume")
+            saved = ledger.save(out_dir, base_name=kwargs.get("ledger_base_name", "resume"))
             result_paths["diff_ledger_md"] = saved["markdown"]
             result_paths["diff_ledger_json"] = saved["json"]
 
@@ -804,9 +813,7 @@ class ResumeBuilder:
             )
             fact_guard_res = None
             try:
-                from core.fact_guard import FactVerificationGuard
-                guard = FactVerificationGuard(effective_baseline)
-                fact_guard_res = guard.verify_facts(self.profile)
+                fact_guard_res = self._verify_build_facts(effective_baseline, self.profile)
             except Exception:
                 pass
             from core.diff_ledger import DiffLedger
@@ -817,7 +824,7 @@ class ResumeBuilder:
                 candidate_name=cand_name,
                 layout_metadata=layout_meta,
             )
-            saved = ledger.save(out_dir, base_name="resume")
+            saved = ledger.save(out_dir, base_name=kwargs.get("ledger_base_name", "resume"))
             res["diff_ledger_md"] = saved["markdown"]
             res["diff_ledger_json"] = saved["json"]
 
@@ -883,6 +890,7 @@ class ResumeBuilder:
                 diff_ledger=diff_ledger,
                 baseline_profile=baseline_profile,
                 pages=pages,
+                ledger_base_name=f"resume_{t.replace('-', '_')}",
                 **kwargs,
             )
         return results
