@@ -121,6 +121,8 @@ def test_theme_selection_rejects_arbitrary_paths_and_requires_matching_baseline(
     (baseline / "core/resume_view_model.py").write_text("")
     with pytest.raises(ValueError, match="isolated OfferGet source tree"):
         validate_paths(baseline, tmp_path / "output", "modern-corporate")
+    assert validate_paths(baseline, tmp_path / "initial-output", "modern-corporate",
+                          allow_new_theme=True)[0] == baseline.resolve()
 
 
 def test_corporate_presentation_has_plain_entries_and_keeps_wrapping_contracts():

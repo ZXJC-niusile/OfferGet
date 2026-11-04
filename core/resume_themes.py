@@ -10,6 +10,7 @@ HTML_THEMES = (
     "engineering-sb2nov",
     "modern-corporate",
     "modern-career",
+    "executive-mckinsey",
 )
 DOCX_THEMES = ("ats-docx",)
 PDF_THEMES = HTML_THEMES + ("ats-plain", "academic-latex", "academic-typst")

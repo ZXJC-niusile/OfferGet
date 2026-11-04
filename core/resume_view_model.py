@@ -545,7 +545,7 @@ class HtmlThemeRenderer:
 
     # Stylesheet-owned themes opt in after their templates have migrated. The
     # existing inline defaults stay intact for every other theme.
-    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "silicon-clean", "modern-career"})
+    SEMANTIC_THEMES = frozenset({"modern-navy", "classic-tech", "silicon-clean", "modern-career", "executive-mckinsey"})
 
     @classmethod
     def _style(cls, css: str, theme_name: str = "") -> str:

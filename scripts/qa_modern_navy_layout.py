@@ -793,9 +793,9 @@ def render_production(root, case, output):
     return Path(returned["html"]).read_text(encoding="utf-8"), returned
 
 
-def validate_paths(baseline, output, theme=DEFAULT_THEME):
+def validate_paths(baseline, output, theme=DEFAULT_THEME, *, allow_new_theme=False):
     baseline, output = baseline.resolve(), output.resolve()
-    if not (baseline / theme_path(theme)).is_file() or not (baseline / "core/resume_view_model.py").is_file():
+    if (not allow_new_theme and not (baseline / theme_path(theme)).is_file()) or not (baseline / "core/resume_view_model.py").is_file():
         raise ValueError("--baseline-root must contain an isolated OfferGet source tree")
     if baseline == ROOT or ROOT in baseline.parents:
         raise ValueError("Baseline must be isolated outside the current source tree")
@@ -1017,10 +1017,13 @@ def final_failures(metrics, case):
 
 
 def run(baseline, output, theme=DEFAULT_THEME):
+    has_baseline = (baseline / theme_path(theme)).is_file()
+    phases = (("before", baseline), ("after", ROOT)) if has_baseline else (("after", ROOT),)
     report = {"theme": theme, "syntheticDataOnly": True, "baselineRevision": os.environ.get("BASELINE_SHA") or revision(baseline),
               "currentRevision": os.environ.get("GITHUB_SHA") or revision(ROOT),
               "requestedHeadRevision": os.environ.get("QA_HEAD_SHA"),
-              "baselineTemplateHash": digest((baseline / theme_path(theme)).read_text(encoding="utf-8")),
+              "baselineTemplateHash": digest((baseline / theme_path(theme)).read_text(encoding="utf-8")) if has_baseline else None,
+              "comparisonKind": "before-after" if has_baseline else "initial-layout-only",
               "currentTemplateHash": digest((ROOT / theme_path(theme)).read_text(encoding="utf-8")),
               "verificationKind": "real-browser-and-actual-pdf",
               "fixtures": [], "failures": []}
@@ -1045,7 +1048,7 @@ def run(baseline, output, theme=DEFAULT_THEME):
                         "fieldOrder": expected_field_order(ledger, theme),
                         "presentation": expected_presentation(case, ledger)}, ensure_ascii=False, indent=2), encoding="utf-8")
                 html, production = {}, {}
-                for phase, root in (("before", baseline), ("after", ROOT)):
+                for phase, root in phases:
                     target = output / case["name"] / phase
                     target.mkdir(parents=True)
                     if case["mode"] == "builder":
@@ -1053,8 +1056,8 @@ def run(baseline, output, theme=DEFAULT_THEME):
                             root, case, target / "production")
                     else:
                         html[phase] = render_html(root, case)
-                unchanged = unchanged_content(html["before"], html["after"], theme)
-                for phase in ("before", "after"):
+                unchanged = unchanged_content(html["before"], html["after"], theme) if has_baseline else True
+                for phase, _ in phases:
                     target = output / case["name"] / phase
                     (target / "resume.html").write_text(html[phase], encoding="utf-8")
                     page = context.new_page()
@@ -1095,9 +1098,13 @@ def run(baseline, output, theme=DEFAULT_THEME):
                     page.close()
                 report["fixtures"].append(pair)
                 report["failures"].extend(f"{case['name']}: {failure}" for failure in pair["after"]["failures"])
-                print(f"{case['name']}: before {len(pair['before']['failures'])} findings / "
-                      f"{pair['before']['pdf']['pages']} pages; after {len(pair['after']['failures'])} findings / "
-                      f"{pair['after']['pdf']['pages']} pages", flush=True)
+                if has_baseline:
+                    print(f"{case['name']}: before {len(pair['before']['failures'])} findings / "
+                          f"{pair['before']['pdf']['pages']} pages; after {len(pair['after']['failures'])} findings / "
+                          f"{pair['after']['pdf']['pages']} pages", flush=True)
+                else:
+                    print(f"{case['name']}: initial layout, {len(pair['after']['failures'])} findings / "
+                          f"{pair['after']['pdf']['pages']} pages", flush=True)
             browser.close()
     except Exception as exc:  # noqa: BLE001 - preserve diagnostics for any failed browser stage
         report["failures"].append(f"QA execution failed: {type(exc).__name__}: {exc}")
@@ -1113,7 +1120,7 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        baseline, output = validate_paths(args.baseline_root, args.output_dir, args.theme)
+        baseline, output = validate_paths(args.baseline_root, args.output_dir, args.theme, allow_new_theme=True)
     except ValueError as exc:
         parser.error(str(exc))
     report = run(baseline, output, args.theme)
