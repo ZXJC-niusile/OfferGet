@@ -263,7 +263,7 @@ class TestSecurityGateIntegration(unittest.TestCase):
         from tests.test_resume_builder import FastBrowserRenderer
         builder = ResumeBuilder(self.malicious_profile, renderer=FastBrowserRenderer())
 
-        for theme in ["modern-navy", "silicon-clean", "classic-tech"]:
+        for theme in ["modern-navy", "classic-tech"]:
             res = builder.build_html_theme(theme, self.test_dir, photo=True, autofit=False)
             html_text = res["html"].read_text(encoding="utf-8")
 

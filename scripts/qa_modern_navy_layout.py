@@ -225,9 +225,6 @@ MEASURE = r'''() => {
           fields:[...document.querySelectorAll('[data-field]')].map(el=>({
             id:el.dataset.field,text:el.textContent,
             visible:isVisible(el)})),
-          columns:[...document.querySelectorAll('[data-column]')].map(el=>({
-            name:el.dataset.column,left:el.getBoundingClientRect().left-box.left,
-            right:el.getBoundingClientRect().right-box.left})),
           headerBottom:document.querySelector('header').getBoundingClientRect().bottom-box.top,
           printPaddingMm:parseFloat(getComputedStyle(document.documentElement)
             .getPropertyValue('--page-padding-y'))};
@@ -261,8 +258,6 @@ def text_content(html):
     return " ".join("".join(parser.parts).split())
 
 
-
-
 def digest(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -290,8 +285,7 @@ def synthetic_photo():
 
 # Explicit opt-in: legacy themes continue to require exact non-photo body order.
 # A marker from an unknown theme cannot silently opt it into weaker comparisons.
-STRUCTURAL_LAYOUTS = {"modern-navy": "label-gutter", "classic-tech": "date-rail",
-                      "silicon-clean": "balanced-columns"}
+STRUCTURAL_LAYOUTS = {"modern-navy": "label-gutter", "classic-tech": "date-rail"}
 PUBLICATION_FIELDS = ("title", "authors", "venue", "conference", "year", "status",
                       "author_role", "highlight", "summary", "individual_contribution")
 SECTION_LABELS = {"education": "教育背景", "experience": "实习经历",
@@ -388,8 +382,6 @@ def field_section(path):
 
 def expected_sections(ledger, theme):
     order = ["postgraduate-exam", "education", "experience", "projects", "skills", "publications"]
-    if theme == "silicon-clean":
-        order = ["postgraduate-exam", "education", "experience", "projects", "publications", "skills"]
     return [section for section in order if any(field_section(key) == section for key in ledger)]
 
 
@@ -538,9 +530,6 @@ def audit_html(html, case):
         if field["section"] != field_section(field["id"]):
             errors.append(f"field moved to wrong section: {field['id']}")
         expected_column = None
-        if theme == "silicon-clean":
-            section = field_section(field["id"])
-            expected_column = "left" if section == "experience" else "right" if section in ("projects", "publications") else None
         if field["column"] != expected_column:
             errors.append(f"field moved to wrong column: {field['id']}")
     if theme in STRUCTURAL_LAYOUTS and doc.layout != [STRUCTURAL_LAYOUTS[theme]]:
@@ -673,7 +662,7 @@ def fixtures(theme=DEFAULT_THEME):
             result.append({"name": f"skills-long-{mode}-{photo}", "profile": skills_long,
                            "photo": photo, "mode": mode, "max_pages": 2,
                            "require_autofit": False})
-    if theme in {"academic-postgraduate", "sidebar-clean"}:
+    if theme == "academic-postgraduate":
         for long_exam in (False, True):
             academic = json.loads(json.dumps(short))
             academic["intent"] = "计算机科学硕士 / MSc Computer Science"
@@ -837,51 +826,6 @@ def ordered_field_errors(text, keys, ledger):
     return errors
 
 
-def pdf_column_streams(lines, geometry):
-    """Read actual PDF glyphs column-major, with full-width opening and ending.
-
-    X bounds come from print DOM measurements; vertical transitions come from
-    required section headings in the PDF itself, so page-break whitespace does
-    not corrupt continuation-page coordinates. No source field is discarded.
-    """
-    columns = geometry.get("columns", [])
-    if [column["name"] for column in columns] != ["left", "right"]:
-        return {}, ["expected exactly the declared left and right print columns"]
-    if columns[0]["right"] >= columns[1]["left"]:
-        return {}, ["print column bounds overlap"]
-    starts = [(line["page"], line["bbox"][1]) for line in lines
-              if squash(line["text"]) in ("实习经历", "校园与实践经历")]
-    endings = [(line["page"], line["bbox"][1]) for line in lines if squash(line["text"]) == "专业技能"]
-    if not starts or len(endings) != 1:
-        return {}, ["missing or repeated PDF column-boundary section headings"]
-    start, end = min(starts), endings[0]
-    if start >= end:
-        return {}, ["full-width ending precedes column content"]
-    streams = {"opening": [], "left": [], "right": [], "ending": []}
-    errors = []
-    for line in lines:
-        scale = line["pageWidth"] / geometry["pageWidth"]
-        position = (line["page"], line["bbox"][1])
-        for char in line["chars"]:
-            value, (x0, _y0, x1, _y1) = char["c"], char["bbox"]
-            if not value.strip():
-                continue
-            if position < start:
-                streams["opening"].append(value)
-                continue
-            if position >= end:
-                streams["ending"].append(value)
-                continue
-            center = (x0 + x1) / 2
-            hits = [column["name"] for column in columns
-                    if column["left"] * scale - 1 <= center <= column["right"] * scale + 1]
-            if len(hits) != 1:
-                errors.append(f"unassigned or ambiguous PDF glyph on page {line['page']}: {value}")
-            else:
-                streams[hits[0]].append(value)
-    return {key: "".join(values) for key, values in streams.items()}, errors
-
-
 def pdf_line_overlaps(lines):
     """Flag separate PDF text lines whose boxes collide materially."""
     overlaps = []
@@ -900,7 +844,7 @@ def pdf_line_overlaps(lines):
     return overlaps
 
 
-def inspect_pdf(path, anchors, check_text_overlap=False, *, case=None, geometry=None):
+def inspect_pdf(path, anchors, check_text_overlap=False, *, case=None):
     import fitz
 
     with fitz.open(path) as doc:
@@ -926,18 +870,7 @@ def inspect_pdf(path, anchors, check_text_overlap=False, *, case=None, geometry=
             ledger = source_ledger(case)
             result["sourceErrors"] = coverage_errors(text, ledger, expected_presentation(case, ledger), pdf=True)
             order = expected_field_order(ledger, case["theme"])
-            if case["theme"] == "silicon-clean":
-                streams, errors = pdf_column_streams(lines, geometry or {})
-                result["columnErrors"] = errors
-                for column, stream in streams.items():
-                    keys = [key for key in order if (
-                        "opening" if field_section(key) in ("identity", "postgraduate-exam", "education") else
-                        "ending" if field_section(key) == "skills" else
-                        "left" if field_section(key) == "experience" else "right") == column]
-                    result["sourceErrors"].extend(ordered_field_errors(stream, keys, ledger))
-                result["columnTextHashes"] = {key: digest(value) for key, value in streams.items()}
-            else:
-                result["sourceErrors"].extend(ordered_field_errors(text, order, ledger))
+            result["sourceErrors"].extend(ordered_field_errors(text, order, ledger))
         return result
 
 
@@ -1001,8 +934,6 @@ def final_failures(metrics, case):
         failures.append(f"PDF text lines overlap ({len(pdf['overlappingTextLines'])} pairs)")
     if pdf.get("overlaps"):
         failures.append(f"PDF text overlap ({len(pdf['overlaps'])})")
-    if pdf.get("columnErrors"):
-        failures.extend(f"PDF columns: {error}" for error in pdf["columnErrors"])
     if pdf["missingAnchors"]:
         failures.append(f"PDF lost selectable text ({len(pdf['missingAnchors'])} anchors)")
     gutter_pt = metrics["print"]["printPaddingMm"] * 72 / 25.4
@@ -1086,7 +1017,7 @@ def run(baseline, output, theme=DEFAULT_THEME):
                         page.pdf(path=str(target / "resume.pdf"), prefer_css_page_size=True, print_background=True,
                                  display_header_footer=False)
                     metrics["pdf"] = inspect_pdf(target / "resume.pdf", metrics["screen"]["anchors"],
-                                                 check_text_overlap=theme == "sidebar-clean", case=case, geometry=metrics["print"])
+                                                 case=case)
                     metrics["failures"] = final_failures(metrics, case)
                     # Store text only once in HTML and keep the JSON compact and reviewable.
                     for media in ("screen", "print"):

@@ -90,15 +90,13 @@ python cli.py resume build examples/sample_resume.md --anonymize strict
 
 ## 主题
 
-共 16 款，使用 `--theme` 选择。
+共 14 款，使用 `--theme` 选择。
 
 | 主题 | 格式 | 风格 |
 | --- | --- | --- |
 | `modern-navy`（默认） | HTML/PDF | 海军蓝 |
 | `classic-tech` | HTML/PDF | 经典黑白 |
-| `silicon-clean` | HTML/PDF | 简洁留白 |
 | `asu-dense` | HTML/PDF | 紧凑双列 |
-| `sidebar-clean` | HTML/PDF | 侧栏布局 |
 | `modern-corporate` | HTML/PDF | 商务风格 |
 | `modern-career` | HTML/PDF | 通用职业简历 |
 | `academic-postgraduate` | HTML/PDF | 中文学术简历 |
@@ -111,7 +109,7 @@ python cli.py resume build examples/sample_resume.md --anonymize strict
 | `wall-street-classic` | 华尔街经典风，黑白衬线与紧凑单栏 | HTML/PDF |
 | `ats-docx` | Word | DOCX 文档 |
 
-`--theme all` 批量生成 15 个 PDF 主题，Word 需单独导出。
+`--theme all` 批量生成 13 个 PDF 主题，Word 需单独导出。
 
 ## 其他功能
 

@@ -1,4 +1,4 @@
-"""Runtime contracts for the first three structural layouts (no browser claims)."""
+"""Runtime contracts for the retained structural layouts (no browser claims)."""
 
 import copy
 import hashlib
@@ -10,11 +10,10 @@ import pytest
 
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 
-PILOTS = ("modern-navy", "classic-tech", "silicon-clean")
+PILOTS = ("modern-navy", "classic-tech")
 LEGACY = (
     "modern-corporate",
     "asu-dense",
-    "sidebar-clean",
     "academic-postgraduate",
     "engineering-sb2nov",
 )
@@ -198,40 +197,6 @@ def test_date_rail_is_source_order_and_keeps_date_inside_its_entry():
             children[0]["attrs"]["data-field"] == entry["attrs"]["data-entry"] + ".time"
         )
         assert children[1]["attrs"]["class"] == "entry-content"
-
-
-def test_silicon_sections_have_explicit_column_and_full_width_ownership():
-    doc = Document(render("silicon-clean"))
-    sections = [node for node in doc.nodes if node["tag"] == "section"]
-    assert [node["attrs"]["id"] for node in sections] == [
-        "education",
-        "experience",
-        "projects",
-        "publications",
-        "skills",
-    ]
-    owners = {
-        node["attrs"]["id"]: node["parent"]["attrs"].get("data-column", "full")
-        for node in sections
-    }
-    assert owners == {
-        "education": "full",
-        "experience": "left",
-        "projects": "right",
-        "publications": "right",
-        "skills": "full",
-    }
-    assert len(doc.classes("resume-columns")) == 1
-
-
-@pytest.mark.parametrize("missing", ["experience", "campus_experience"])
-def test_silicon_does_not_reserve_an_empty_editorial_column(missing):
-    profile = copy.deepcopy(PROFILE)
-    profile[missing] = []
-    profile["publications"] = []
-    doc = Document(render("silicon-clean", profile))
-    assert not doc.classes("resume-columns")
-    assert len(doc.classes("resume-single-column")) == 1
 
 
 @pytest.mark.parametrize("theme", LEGACY)
