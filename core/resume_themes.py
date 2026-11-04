@@ -11,6 +11,7 @@ HTML_THEMES = (
     "modern-corporate",
     "modern-career",
     "executive-mckinsey",
+    "awesome-cv",
 )
 DOCX_THEMES = ("ats-docx",)
 PDF_THEMES = HTML_THEMES + ("ats-plain", "academic-latex", "academic-typst")
