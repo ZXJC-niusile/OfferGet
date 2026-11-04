@@ -2,6 +2,7 @@ name: ATS plain visual QA
 on:
   pull_request:
     paths:
+      - '.github/actions/setup-offerget/action.yml'
       - 'core/resume_view_model.py'
       - 'core/resume_builder.py'
       - 'core/profile_adapter.py'
@@ -19,6 +20,10 @@ on:
       - 'scripts/qa_modern_navy_layout.py'
       - 'tests/test_ats_plain_design.py'
       - '.github/workflows/ats-plain-layout.yml'
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
@@ -30,13 +35,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-offerget
         with:
           python-version: '3.12'
-      - name: Install isolated browser test dependencies
+          browser: chromium
+      - name: Install CJK fonts
         run: |
-          python -m pip install -e '.[all]' 'playwright==1.62.0'
-          python -m playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
       - name: Materialize the exact comparison revision

@@ -2,6 +2,7 @@ name: Academic LaTeX visual QA
 on:
   pull_request:
     paths:
+      - '.github/actions/setup-offerget/action.yml'
       - 'core/academic_exporter.py'
       - 'core/resume_view_model.py'
       - 'core/profile_adapter.py'
@@ -20,6 +21,10 @@ on:
       - 'tests/test_academic_latex_design.py'
       - '.github/workflows/academic-latex-layout.yml'
   workflow_dispatch:
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
@@ -28,15 +33,14 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: ./.github/actions/setup-offerget
         with:
           python-version: '3.12'
+          browser: chromium
       - name: Install native TeX, browser and fonts
         run: |
           sudo apt-get update
           sudo apt-get install -y texlive-xetex texlive-lang-chinese fonts-noto-cjk fonts-texgyre
-          python -m pip install -e '.[all]' 'playwright==1.62.0'
-          python -m playwright install --with-deps chromium
       - name: Check source escaping and compilation failure handling
         run: python -m pytest tests/test_academic_latex_design.py -v
       - name: Render native and fallback separately

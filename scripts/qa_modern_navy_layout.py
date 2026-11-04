@@ -55,7 +55,8 @@ def changed_themes(paths):
         return list(THEMES)
     selected = {theme for theme in THEMES if theme_path(theme).as_posix() in paths}
     harness_sources = {"scripts/qa_modern_navy_layout.py", "tests/test_resume_theme_qa.py",
-                       "tests/test_modern_navy_layout.py", ".github/workflows/resume-visual.yml"}
+                       "tests/test_modern_navy_layout.py", ".github/workflows/resume-visual.yml",
+                       ".github/actions/setup-offerget/action.yml"}
     if paths & harness_sources or not selected:
         selected.add(DEFAULT_THEME)
     return [theme for theme in THEMES if theme in selected]
