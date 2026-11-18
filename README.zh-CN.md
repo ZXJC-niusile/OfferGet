@@ -2,7 +2,7 @@
 
 [English (Primary)](README.md) | **简体中文**
 
-基于事实证据的本地简历制作 Skill（[`SKILL.md`](SKILL.md)）与确定性 Python CLI 工具链，用于整理个人经历、核查事实与隐私边界，并编译渲染多格式简历与学术 CV。核心 CLI 完全在本地执行，无需上传个人材料或调用付费模型 API。
+本地简历制作 Skill（[`SKILL.md`](SKILL.md)）与 Python CLI，用于整理个人资料、定制简历和导出文件。所有 CLI 命令均在本地运行，无需上传个人材料或调用付费模型 API。
 
 ## 安装
 
@@ -15,6 +15,7 @@ pip install -e ".[render]"
 python cli.py doctor
 ```
 
+- 支持的输入格式：`.md`、`.txt`、`.docx`、`.html`、`.pdf`、`.json`（解析时还支持 `.bib`）；导出格式：PDF、HTML、DOCX、TeX、Typst。
 - 导出或解析 Word（`.docx`）需安装 `.[docs]`（开发与运行完整测试可安装 `pip install -e ".[all]"`）。
 - 原生学术排版需要安装 `xelatex`（`academic-latex`）或 `typst` Python 包 / CLI（`academic-typst`）；当本机缺少原生编译器时，会自动回退至共用的学术 HTML 预览与浏览器渲染链路。
 - 请在仓库根目录运行命令，含空格的路径请加引号。
@@ -24,7 +25,7 @@ python cli.py doctor
 | 流程 | 已有材料 | 得到什么 |
 | --- | --- | --- |
 | [A. 整理资料](#a-整理资料) | 零散笔记、旧简历、BibTeX 文献或项目文档 | 核对过的可复用 JSON 底稿 |
-| [B. 现有资料编译](#b-现有资料编译) | 已整理的 `.md`、`.txt`、`.docx`、`.html`、`.pdf` 或 `.json` | 排版后的简历文件（PDF / HTML / DOCX / TeX / Typst） |
+| [B. 现有资料编译](#b-现有资料编译) | 已整理的简历或 JSON 底稿 | 排版后的简历文件 |
 | [C. 全流程定制](#c-全流程定制) | 已核对的个人底稿和目标岗位 JD（文字或截图） | 对话确认后的改写稿、事实与差异核查报告及成品简历 |
 
 按需选择即可：单纯排版不要求提供 JD；单独的核查需求（`ats audit`、`fact verify`、`diff audit`、`resume audit`）可直接按需调用。下方命令使用虚构示例，实际使用时请替换为自己的文件路径。
@@ -32,7 +33,7 @@ python cli.py doctor
 ## A. 整理资料
 
 1. 将教育、工作、项目、个人职责、量化成果、技能和论文整理成 Markdown 底稿或结构化 JSON 档案。学术 CV 请保留准确的作者顺序、本人姓名加粗信息、发表状态（`published`、`accepted`、`under_review`、`submitted`）及论文链接。
-2. 可直接把 `.md`、`.txt`、`.docx`、`.html`、`.pdf`（需安装 `pypdf`/`PyMuPDF`）或 `.bib` 解析为独立的 JSON 底稿，不改动原文件：
+2. 可直接把已有简历或 `.bib` 解析为独立的 JSON 底稿，不改动原文件：
 
 ```bash
 python cli.py profile parse examples/sample_resume.md --output output/profile.json
@@ -54,7 +55,7 @@ python cli.py profile refs --docs notes/ --query "distributed cache latency" --l
 
 ## B. 现有资料编译
 
-输入已整理的 `.md`、`.txt`、`.docx`、`.html`、`.pdf` 或 `.json` 文件。文本导入采用确定性规则解析，正式分享前请检查是否完整保留了原始事实。
+输入已整理的简历文件或核对过的 JSON 底稿。文本导入采用确定性规则解析，正式分享前请检查是否完整保留了原始事实。
 
 ```bash
 # 默认 modern-navy 主题（CLI 默认启用 --no-photo 与 --pages auto）
@@ -68,14 +69,10 @@ python cli.py resume build output/reviewed-profile.json --theme classic-tech --p
 
 | 参数 | 用途 |
 | --- | --- |
-| `--pages auto` | 默认页数处理 |
-| `--pages 1` / `--pages 2` | 显式指定 PDF 页数预算；适用时执行单页 AutoFit，超出预算则报错返回 |
-| `--no-photo` / `--photo-mode no-photo` | CLI 默认模式；不放照片，也不预留照片位 |
-| `--photo-path "photo.jpg"` | 校验并嵌入本地光栅照片（`PNG`、`JPEG`、`WebP`、`GIF`） |
-| `--photo-mode placeholder` | 仅预留 3:4 证件照占位框，供版面预览使用 |
-| `--theme ats-docx` | 导出 Word（`.docx`），需保持默认 `--pages auto` |
-| `--theme all` | 批量生成 13 款 PDF 主题供对比，Word 单独导出 |
-| `--anonymize strict` | 生成脱敏导出（自动省略差异台账侧车文件，且不生成含真实姓名的便捷副本） |
+| `--theme <name>` | 选择主题或格式（默认 `modern-navy`；`ats-docx` 导出 Word；`all` 生成 13 款 PDF 主题） |
+| `--pages <auto\|1\|2>` | 页数预算（默认 `auto`；`1` 或 `2` 限制 PDF 页数上限） |
+| `--photo-path` / `--photo-mode` | 照片处理（默认不放照片；详见 `--help` 与[照片模式说明](docs/RESUME_PHOTO_MODES.md)） |
+| `--anonymize strict` | 生成脱敏导出，并省略差异侧车文件与含真实姓名的副本 |
 
 ## C. 全流程定制
 
@@ -95,11 +92,11 @@ python cli.py diff audit output/reviewed-profile.json output/tailored.json --out
 python cli.py resume build output/tailored.json --no-photo --baseline output/reviewed-profile.json --output-dir output/resume
 ```
 
-对话确认取代了原有的数据库审批状态机，因此保留未修改的原始底稿、执行公开范围预检、通过 `fact verify`（含指标防漂移与句内比率/变化重算）与 `diff audit` 校验，以及人工检查最终渲染页面仍是必需保障。
+确认修改后保存至独立修改稿（保持原始底稿不变），再运行 `fact verify`、`diff audit` 核查，并检查最终导出页面。
 
 ## 模板仍在持续优化
 
-**模板部分仍在持续优化。** 字体、留白、分页和不同主题之间的一致性尚在持续调整，正式投递前请务必打开成品检查。
+字体、留白、分页和不同主题之间的一致性尚在持续调整，正式投递前请务必打开成品检查。
 
 目前共 14 款主题，通过 `--theme` 选择：
 
@@ -122,37 +119,14 @@ python cli.py resume build output/tailored.json --no-photo --baseline output/rev
 
 参见[主题与格式 QA](docs/RESUME_THEME_QA.md)、[学术 LaTeX QA](docs/ACADEMIC_LATEX_LAYOUT.md)、[学术 Typst QA](docs/ACADEMIC_TYPST_LAYOUT.md)、[ATS Plain QA](docs/ATS_PLAIN_DESIGN_QA.md)、[ATS DOCX QA](docs/ATS_DOCX_LAYOUT.md) 及[照片模式说明](docs/RESUME_PHOTO_MODES.md)。
 
-## 命令、QA 脚本与开发测试
+## 命令与测试
 
-可用 CLI 命令：
-- `profile`：`parse`、`refs`
-- `resume`：`build`、`render`、`autofit`、`audit`
-- `ats`：`audit`、`ledger`、`filter`
-- `fact`：`verify`
-- `diff`：`audit`
-- `anon`：`mask`、`unmask`
-- `doctor`、`selftest`
-
-运行 `python cli.py <command> --help` 查看完整参数。
+可用 CLI 命令：`profile`（`parse`、`refs`）、`resume`（`build`、`render`、`autofit`、`audit`）、`ats`（`audit`、`ledger`、`filter`）、`fact`（`verify`）、`diff`（`audit`）、`anon`（`mask`、`unmask`）、`doctor`、`selftest`。运行 `python cli.py <command> --help` 查看完整参数。
 
 ```bash
-pip install -e ".[all]"
-
-# 快速单元与契约测试套件
 python -m pytest tests -m "not browser and not package" --strict-markers
-
-# 真实浏览器渲染与隔离 wheel 安装回归套件
-python -m pytest tests -m "browser or package" --strict-markers
-
-# Skill 静态契约校验与确定性 CLI 烟测评估
-python scripts/eval_offerget_skill.py validate
-python scripts/eval_offerget_skill.py smoke
-
-# 格式专项视觉与几何验收脚本（需本机安装对应编译器/Chromium）
-python scripts/qa_academic_layout.py --format latex --output artifacts/academic-latex
-python scripts/qa_academic_layout.py --format typst --output artifacts/academic-typst
-python scripts/qa_ats_plain_layout.py --output-dir artifacts/ats-plain
-python scripts/qa_ats_docx_layout.py --output artifacts/ats-docx
 ```
+
+浏览器/打包回归测试与专项格式 QA 命令见[发布验证](docs/RELEASE_VERIFICATION.md)，Skill 评估命令见[Skill 评估](docs/SKILL_EVALUATION.md)。
 
 [示例文件](examples/) · [架构规范](docs/ARCHITECTURE.md) · [发布验证](docs/RELEASE_VERIFICATION.md) · [Skill 评估](docs/SKILL_EVALUATION.md) · [智能体说明](SKILL.md) · [许可证：CC BY-NC-SA 4.0](LICENSE)

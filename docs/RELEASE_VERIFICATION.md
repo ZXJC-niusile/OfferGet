@@ -24,9 +24,9 @@ python -m pytest tests/ -ra
 - `pytest` is the developer regression suite. Report passes, failures, skips and
   deselections separately. A constrained or filtered run is not a full pass.
 
-For a quick development run, use `python -m pytest tests -m "not browser and not package"`.
-The complementary integration selection is `-m "browser or package"`; the full
-command above includes both. CI configures fast checks on Windows/Linux with
+For a quick development run, use `python -m pytest tests -m "not browser and not package" --strict-markers`.
+The complementary integration selection is `-m "browser or package" --strict-markers`;
+the full command above includes both. CI configures fast checks on Windows/Linux with
 Python 3.9–3.13, and integration checks on both systems with Python 3.12. Record
 actual job results; configuration alone is not evidence of a remote pass.
 
@@ -54,6 +54,16 @@ Use the commands and dependency setup in the applicable workflows:
 [DOCX](../.github/workflows/ats-docx-layout.yml),
 [LaTeX](../.github/workflows/academic-latex-layout.yml) and
 [Typst](../.github/workflows/academic-typst-layout.yml).
+To run the format-specific visual and geometry QA harnesses locally (requires local compilers/Chromium):
+
+```sh
+python scripts/qa_academic_layout.py --format latex --output artifacts/academic-latex
+python scripts/qa_academic_layout.py --format typst --output artifacts/academic-typst
+python scripts/qa_ats_plain_layout.py --output-dir artifacts/ats-plain
+python scripts/qa_ats_docx_layout.py --output artifacts/ats-docx
+```
+
+For skill contract validation and deterministic CLI smoke evaluation, see [Skill Evaluation](SKILL_EVALUATION.md).
 Keep the actual PDFs, page images and measurements for the exact revision, and
 inspect layout, clipping, text and photo treatment. Check native compiler output
 separately from any browser fallback.

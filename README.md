@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md)
 
-An evidence-grounded resume-building Skill ([`SKILL.md`](SKILL.md)) and deterministic local Python CLI toolchain for organizing career materials, verifying facts and privacy boundaries, and rendering publication-grade resumes and academic CVs. All CLI operations run locally without uploading user materials or calling paid model APIs.
+A local resume-building Skill ([`SKILL.md`](SKILL.md)) and Python CLI for organizing career materials, tailoring resumes, and exporting files. All CLI commands run locally without uploading your materials or calling paid model APIs.
 
 ## Install
 
@@ -15,6 +15,7 @@ pip install -e ".[render]"
 python cli.py doctor
 ```
 
+- Supported inputs: `.md`, `.txt`, `.docx`, `.html`, `.pdf`, `.json` (plus `.bib` for parsing). Exports: PDF, HTML, DOCX, TeX, and Typst.
 - For Word (`.docx`) export and input parsing, also install `.[docs]` (or `pip install -e ".[all]"` for full development and test dependencies).
 - Native academic compilation uses `xelatex` (`academic-latex`) or the `typst` Python package / CLI (`academic-typst`), falling back to the shared academic HTML/browser renderer when native compilers are unavailable.
 - Run commands from the repository root and quote paths containing spaces.
@@ -24,7 +25,7 @@ python cli.py doctor
 | Workflow | Start with | Result |
 | --- | --- | --- |
 | [A. Organize materials](#a-organize-materials) | Notes, an old resume, BibTeX entries, or supporting docs | A reviewed, reusable JSON profile |
-| [B. Build from existing materials](#b-build-from-existing-materials) | A prepared `.md`, `.txt`, `.docx`, `.html`, `.pdf`, or `.json` file | Rendered resume files (PDF / HTML / DOCX / TeX / Typst) |
+| [B. Build from existing materials](#b-build-from-existing-materials) | A prepared resume or JSON profile | Rendered resume files |
 | [C. Complete tailoring workflow](#c-complete-tailoring-workflow) | Your reviewed profile and a target JD (text or screenshot) | Confirmed edits, verified diff & fact report, and rendered resume |
 
 Use only the route you need—formatting an existing resume does not require a job description, and standalone audit commands (`ats audit`, `fact verify`, `diff audit`, `resume audit`) can be run directly on demand. Commands below use synthetic examples; replace their paths with your own files.
@@ -32,7 +33,7 @@ Use only the route you need—formatting an existing resume does not require a j
 ## A. Organize materials
 
 1. Collect education, work and project history, personal responsibilities, quantified outcomes, skills, and publications in a Markdown draft or structured JSON profile. For academic CVs, preserve exact author order, candidate-name highlighting, publication status (`published`, `accepted`, `under_review`, `submitted`), and paper links.
-2. Parse existing `.md`, `.txt`, `.docx`, `.html`, `.pdf` (via `pypdf`/`PyMuPDF`), or `.bib` files into a separate JSON profile without modifying source files:
+2. Parse existing resume files or `.bib` entries into a separate JSON profile without modifying source files:
 
 ```bash
 python cli.py profile parse examples/sample_resume.md --output output/profile.json
@@ -54,7 +55,7 @@ python cli.py profile refs --docs notes/ --query "distributed cache latency" --l
 
 ## B. Build from existing materials
 
-Use a prepared `.md`, `.txt`, `.docx`, `.html`, `.pdf`, or `.json` file. For imported text, verify that rule-based parsing preserved your facts before sharing the result.
+Use a prepared resume file or reviewed JSON profile. For imported text, verify that rule-based parsing preserved your facts before sharing the result.
 
 ```bash
 # Default modern-navy theme (CLI defaults to --no-photo and --pages auto)
@@ -68,14 +69,10 @@ Open the returned files and inspect text, links, page breaks, clipping, and phot
 
 | Option | Purpose |
 | --- | --- |
-| `--pages auto` | Default page handling |
-| `--pages 1` or `--pages 2` | Explicit PDF page budget; runs single-page AutoFit when applicable and fails if exceeded |
-| `--no-photo` / `--photo-mode no-photo` | Default CLI behavior; excludes photos and reserved photo slots |
-| `--photo-path "photo.jpg"` | Validate and embed a local raster photo (`PNG`, `JPEG`, `WebP`, `GIF`) |
-| `--photo-mode placeholder` | Reserve a 3:4 portrait slot for layout preview only |
-| `--theme ats-docx` | Export Word (`.docx`); requires `--pages auto` |
-| `--theme all` | Build all 13 PDF themes for visual comparison; Word is exported separately |
-| `--anonymize strict` | Produce an anonymized export (omits diff-ledger sidecars and real-name filename copies) |
+| `--theme <name>` | Select theme/format (`modern-navy` by default; `ats-docx` for Word; `all` for 13 PDF themes) |
+| `--pages <auto\|1\|2>` | Page budget (`auto` by default; `1` or `2` enforces PDF page limit) |
+| `--photo-path` / `--photo-mode` | Photo handling (excluded by default; see `--help` and [photo modes](docs/RESUME_PHOTO_MODES.md)) |
+| `--anonymize strict` | Anonymize exported files and omit diff sidecars / real-name copies |
 
 ## C. Complete tailoring workflow
 
@@ -95,13 +92,13 @@ python cli.py diff audit output/reviewed-profile.json output/tailored.json --out
 python cli.py resume build output/tailored.json --no-photo --baseline output/reviewed-profile.json --output-dir output/resume
 ```
 
-Conversational confirmation replaces a stateful approval database, so keeping the unmodified master profile, running disclosure preflight, verifying metrics and arithmetic consistency via `fact verify` + `diff audit`, and visually inspecting final pages remain mandatory safeguards.
+Save approved edits to a separate file, keep the master profile untouched, and run `fact verify`, `diff audit`, and visual inspection before exporting or sharing.
 
 ## Templates — under active refinement
 
-**Templates are under active refinement.** Typography, spacing, pagination, and cross-theme consistency are continuously being tuned. Always inspect the rendered files before submitting an application.
+Typography, spacing, pagination, and cross-theme consistency are continuously being tuned. Always inspect the rendered files before submitting an application.
 
-There are 14 themes, selected with `--theme`:
+Select one of 14 themes with `--theme`:
 
 | Theme | Format / style |
 | --- | --- |
@@ -122,37 +119,14 @@ There are 14 themes, selected with `--theme`:
 
 See [theme & format QA](docs/RESUME_THEME_QA.md), [academic LaTeX QA](docs/ACADEMIC_LATEX_LAYOUT.md), [academic Typst QA](docs/ACADEMIC_TYPST_LAYOUT.md), [ATS plain QA](docs/ATS_PLAIN_DESIGN_QA.md), [ATS DOCX QA](docs/ATS_DOCX_LAYOUT.md), and [photo modes](docs/RESUME_PHOTO_MODES.md).
 
-## Commands, QA harnesses, and development
+## CLI & testing
 
-Available CLI commands:
-- `profile`: `parse`, `refs`
-- `resume`: `build`, `render`, `autofit`, `audit`
-- `ats`: `audit`, `ledger`, `filter`
-- `fact`: `verify`
-- `diff`: `audit`
-- `anon`: `mask`, `unmask`
-- `doctor`, `selftest`
-
-Run `python cli.py <command> --help` for full options.
+Available CLI commands: `profile` (`parse`, `refs`), `resume` (`build`, `render`, `autofit`, `audit`), `ats` (`audit`, `ledger`, `filter`), `fact` (`verify`), `diff` (`audit`), `anon` (`mask`, `unmask`), `doctor`, `selftest`. Run `python cli.py <command> --help` for full options.
 
 ```bash
-pip install -e ".[all]"
-
-# Fast unit & contract test suite
 python -m pytest tests -m "not browser and not package" --strict-markers
-
-# Browser rendering & isolated wheel-packaging regression suite
-python -m pytest tests -m "browser or package" --strict-markers
-
-# Skill static contract validation & deterministic CLI smoke evaluation
-python scripts/eval_offerget_skill.py validate
-python scripts/eval_offerget_skill.py smoke
-
-# Format-specific visual & geometry QA harnesses (require local compilers/Chromium)
-python scripts/qa_academic_layout.py --format latex --output artifacts/academic-latex
-python scripts/qa_academic_layout.py --format typst --output artifacts/academic-typst
-python scripts/qa_ats_plain_layout.py --output-dir artifacts/ats-plain
-python scripts/qa_ats_docx_layout.py --output artifacts/ats-docx
 ```
+
+See [Release Verification](docs/RELEASE_VERIFICATION.md) for browser/packaging tests and format QA harnesses, and [Skill Evaluation](docs/SKILL_EVALUATION.md) for skill checks.
 
 [Examples](examples/) · [Architecture](docs/ARCHITECTURE.md) · [Release Verification](docs/RELEASE_VERIFICATION.md) · [Skill Evaluation](docs/SKILL_EVALUATION.md) · [Agent Instructions](SKILL.md) · [License: CC BY-NC-SA 4.0](LICENSE)
