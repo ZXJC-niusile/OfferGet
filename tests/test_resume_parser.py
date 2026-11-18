@@ -12,9 +12,6 @@ from pathlib import Path
 from core.resume_parser import ResumeTextParser, parse_resume_to_profile
 from core.cli_helpers import load_profile
 from core.profile_adapter import build_profile_context, normalize_candidate_profile
-from services.profile_service import ProfileService
-from services.match_service import MatchService
-from services.jd_service import JDService
 
 
 SAMPLE_MD_RESUME = """# 李华
@@ -117,30 +114,12 @@ def test_load_profile_from_file():
         assert len(context.skills) > 0
 
 
-def test_profile_service_integration():
-    service = ProfileService()
-    profile = service.parse_resume_text(SAMPLE_MD_RESUME)
+def test_parse_normalize_integration():
+    profile = parse_resume_to_profile(SAMPLE_MD_RESUME)
     assert profile["candidate"]["name"] == "李华"
 
-    normalized = service.normalize(profile)
+    normalized = normalize_candidate_profile(profile)
     assert normalized["candidate"]["name"] == "李华"
-
-
-def test_markdown_resume_jd_match():
-    """Verifies that an auto-parsed markdown resume can directly feed into JD matching."""
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        md_file = Path(tmp_dir) / "resume.md"
-        md_file.write_text(SAMPLE_MD_RESUME, encoding="utf-8")
-
-        profile_data = load_profile(str(md_file))
-        sample_jd_path = Path(__file__).resolve().parent.parent / "examples" / "sample_ai_jd.txt"
-        if sample_jd_path.exists():
-            jd_text = sample_jd_path.read_text(encoding="utf-8")
-            decoded = JDService().decode_jd(jd_text)
-            match_result = MatchService().match(decoded, profile_data)
-            assert match_result is not None
-            assert "overall_match_score" in match_result
-            assert match_result["candidate_name"] == "李华"
 
 
 def test_parse_report_keeps_unknown_sections_out_of_experience_and_flags_missing_fields():
@@ -209,17 +188,106 @@ def test_parse_utf8_bom_resume():
 
 
 def test_parse_rejects_binary_resume_files():
-    """PDF/DOCX inputs must fail with a clear message instead of crashing or emitting garbage."""
+    """Unsupported binary inputs and corrupted DOCX/PDF files must fail with clear ValueErrors."""
     with tempfile.TemporaryDirectory() as tmp_dir:
+        doc_file = Path(tmp_dir) / "legacy.doc"
+        doc_file.write_bytes(b"\xd0\xcf\x11\xe0 fake")
+        with pytest.raises(ValueError, match="binary resume format"):
+            parse_resume_to_profile(doc_file)
+
         pdf_file = Path(tmp_dir) / "resume.pdf"
         pdf_file.write_bytes(b"%PDF-1.4 fake")
-        with pytest.raises(ValueError, match="binary resume format"):
+        with pytest.raises(ValueError):
             parse_resume_to_profile(pdf_file)
 
         docx_file = Path(tmp_dir) / "resume.docx"
         docx_file.write_bytes(b"PK fake")
-        with pytest.raises(ValueError, match="binary resume format"):
+        with pytest.raises(ValueError, match="DOCX"):
             ResumeTextParser.from_file(docx_file)
+
+
+def test_parse_docx_resume_with_headings():
+    """Zero-dependency DOCX parser must restore Heading styles into Markdown and parse sections."""
+    import zipfile
+
+    doc_xml = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>张敏</w:t></w:r></w:p>
+    <w:p><w:r><w:t>138-0000-1111 | zhangmin@example.com | 北京</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>教育背景</w:t></w:r></w:p>
+    <w:p><w:r><w:t>复旦大学 · 软件工程 · 硕士 | 2021.09 - 2024.06</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>专业技能</w:t></w:r></w:p>
+    <w:p><w:r><w:t>Python, Go, Kubernetes, Redis</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>工作经历</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Heading3"/></w:pPr><w:r><w:t>星河科技 · 后端工程师 (2024.07 - 至今)</w:t></w:r></w:p>
+    <w:p><w:r><w:t>- 主导网关限流重构，P99 延迟降低 35%。</w:t></w:r></w:p>
+  </w:body>
+</w:document>"""
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        docx_path = Path(tmp_dir) / "candidate.docx"
+        with zipfile.ZipFile(docx_path, "w") as zf:
+            zf.writestr("word/document.xml", doc_xml)
+
+        profile = parse_resume_to_profile(docx_path)
+        assert profile["candidate"]["name"] == "张敏"
+        assert profile["candidate"]["email"] == "zhangmin@example.com"
+        assert profile["education"][0]["school"] == "复旦大学"
+        assert "Python" in profile["skills"]
+        assert "星河科技" in profile["experience"][0]["company"]
+        assert len(profile["experience"][0]["bullets"]) == 1
+
+
+def test_parse_html_resume():
+    """HTML resume imports must strip scripts and preserve heading hierarchy."""
+    html_doc = """<!doctype html><html><head><style>body{color:red}</style><script>alert(1)</script></head>
+    <body>
+      <h1>陈雷</h1>
+      <p>chenlei@example.com | 上海</p>
+      <h2>教育背景</h2>
+      <p>浙江大学 · 计算机 · 本科 | 2018.09 - 2022.06</p>
+      <h2>专业技能</h2>
+      <ul><li>Rust, C++ &amp; Linux</li></ul>
+    </body></html>"""
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        html_path = Path(tmp_dir) / "resume.html"
+        html_path.write_text(html_doc, encoding="utf-8")
+
+        profile = parse_resume_to_profile(html_path)
+        assert profile["candidate"]["name"] == "陈雷"
+        assert profile["candidate"]["email"] == "chenlei@example.com"
+        assert profile["education"][0]["school"] == "浙江大学"
+        assert "Rust" in profile["skills"]
+
+
+def test_reference_knowledge_index_and_cli_refs(capsys):
+    """ReferenceKnowledgeIndex and `profile refs` must tag all hits reference-only."""
+    import cli
+    import sys
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        notes_dir = Path(tmp_dir) / "notes"
+        notes_dir.mkdir()
+        (notes_dir / "gateway_postmortem.md").write_text(
+            "# 网关限流重构复盘\n## 压测数据\n采用令牌桶与本地缓存后，集群 QPS 从 12000 提升到 38000，P99 降至 18ms。\n",
+            encoding="utf-8",
+        )
+        (notes_dir / "other.txt").write_text("日常周报：完成需求评审与代码走查。", encoding="utf-8")
+
+        orig_argv = sys.argv
+        try:
+            sys.argv = ["offerget", "profile", "refs", "--docs", str(notes_dir), "--query", "网关 QPS 38000", "--json"]
+            cli.main()
+        finally:
+            sys.argv = orig_argv
+
+        out = json.loads(capsys.readouterr().out)
+        assert out["visibility"] == "reference-only"
+        assert len(out["hits"]) >= 1
+        assert out["hits"][0]["visibility"] == "reference-only"
+        assert "38000" in out["hits"][0]["content"]
 
 
 def test_parse_preserves_subheading_entries():

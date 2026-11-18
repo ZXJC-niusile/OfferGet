@@ -8,7 +8,7 @@ import pytest
 
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
-from scripts.qa_modern_navy_layout import fixtures, synthetic_photo, text_content
+from scripts.qa_common import fixtures, synthetic_photo, text_content
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "themes/academic-postgraduate.html").read_text(encoding="utf-8")

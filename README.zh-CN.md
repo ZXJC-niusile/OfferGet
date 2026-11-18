@@ -1,8 +1,8 @@
 # OfferGet
 
-[English（主文档）](README.md) | **简体中文**
+[English (Primary)](README.md) | **简体中文**
 
-本地运行的求职工具，用于整理资料、生成简历、按岗位调整内容和练习面试。核心 CLI 使用本地规则，无需上传个人材料或调用付费模型 API。
+基于事实证据的本地简历制作 Skill（[`SKILL.md`](SKILL.md)）与确定性 Python CLI 工具链，用于整理个人经历、核查事实与隐私边界，并编译渲染多格式简历与学术 CV。核心 CLI 完全在本地执行，无需上传个人材料或调用付费模型 API。
 
 ## 安装
 
@@ -15,156 +15,144 @@ pip install -e ".[render]"
 python cli.py doctor
 ```
 
-导出 Word 还需安装 `.[docs]`；使用原生 LaTeX、Typst 输出需安装相应编译器。命令在仓库根目录运行，含空格的路径加引号。
+- 导出或解析 Word（`.docx`）需安装 `.[docs]`（开发与运行完整测试可安装 `pip install -e ".[all]"`）。
+- 原生学术排版需要安装 `xelatex`（`academic-latex`）或 `typst` Python 包 / CLI（`academic-typst`）；当本机缺少原生编译器时，会自动回退至共用的学术 HTML 预览与浏览器渲染链路。
+- 请在仓库根目录运行命令，含空格的路径请加引号。
 
 ## 选择流程
 
 | 流程 | 已有材料 | 得到什么 |
 | --- | --- | --- |
-| [A. 整理资料](#a-整理资料) | 零散笔记、旧简历、项目记录、论文信息 | 核对过的可复用底稿 |
-| [B. 现有资料编译](#b-现有资料编译) | 已整理的 Markdown、文本或 JSON 简历 | 排版后的简历文件 |
-| [C. 全流程](#c-全流程) | 个人资料和目标岗位 JD | 内容调整、确认导出和面试练习 |
+| [A. 整理资料](#a-整理资料) | 零散笔记、旧简历、BibTeX 文献或项目文档 | 核对过的可复用 JSON 底稿 |
+| [B. 现有资料编译](#b-现有资料编译) | 已整理的 `.md`、`.txt`、`.docx`、`.html`、`.pdf` 或 `.json` | 排版后的简历文件（PDF / HTML / DOCX / TeX / Typst） |
+| [C. 全流程定制](#c-全流程定制) | 已核对的个人底稿和目标岗位 JD（文字或截图） | 对话确认后的改写稿、事实与差异核查报告及成品简历 |
 
-按需要选择即可。单纯排版不要求提供 JD，也不必先做面试。下方命令使用虚构示例，实际使用时替换为自己的文件路径。
+按需选择即可：单纯排版不要求提供 JD；单独的核查需求（`ats audit`、`fact verify`、`diff audit`、`resume audit`）可直接按需调用。下方命令使用虚构示例，实际使用时请替换为自己的文件路径。
 
 ## A. 整理资料
 
-1. 将教育、工作、项目、个人职责、成果、技能和论文整理成 Markdown 底稿。经历与对应成果放在一起；科研项目按研究问题、方法、个人贡献、实验结果展开，保留作者顺序和发表状态。
-2. 补充可核对的仓库、已合并 PR、论文、报告或测量记录，处理日期与指标冲突。CLI 只解析输入文件，**不会自动检索 GitHub 或补全缺失事实**；资料检索和实质改写需要另行阅读来源、核对内容。
-3. 将底稿解析到独立的 JSON 文件：
+1. 将教育、工作、项目、个人职责、量化成果、技能和论文整理成 Markdown 底稿或结构化 JSON 档案。学术 CV 请保留准确的作者顺序、本人姓名加粗信息、发表状态（`published`、`accepted`、`under_review`、`submitted`）及论文链接。
+2. 可直接把 `.md`、`.txt`、`.docx`、`.html`、`.pdf`（需安装 `pypdf`/`PyMuPDF`）或 `.bib` 解析为独立的 JSON 底稿，不改动原文件：
 
 ```bash
 python cli.py profile parse examples/sample_resume.md --output output/profile.json
 ```
 
-检查识别结果、警告和未归类原文，按原始资料修正 JSON。核对后再记录确认状态：
+3. 检查识别出的章节、警告和未归类原文，对照原始材料修正后再记录核对状态：
 
 ```bash
 python cli.py profile parse output/profile.json --confirm-parsed --output output/reviewed-profile.json
 ```
 
-`--confirm-parsed` 仅记录你核对过解析结果，不代表外部事实已验证。内部证据和待确认事项保留在总档案中，导出使用仅含允许公开内容的独立底稿。结构可参考[个人资料示例](examples/candidate_profile_minimal.json)。
+4. 私有项目笔记、设计文档或故障复盘可通过 `profile refs` 在本地分块检索（结果带 `reference-only` 标记，仅用于回忆细节与核对，不直接写入公开简历）：
 
-**下一步：**将核对后的底稿用于流程 B 或 C。只整理资料时，不必生成简历。
+```bash
+python cli.py profile refs --docs notes/ --query "distributed cache latency" --limit 5 --json
+```
+
+`--confirm-parsed` 仅记录你已人工核对解析结果，不代表外部事实核验。档案条目支持可见性标记（`always`、`variant-specific`、`on-request`、`reference-only`）；公开导出要求使用仅含 `always` 条目的安全公开底稿，未决的可见性标记会被拒绝导出。结构可参考[精简资料示例](examples/candidate_profile_minimal.json)与[完整资料示例](examples/candidate_profile.json)。
 
 ## B. 现有资料编译
 
-输入已整理的 `.md`、`.txt` 或 `.json` 文件。文本导入采用规则解析，分享前先检查是否保留了原始事实。
+输入已整理的 `.md`、`.txt`、`.docx`、`.html`、`.pdf` 或 `.json` 文件。文本导入采用确定性规则解析，正式分享前请检查是否完整保留了原始事实。
 
 ```bash
-# 默认 modern-navy 主题，生成一份简历
+# 默认 modern-navy 主题（CLI 默认启用 --no-photo 与 --pages auto）
 python cli.py resume build examples/sample_resume.md --output-dir output/resume
 
-# 用核对过的 JSON 底稿选择其他主题
-python cli.py resume build output/reviewed-profile.json --theme classic-tech --output-dir output/resume
+# 使用核对过的 JSON 底稿指定主题与单页上限
+python cli.py resume build output/reviewed-profile.json --theme classic-tech --pages 1 --output-dir output/resume
 ```
 
-打开返回的文件，检查文字、链接、分页、截断和照片位置。不指定 `--output-dir` 时，输出到桌面“个人简历”文件夹。
+打开返回的文件，检查文字、链接、分页、截断和照片位置。不指定 `--output-dir` 时，默认输出到桌面“个人简历”文件夹。
 
 | 参数 | 用途 |
 | --- | --- |
 | `--pages auto` | 默认页数处理 |
-| `--pages 1` / `--pages 2` | 指定 PDF 页数上限，成品超出时会报错 |
-| `--photo-path "photo.jpg"` | 使用本地照片 |
-| `--no-photo` | 不放照片，也不预留照片位 |
-| `--theme ats-docx` | 导出 Word，保留默认 `--pages auto` |
-| `--theme all` | 批量生成 13 款 PDF 供比较，Word 单独导出 |
-| `--anonymize strict` | 生成脱敏版本，分享前仍需检查 |
+| `--pages 1` / `--pages 2` | 显式指定 PDF 页数预算；适用时执行单页 AutoFit，超出预算则报错返回 |
+| `--no-photo` / `--photo-mode no-photo` | CLI 默认模式；不放照片，也不预留照片位 |
+| `--photo-path "photo.jpg"` | 校验并嵌入本地光栅照片（`PNG`、`JPEG`、`WebP`、`GIF`） |
+| `--photo-mode placeholder` | 仅预留 3:4 证件照占位框，供版面预览使用 |
+| `--theme ats-docx` | 导出 Word（`.docx`），需保持默认 `--pages auto` |
+| `--theme all` | 批量生成 13 款 PDF 主题供对比，Word 单独导出 |
+| `--anonymize strict` | 生成脱敏导出（自动省略差异台账侧车文件，且不生成含真实姓名的便捷副本） |
 
-这条流程用于排版已有内容，不会编造成果，也不代表已对照外部来源核实经历。
+## C. 全流程定制
 
-## C. 全流程
-
-### 1. 准备底稿和岗位
-
-使用流程 A 的已核对底稿，或自己已有的可靠资料，将目标岗位 JD 保存为文本文件。
+1. **阅读底稿与岗位 JD**：读取已核对底稿与目标 JD 文字或截图（截图中被截断或看不清的要求需先向用户确认）。需要时可运行 ATS 结构与关键词覆盖检查：
 
 ```bash
-python cli.py review examples/sample_ai_jd.txt --profile output/reviewed-profile.json --goal review --workspace output/job-review
+python cli.py ats audit output/reviewed-profile.json --jd examples/sample_ai_jd.txt --json
+python cli.py ats ledger output/reviewed-profile.json --jd examples/sample_ai_jd.txt --json
 ```
 
-工作目录关联原始路径、会话、回答模板、提案和输出文件。只想调整简历时，将目标换成 `--goal tailor`。
-
-### 2. 补充事实与证据
-
-阅读问题和修改预览。需要补充信息时，填写本轮提示的回答文件，再执行提示中的下一步命令。首轮可能是：
+2. **展示修改建议并对话确认**：先向用户展示拟改写前后对照与证据缺口，经明确确认后再保存至**独立的修改稿文件**（如 `output/tailored.json`），保持原始底稿不变。
+3. **事实、差异与公开范围检查后再渲染**：
 
 ```bash
-python cli.py review --workspace output/job-review --answers output/job-review/answers.json
+python cli.py fact verify output/tailored.json --profile output/reviewed-profile.json --json
+python cli.py diff audit output/reviewed-profile.json output/tailored.json --output-dir output/diff
+python cli.py resume build output/tailored.json --no-photo --baseline output/reviewed-profile.json --output-dir output/resume
 ```
 
-保留回答模板中的版本标识。后续轮次文件名可能变化，以**本轮实际显示的路径**为准。修改底稿或 JD 后，先不提交旧回答，刷新一次：
+对话确认取代了原有的数据库审批状态机，因此保留未修改的原始底稿、执行公开范围预检、通过 `fact verify`（含指标防漂移与句内比率/变化重算）与 `diff audit` 校验，以及人工检查最终渲染页面仍是必需保障。
 
-```bash
-python cli.py review --workspace output/job-review
-```
+## 模板仍在持续优化
 
-材料未变时，续填回答会复用已有岗位解码和匹配结果。
+**模板部分仍在持续优化。** 字体、留白、分页和不同主题之间的一致性尚在持续调整，正式投递前请务必打开成品检查。
 
-### 3. 确认修改并导出
-
-核对修改前后内容，同意后执行程序显示的完整 `proposal accept` 命令，其中包含本轮提案 ID、源文件、JD、数据库、工作目录和导出参数。没有待确认修改时，按提示直接导出。
-
-内容修改需确认。目前自动调整包括相关性排序和去除句首套语，新增事实来自你提供的材料。确认后的履历会接入后续面试。源材料更新时，已有简历在配置的输出目录刷新；需要历史成品时，请另存副本。
-
-### 4. 根据当前简历练习面试
-
-在同一工作目录继续：
-
-```bash
-python cli.py review --workspace output/job-review --goal interview
-```
-
-也可以跳过岗位调整，直接以简历开始，不要求 JD：
-
-```bash
-python cli.py review --profile examples/candidate_profile_minimal.json --goal interview --workspace output/interview
-```
-
-问题围绕当前简历中的个人贡献、方案选择和结果依据。填写显示的回答模板，再按提示获取反馈与追问。独立面试不创建材料提案，也不导出简历。
-
-`--verbose` 展开详情，`--json` 输出结构化结果。匹配分表示材料对岗位要求的覆盖程度，不预测面试或录用概率。
-
-## 模板仍在优化
-
-**模板部分仍在持续优化。** 字体、留白、分页和不同主题的一致性尚在调整，正式投递前请打开成品检查。
-
-目前共 14 款，通过 `--theme` 选择：
+目前共 14 款主题，通过 `--theme` 选择：
 
 | 主题 | 格式 / 风格 |
 | --- | --- |
-| `modern-navy`（默认） | HTML/PDF，海军蓝 |
-| `classic-tech` | HTML/PDF，经典黑白 |
-| `asu-dense` | HTML/PDF，紧凑双列 |
-| `modern-corporate` | HTML/PDF，商务 |
+| `modern-navy`（默认） | HTML/PDF，海军蓝左侧分栏布局 |
+| `classic-tech` | HTML/PDF，经典黑白日期轨布局 |
+| `asu-dense` | HTML/PDF，高密度紧凑布局 |
+| `modern-corporate` | HTML/PDF，深青色商务布局 |
 | `modern-career` | HTML/PDF，通用职业简历 |
-| `academic-postgraduate` | HTML/PDF，中文学术简历 |
+| `academic-postgraduate` | HTML/PDF，中文学术 / 保研深造简历 |
 | `engineering-sb2nov` | HTML/PDF，单列工程简历 |
-| `academic-latex` | LaTeX/PDF |
-| `academic-typst` | Typst/PDF |
-| `ats-plain` | 文本/HTML/PDF |
 | `executive-mckinsey` | HTML/PDF，咨询风格 |
-| `awesome-cv` | HTML/PDF，红色章节标记 |
-| `wall-street-classic` | HTML/PDF，紧凑衬线字体 |
-| `ats-docx` | Word/DOCX |
+| `awesome-cv` | HTML/PDF，红色重点标记 |
+| `wall-street-classic` | HTML/PDF，紧凑衬线金融风格 |
+| `ats-plain` | Markdown/HTML/PDF，单列纯文本 ATS 友好布局 |
+| `academic-latex` | 原生 XeLaTeX（`.tex`）+ 独立学术 HTML + PDF |
+| `academic-typst` | 原生 Typst（`.typ`）+ PDF（带共享学术 HTML 回退） |
+| `ats-docx` | 原生 Word（`.docx`） |
 
-批量生成时，各主题的差异和排版报告分别保存。参见[主题 QA](docs/RESUME_THEME_QA.md)和[照片设置](docs/RESUME_PHOTO_MODES.md)。
+参见[主题与格式 QA](docs/RESUME_THEME_QA.md)、[学术 LaTeX QA](docs/ACADEMIC_LATEX_LAYOUT.md)、[学术 Typst QA](docs/ACADEMIC_TYPST_LAYOUT.md)、[ATS Plain QA](docs/ATS_PLAIN_DESIGN_QA.md)、[ATS DOCX QA](docs/ATS_DOCX_LAYOUT.md) 及[照片模式说明](docs/RESUME_PHOTO_MODES.md)。
 
-## 出错后继续
+## 命令、QA 脚本与开发测试
 
-路径、权限或文件占用问题处理后重试。回答 JSON 损坏时，修复文件或先改名备份，再生成新模板。会话丢失时，恢复文件或修正路径。确认或导出中断后，可重试原命令，恢复检查会保留已确认版本及接续后的回答。
+可用 CLI 命令：
+- `profile`：`parse`、`refs`
+- `resume`：`build`、`render`、`autofit`、`audit`
+- `ats`：`audit`、`ledger`、`filter`
+- `fact`：`verify`
+- `diff`：`audit`
+- `anon`：`mask`、`unmask`
+- `doctor`、`selftest`
 
-## 其他功能与开发
-
-用 `python cli.py --help` 或具体命令的 `--help` 查看岗位分析（`jd`）、简历检查（`ats`）、事实与差异检查（`fact`、`diff`）、保研材料（`baoyan`）、Offer 分析（`offer`）和投递记录（`application`）。
+运行 `python cli.py <command> --help` 查看完整参数。
 
 ```bash
 pip install -e ".[all]"
-python -m pytest tests -m "not browser and not package"
-# 完整测试，包含真实浏览器与隔离安装
-python -m pytest tests
+
+# 快速单元与契约测试套件
+python -m pytest tests -m "not browser and not package" --strict-markers
+
+# 真实浏览器渲染与隔离 wheel 安装回归套件
+python -m pytest tests -m "browser or package" --strict-markers
+
+# Skill 静态契约校验与确定性 CLI 烟测评估
+python scripts/eval_offerget_skill.py validate
+python scripts/eval_offerget_skill.py smoke
+
+# 格式专项视觉与几何验收脚本（需本机安装对应编译器/Chromium）
+python scripts/qa_academic_layout.py --format latex --output artifacts/academic-latex
+python scripts/qa_academic_layout.py --format typst --output artifacts/academic-typst
+python scripts/qa_ats_plain_layout.py --output-dir artifacts/ats-plain
+python scripts/qa_ats_docx_layout.py --output artifacts/ats-docx
 ```
 
-日常 CI 使用 Linux/Python 3.9、Linux/Python 3.13 和 Windows/Python 3.13，浏览器及安装包检查单独运行。手动开启 `full-matrix` 可检查两个平台的 Python 3.9–3.13；通过情况以实际运行结果为准。
-
-[示例文件](examples/) · [项目结构](docs/ARCHITECTURE.md) · [智能体说明](SKILL.md) · [许可证：CC BY-NC-SA 4.0](LICENSE)
+[示例文件](examples/) · [架构规范](docs/ARCHITECTURE.md) · [发布验证](docs/RELEASE_VERIFICATION.md) · [Skill 评估](docs/SKILL_EVALUATION.md) · [智能体说明](SKILL.md) · [许可证：CC BY-NC-SA 4.0](LICENSE)

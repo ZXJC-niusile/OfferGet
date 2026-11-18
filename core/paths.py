@@ -1,6 +1,6 @@
 """Standard path and resource resolution for OfferGet.
 
-Resolves repository roots, templates, themes, examples, and outputs consistently
+Resolves repository roots, themes, examples, and outputs consistently
 across local dev checkouts, editable installations, and packaged runtimes.
 """
 
@@ -17,23 +17,6 @@ _PROJECT_ROOT = _CURRENT_FILE.parent.parent
 def get_project_root() -> Path:
     """Returns the OfferGet project root directory."""
     return _PROJECT_ROOT
-
-
-def get_template_path(name: str = "offer_strategy.html") -> Path:
-    """Resolves an HTML template path from templates/ directory."""
-    root = get_project_root()
-    direct = root / "templates" / name
-    if direct.is_file():
-        return direct.resolve()
-    # Check if name is already an existing path
-    custom = Path(name)
-    if custom.is_file():
-        return custom.resolve()
-    # Try relative to root
-    rel = (root / name).resolve()
-    if rel.is_file():
-        return rel
-    return direct.resolve()
 
 
 def get_theme_dir() -> Path:
@@ -92,7 +75,6 @@ def get_default_resume_output_dir() -> Path:
 
 __all__ = [
     "get_project_root",
-    "get_template_path",
     "get_theme_dir",
     "get_theme_path",
     "get_example_path",

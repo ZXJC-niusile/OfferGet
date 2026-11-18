@@ -6,9 +6,8 @@ and typed accessors.
 
 Registries:
 1. AliasRegistry: Skill & technology canonicalization, alias management, and precise word-boundary matching.
-2. TaxonomyRegistry: Role capability trees, dimensions, keywords, and role classification.
-3. MetricPatternRegistry: Quantified patterns, non-metric technology whitelists, metric-topic mappings, and extraction.
-4. QualityRuleRegistry: Linguistic quality rules, verb hierarchy, role ranks, inflation patterns, and forbidden buzzwords.
+2. MetricPatternRegistry: Quantified patterns, non-metric technology whitelists, metric-topic mappings, and extraction.
+3. QualityRuleRegistry: Linguistic quality rules, verb hierarchy, role ranks, inflation patterns, and forbidden buzzwords.
 """
 
 from __future__ import annotations
@@ -114,126 +113,7 @@ class AliasRegistry:
 
 
 # ============================================================================
-# 2. TaxonomyRegistry
-# ============================================================================
-
-class TaxonomyRegistry:
-    """Static registry for enterprise role taxonomies, dimensions, and competencies."""
-
-    REGISTRY_ID: str = "REG_ROLE_TAXONOMY"
-    VERSION: str = "1.5.0"
-    RULE_ID_PREFIX: str = "TAXONOMY"
-
-    _ROLE_TAXONOMIES: Dict[str, Dict[str, Any]] = {
-        "ai_algorithm": {
-            "title": "AI / 大模型与算法架构",
-            "keywords": ["Transformer", "MoE", "Megatron", "vLLM", "PyTorch", "CUDA", "Triton", "RAG", "Agent"],
-            "dimensions": [("算法与模型", 0.25), ("工程与性能", 0.25), ("业务落地", 0.20), ("数据与评测", 0.15), ("研究与生态", 0.15)],
-        },
-        "backend_distributed": {
-            "title": "后端与分布式高并发架构",
-            "keywords": ["Java", "Go", "gRPC", "Kafka", "MySQL", "Redis", "微服务", "分布式事务", "DDD"],
-            "dimensions": [("系统设计", 0.30), ("存储与一致性", 0.25), ("稳定性", 0.20), ("业务建模", 0.15), ("性能与工程", 0.10)],
-        },
-        "frontend_fullstack": {
-            "title": "前端与 Web 全栈工程",
-            "keywords": ["React", "Vue", "TypeScript", "Next.js", "Web Vitals", "SSR", "Vite", "BFF"],
-            "dimensions": [("交互架构", 0.25), ("性能治理", 0.25), ("组件工程", 0.20), ("跨端协同", 0.15), ("体验指标", 0.15)],
-        },
-        "client_mobile": {
-            "title": "客户端与移动端工程",
-            "keywords": ["iOS", "Android", "Flutter", "Swift", "Kotlin", "ANR", "SQLite", "QUIC"],
-            "dimensions": [("端侧架构", 0.25), ("稳定性", 0.25), ("跨端工程", 0.20), ("弱网与存储", 0.15), ("业务交互", 0.15)],
-        },
-        "bigdata_infra": {
-            "title": "大数据开发与实时湖仓",
-            "keywords": ["Flink", "Spark", "Iceberg", "Hudi", "ClickHouse", "StarRocks", "Doris", "数据血缘"],
-            "dimensions": [("计算引擎", 0.30), ("湖仓建模", 0.25), ("查询与存储", 0.20), ("质量与成本", 0.15), ("业务决策", 0.10)],
-        },
-        "cloudnative_sre": {
-            "title": "系统底层 / 云原生 / SRE",
-            "keywords": ["Kubernetes", "K8s", "eBPF", "Prometheus", "Docker", "Slurm", "RDMA", "FinOps"],
-            "dimensions": [("平台与调度", 0.25), ("网络与硬件", 0.25), ("稳定性", 0.20), ("系统性能", 0.15), ("成本治理", 0.15)],
-        },
-        "product": {
-            "title": "产品管理与产品策略",
-            "keywords": ["产品经理", "产品", "用户研究", "需求分析", "路线图", "PRD", "A/B测试", "用户增长", "留存", "转化"],
-            "dimensions": [("问题定义", 0.25), ("用户与需求", 0.25), ("决策与交付", 0.20), ("数据与实验", 0.15), ("业务结果", 0.15)],
-        },
-        "operations": {
-            "title": "运营与业务增长",
-            "keywords": ["运营", "增长", "活动", "内容", "用户运营", "产品运营", "流程优化", "转化", "留存", "SLA"],
-            "dimensions": [("运营策略", 0.25), ("流程执行", 0.25), ("用户与供给", 0.20), ("数据指标", 0.15), ("协同交付", 0.15)],
-        },
-        "marketing_sales": {
-            "title": "市场、销售与商务拓展",
-            "keywords": ["市场", "营销", "销售", "商务", "渠道", "获客", "线索", "客户", "ROI", "CAC", "pipeline"],
-            "dimensions": [("市场洞察", 0.25), ("渠道与获客", 0.25), ("客户经营", 0.20), ("转化与收入", 0.20), ("复盘与协同", 0.10)],
-        },
-        "project_management": {
-            "title": "项目管理与交付",
-            "keywords": ["项目管理", "项目经理", "PMO", "敏捷", "Scrum", "里程碑", "风险管理", "交付", "干系人"],
-            "dimensions": [("目标与范围", 0.25), ("计划与交付", 0.25), ("风险与质量", 0.20), ("干系人协同", 0.20), ("复盘改进", 0.10)],
-        },
-        "data_analyst": {
-            "title": "数据分析与商业智能 (BI)",
-            "keywords": ["数据分析", "数据分析师", "商业智能", "BI", "Tableau", "PowerBI", "看板", "A/B测试", "漏斗分析", "归因分析", "SQL取数"],
-            "dimensions": [("指标体系", 0.25), ("取数与工程", 0.25), ("业务洞察", 0.25), ("实验与归因", 0.15), ("交付呈现", 0.10)],
-        },
-        "ai_product": {
-            "title": "AI 产品经理 / 智能体与大模型产品",
-            "keywords": ["AI产品", "AI产品经理", "大模型产品", "LLM", "Prompt", "Agent", "智能体", "模型评测", "RAG架构", "落地场景"],
-            "dimensions": [("场景定义", 0.25), ("模型边界与评测", 0.25), ("方案设计", 0.20), ("工程协同", 0.15), ("业务指标", 0.15)],
-        },
-        "qa_test_engineer": {
-            "title": "测试开发与质量保障 (QA)",
-            "keywords": ["测试开发", "质量保障", "QA", "自动化测试", "接口测试", "性能测试", "压测", "JMeter", "Selenium", "Pytest", "漏测率"],
-            "dimensions": [("测试方案", 0.30), ("自动化工程", 0.25), ("性能压测", 0.20), ("缺陷定位", 0.15), ("质量体系", 0.10)],
-        },
-        "ui_ux_design": {
-            "title": "UI/UX 设计 / 交互与体验设计",
-            "keywords": ["UI", "UX", "UI/UX", "交互设计", "视觉设计", "体验设计", "设计系统", "Figma", "Sketch", "用户研究", "原型设计"],
-            "dimensions": [("用户洞察", 0.25), ("交互与架构", 0.25), ("设计系统", 0.20), ("工程协同", 0.15), ("体验指标", 0.15)],
-        },
-        "growth_strategy": {
-            "title": "用户增长 / 策略运营与转化",
-            "keywords": ["用户增长", "增长黑客", "转化漏斗", "裂变", "用户召回", "CAC", "LTV", "A/B实验", "生命周期运营"],
-            "dimensions": [("增长模型", 0.30), ("漏斗与转化", 0.25), ("实验驱动", 0.20), ("渠道策略", 0.15), ("复盘归因", 0.10)],
-        },
-        "general": {
-            "title": "通用岗位能力",
-            "keywords": [],
-            "dimensions": [("职责匹配", 0.30), ("能力证据", 0.30), ("结果表达", 0.20), ("岗位约束", 0.20)],
-        },
-    }
-
-    @classmethod
-    def get_taxonomy(cls, role_id: str) -> Optional[Dict[str, Any]]:
-        """Returns a copy of the taxonomy definition for role_id, or None if not registered."""
-        if role_id in cls._ROLE_TAXONOMIES:
-            return copy.deepcopy(cls._ROLE_TAXONOMIES[role_id])
-        return None
-
-    @classmethod
-    def list_taxonomies(cls) -> Dict[str, Dict[str, Any]]:
-        """Returns a deep copy of all registered role taxonomies."""
-        return copy.deepcopy(cls._ROLE_TAXONOMIES)
-
-    @classmethod
-    def classify_role(cls, jd_text: str) -> Dict[str, Any]:
-        """Classifies a JD text into the best matching taxonomy category."""
-        text = jd_text or ""
-        scores = {
-            key: sum(1 for keyword in info["keywords"] if keyword.lower() in text.lower())
-            for key, info in cls._ROLE_TAXONOMIES.items()
-        }
-        best_key = max(scores, key=scores.get) if scores and max(scores.values()) else "general"
-        info = cls._ROLE_TAXONOMIES[best_key]
-        return {"role_key": best_key, "taxonomy": copy.deepcopy(info)}
-
-
-# ============================================================================
-# 3. MetricPatternRegistry
+# 2. MetricPatternRegistry
 # ============================================================================
 
 class MetricPatternRegistry:
@@ -302,14 +182,6 @@ class MetricPatternRegistry:
             if pattern.search(bullet):
                 return True
         return False
-
-    @classmethod
-    def get_quantified_patterns(cls) -> List[re.Pattern]:
-        return list(cls.QUANTIFIED_PATTERNS)
-
-    @classmethod
-    def get_non_metric_tech_patterns(cls) -> List[re.Pattern]:
-        return list(cls.NON_METRIC_TECH_PATTERNS)
 
     @classmethod
     def get_metric_type_to_topics(cls) -> Dict[str, Set[str]]:
@@ -762,100 +634,6 @@ class QualityRuleRegistry:
         ("non_standard_symbols", re.compile(r"[★✪❖➔✔►◆■✈✉☎✓✗➤➢✦✧▼▲◀▶]"), "Non-standard decorative symbols confuse character encoders in ATS")
     ]
 
-    DEFENSE_GUIDE_TEMPLATES: Dict[str, str] = {
-        "kubernetes": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
-        "k8s": "Acknowledge lack of production K8s cluster maintenance. Pivot to distributed container workload scheduling, GPU node discovery, and Slurm/MPI execution topology understanding.",
-        "triton": "Be transparent: state that custom kernels were previously written in CUDA/C++ or optimized PyTorch. Highlight strong grasp of GPU SRAM/HBM memory hierarchies and tile-level compilation principles.",
-        "rust": "Honestly state no commercial Rust production experience. Emphasize deep mastery of C++17/20 systems programming, explicit memory safety concepts, and ability to read Rust codebases immediately.",
-        "megatron-lm": "Clarify that 3D parallelism principles (TP/PP/DP/SP) were mastered conceptually and on DeepSpeed/FSDP; demonstrate exact communication volume equations during interview.",
-        "default": "Transparently acknowledge the gap without defensiveness. Pivot to adjacent production architectures, emphasize deep conceptual grasp of the underlying principles, and highlight rapid 48-hour ramp-up history."
-    }
-
-    # -------------------------------------------------------------------------
-    # Baoyan Academic Integrity & Typography Standards
-    # -------------------------------------------------------------------------
-    BAOYAN_SPEC_RANGES: Dict[str, Tuple[int, int]] = {
-        "摘要版": (40, 60),
-        "简历版": (80, 110),
-        "陈述版": (150, 220),
-    }
-
-    BAOYAN_SPEC_ALIASES: Dict[str, str] = {
-        "摘要版": "摘要版",
-        "摘要": "摘要版",
-        "summary": "摘要版",
-        "简历版": "简历版",
-        "简历": "简历版",
-        "resume": "简历版",
-        "陈述版": "陈述版",
-        "陈述": "陈述版",
-        "个人陈述": "陈述版",
-        "statement": "陈述版",
-    }
-
-    FORBIDDEN_DASHES: Dict[str, str] = {
-        "——": "chinese em dash (——)",
-        "\u2014": "em dash (—)",
-        "\u2013": "en dash (–)",
-        "\u2015": "horizontal bar (―)",
-        "\u2212": "minus (−)",
-        "\u2e3a": "two-em dash (⸺)",
-        "\u2e3b": "three-em dash (⸻)",
-    }
-
-    FORBIDDEN_QUOTES: Dict[str, str] = {
-        "\u201c": "left double quote (“)",
-        "\u201d": "right double quote (”)",
-        "\u2018": "left single quote (‘)",
-        "\u2019": "right single quote (’)",
-    }
-
-    FORBIDDEN_DOUBLE_HYPHEN: str = "--"
-
-    BAOYAN_LEAD_ROLES: Set[str] = {
-        "项目负责人", "负责人", "队长", "主持人", "算法链负责人", "模块负责人", "课题组长", "第一完成人"
-    }
-
-    BAOYAN_CORE_ROLES: Set[str] = {
-        "核心成员", "核心骨干", "核心研发"
-    }
-
-    BAOYAN_LEAD_OR_CORE_ROLES: Set[str] = BAOYAN_LEAD_ROLES | BAOYAN_CORE_ROLES
-
-    BAOYAN_NON_LEAD_ROLES: Set[str] = {
-        "参赛队员", "队员", "辅助成员", "成员", "团队成员", "组员", "协作者"
-    }
-
-    BAOYAN_ESCALATED_VERBS: List[str] = [
-        "主导", "负责", "统筹", "独立完成"
-    ]
-
-    BAOYAN_LEADER_ONLY_VERBS: List[str] = [
-        "主导", "统筹"
-    ]
-
-    SIMULATION_TERMS: List[str] = [
-        "gazebo", "gym", "pybullet", "toy dataset", "toy-dataset", "toy数据集", "纯仿真",
-        "flexsim", "carla", "isaac gym", "isaac-gym", "mujoco", "airsim", "ns-3",
-        "matlab仿真", "仿真环境", "模拟环境", "仿真平台", "仿真系统", "仿真测试", "仿真验证", "模拟路网"
-    ]
-
-    REAL_CLUSTER_TERMS: List[str] = [
-        "万卡集群", "千卡集群", "百卡集群", "物理机", "物理机集群", "物理集群",
-        "真实物理机", "真实集群", "实机", "实机部署", "实机测试", "实机验证",
-        "实测", "产线实测", "产线部署", "真实产线", "实车", "实车测试", "实车部署",
-        "硬件落地", "硬件部署", "端侧实测", "板端实测", "上车实测"
-    ]
-
-    EXPECTED_OUTCOME_TERMS: List[str] = [
-        "在投", "准备投稿", "拟投稿", "预计录用", "拟发表", "待审", "待评审",
-        "审稿中", "拟申请", "拟申报", "预期录用", "预期发表", "under review", "in submission", "submitted"
-    ]
-
-    ACQUIRED_OUTCOME_TERMS: List[str] = [
-        "已录用", "已见刊", "已发表", "录用待刊", "已出版", "已授权", "accepted", "published"
-    ]
-
     # -------------------------------------------------------------------------
     # Role & Title Hierarchy and Inflation Prevention Lexicon
     # -------------------------------------------------------------------------
@@ -945,14 +723,6 @@ class QualityRuleRegistry:
         return list(cls.FORMATTING_RISKS)
 
     @classmethod
-    def get_defense_guide_templates(cls) -> Dict[str, str]:
-        return dict(cls.DEFENSE_GUIDE_TEMPLATES)
-
-    @classmethod
-    def get_baoyan_spec_ranges(cls) -> Dict[str, Tuple[int, int]]:
-        return dict(cls.BAOYAN_SPEC_RANGES)
-
-    @classmethod
     def get_role_kpi_lexicon(cls) -> Dict[str, List[str]]:
         return copy.deepcopy(cls.ROLE_KPI_LEXICON)
 
@@ -983,12 +753,6 @@ class QualityRuleRegistry:
                 return QualityRuleRegistry.VERB_HIERARCHY[v], v
         return None, None
 
-
-    @classmethod
-    def get_inflation_rule(cls, rule_id: str) -> Optional[Dict[str, Any]]:
-        if rule_id in cls.INFLATION_PATTERNS:
-            return copy.deepcopy(cls.INFLATION_PATTERNS[rule_id])
-        return None
 
     @classmethod
     def list_inflation_rules(cls) -> Dict[str, Dict[str, Any]]:
@@ -1178,7 +942,6 @@ class QualityRuleRegistry:
 
 __all__ = [
     "AliasRegistry",
-    "TaxonomyRegistry",
     "MetricPatternRegistry",
     "QualityRuleRegistry",
 ]

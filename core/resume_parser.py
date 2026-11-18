@@ -8,40 +8,156 @@ ProfileContext, ResumeBuilder, and ATSAuditor) without requiring external LLMs.
 
 from __future__ import annotations
 
+import html as _html
 import json
 import os
 import re
+import xml.etree.ElementTree as ET
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-# Binary document formats that cannot be parsed as resume text.
+# Binary document formats that cannot be parsed directly as resume text.
 BINARY_RESUME_SUFFIXES = {
-    ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx",
+    ".doc", ".ppt", ".pptx", ".xls", ".xlsx",
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".zip", ".rar", ".7z",
 }
 
+_WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
-def _read_resume_file(p: Path) -> str:
-    """Read a resume text file with robust encoding handling.
 
-    Prefers UTF-8 (stripping a BOM when present, so leading ``\\ufeff`` cannot
-    pollute name/intent matching) and falls back to GB18030 for legacy Chinese
-    Windows exports (Notepad/WPS .txt files), so a GBK resume no longer crashes
-    with UnicodeDecodeError.
-    """
-    if p.suffix.lower() in BINARY_RESUME_SUFFIXES:
-        raise ValueError(
-            f"Unsupported binary resume format '{p.suffix}': {p.name}. "
-            "ResumeTextParser only ingests Markdown/plain-text (.md/.txt) or JSON profiles; "
-            "请先将 PDF/DOCX 简历转换为 Markdown 或 TXT 格式后重试。"
-        )
-    data = p.read_bytes()
+def _decode_text_bytes(data: bytes) -> str:
+    """Decode bytes with UTF-8 BOM stripping and GB18030 fallback."""
     for encoding in ("utf-8-sig", "gb18030"):
         try:
             return data.decode(encoding)
         except UnicodeDecodeError:
             continue
     return data.decode("utf-8", errors="replace")
+
+
+def _extract_html_markdown(raw_html: str) -> str:
+    """Extract readable text and Markdown heading structure from HTML."""
+    cleaned = re.sub(r"<(script|style|noscript)\b[\s\S]*?</\1>", " ", raw_html, flags=re.IGNORECASE)
+    for level in range(1, 7):
+        pattern = re.compile(rf"<h{level}\b[^>]*>([\s\S]*?)</h{level}>", re.IGNORECASE)
+        cleaned = pattern.sub(
+            lambda m, lvl=level: f"\n\n{'#' * lvl} {re.sub(r'<[^>]+>', ' ', m.group(1)).strip()}\n\n",
+            cleaned,
+        )
+    cleaned = re.sub(r"<(?:br|p|div|li|tr|section|article|blockquote)\b[^>]*>", "\n", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    cleaned = _html.unescape(cleaned)
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _extract_docx_markdown(p: Path) -> str:
+    """Zero-dependency DOCX parser extracting word/document.xml into Markdown-friendly text."""
+    try:
+        with zipfile.ZipFile(p, "r") as zf:
+            if "word/document.xml" not in zf.namelist():
+                raise ValueError(f"Invalid DOCX resume (missing word/document.xml): {p.name}")
+            xml_bytes = zf.read("word/document.xml")
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"Invalid or corrupted DOCX resume '{p.name}': {exc}") from exc
+
+    try:
+        root = ET.fromstring(xml_bytes)
+    except ET.ParseError as exc:
+        raise ValueError(f"Corrupted XML inside DOCX resume '{p.name}': {exc}") from exc
+
+    lines: List[str] = []
+    w_tag = lambda local: f"{{{_WORD_NS}}}{local}"
+    for para in root.iter(w_tag("p")):
+        heading_level = 0
+        p_pr = para.find(w_tag("pPr"))
+        if p_pr is not None:
+            p_style = p_pr.find(w_tag("pStyle"))
+            if p_style is not None:
+                val = p_style.attrib.get(w_tag("val")) or p_style.attrib.get("val", "")
+                m = re.match(r"^(?:Heading|Title)\s*(\d)?", val, re.IGNORECASE)
+                if m:
+                    heading_level = min(6, max(1, int(m.group(1) or 1)))
+
+        runs: List[str] = []
+        for elem in para.iter():
+            if elem.tag == w_tag("t") and elem.text:
+                runs.append(elem.text)
+            elif elem.tag == w_tag("tab"):
+                runs.append("\t")
+            elif elem.tag in (w_tag("br"), w_tag("cr")):
+                runs.append("\n")
+
+        line = "".join(runs).strip()
+        if line:
+            lines.append(f"{'#' * heading_level} {line}" if heading_level > 0 else line)
+
+    return "\n\n".join(lines).strip()
+
+
+def _extract_pdf_text(p: Path) -> str:
+    """Extract text from PDF using pypdf or PyMuPDF when available."""
+    errors: List[str] = []
+    has_backend = False
+    try:
+        from pypdf import PdfReader
+        has_backend = True
+        reader = PdfReader(str(p))
+        pages = [(page.extract_text() or "").strip() for page in reader.pages]
+        text = "\n\n".join(pg for pg in pages if pg).strip()
+        if text:
+            return text
+        errors.append("pypdf extracted no selectable text")
+    except ImportError:
+        pass
+    except Exception as exc:
+        errors.append(str(exc))
+
+    try:
+        import fitz
+        has_backend = True
+        with fitz.open(str(p)) as doc:
+            pages = [page.get_text("text").strip() for page in doc]
+        text = "\n\n".join(pg for pg in pages if pg).strip()
+        if text:
+            return text
+        errors.append("PyMuPDF extracted no selectable text")
+    except ImportError:
+        pass
+    except Exception as exc:
+        errors.append(str(exc))
+
+    if not has_backend:
+        raise ValueError(
+            f"Unsupported binary resume format '.pdf': {p.name}. "
+            "Install pypdf/PyMuPDF or convert PDF to Markdown/DOCX/TXT first."
+        )
+    detail = "; ".join(errors) or "empty PDF text"
+    raise ValueError(
+        f"Failed to extract text from PDF resume '{p.name}' ({detail}). "
+        "请确认 PDF 包含可选中文本，或先转换为 Markdown / DOCX / TXT 后重试。"
+    )
+
+
+def _read_resume_file(p: Path) -> str:
+    """Read a resume file (.md/.txt/.docx/.html/.pdf/.json) into text."""
+    suffix = p.suffix.lower()
+    if suffix in BINARY_RESUME_SUFFIXES:
+        raise ValueError(
+            f"Unsupported binary resume format '{p.suffix}': {p.name}. "
+            "ResumeTextParser ingests Markdown/TXT/HTML/DOCX/PDF or JSON profiles; "
+            "请先将不受支持的格式转换为 Markdown、DOCX 或 TXT 后重试。"
+        )
+    if suffix == ".docx":
+        return _extract_docx_markdown(p)
+    if suffix in (".html", ".htm"):
+        return _extract_html_markdown(_decode_text_bytes(p.read_bytes()))
+    if suffix == ".pdf":
+        return _extract_pdf_text(p)
+    return _decode_text_bytes(p.read_bytes())
 
 
 class ResumeTextParser:
@@ -615,6 +731,24 @@ def parse_resume_to_profile(text_or_path: Union[str, Path]) -> Dict[str, Any]:
                         return data
                 except Exception:
                     pass
+            if p.suffix.lower() == ".bib":
+                from core.academic_sync import BibTexPublicationParser
+
+                entries = BibTexPublicationParser.parse_string(text)
+                pubs = [
+                    {
+                        "title": e.title,
+                        "authors": e.authors,
+                        "venue": e.venue,
+                        "year": str(e.year) if e.year else "",
+                        **({"url": e.url} if e.url else {}),
+                        **({"doi": e.doi} if e.doi else {}),
+                        **({"status": e.status} if e.status else {}),
+                        **({"ccf_rank": e.ccf_rank} if e.ccf_rank and e.ccf_rank != "None" else {}),
+                    }
+                    for e in entries
+                ]
+                return {"candidate": {}, "publications": pubs}
             return ResumeTextParser(text).parse()
 
     # Raw string

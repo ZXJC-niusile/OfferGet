@@ -20,20 +20,11 @@ needed; editing only the placeholder header would not affect production output.
 
 ## Verification
 
-Run browser-independent contracts with:
-
 ```bash
 python -m pytest tests/test_classic_tech_layout.py -q
+python scripts/qa_modern_navy_layout.py --theme classic-tech \
+  --baseline-root /absolute/path/to/exact-baseline \
+  --output-dir /absolute/path/to/empty-artifact-directory
 ```
 
-Use the repository's shared visual QA against an isolated archive of the exact
-comparison revision, selecting `classic-tech`. It renders synthetic, reserved
-`.invalid` fixtures only. Coverage must include ordinary and long bilingual text,
-long unbroken contacts and employer names, optional/embedded photo, dense pages,
-compact AutoFit, and the real production-builder path with AutoFit and adaptive
-fill enabled. Inspect both before/after PNGs and every page of the actual PDFs.
-
-Acceptance requires unchanged factual text, valid A4 PDFs, readable type,
-non-overlapping contacts and dates, safe long-string wrapping, correct embedded
-images, no network resources, and repeated continuation-page gutters. Geometry
-checks do not replace visual review of typography, hierarchy, and page breaks.
+Theme-specific pilot (`date-rail` structural mode; see [shared QA rules](RESUME_THEME_QA.md)): checks unboxed organization/project rows, right-aligned dates, absence of colored role chips, and `17fr / 83fr` grid wrapping.

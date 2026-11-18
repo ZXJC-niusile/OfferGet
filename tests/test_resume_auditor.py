@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import sys
 import tempfile
 import unittest
@@ -15,12 +14,7 @@ if str(MODULE_ROOT) not in sys.path:
 
 from core.resume_auditor import (
     ResumeAuditor,
-    Finding,
-    ROLE_RANKS,
-    SUPERLATIVES,
     VERB_HIERARCHY,
-    DATA_DEPTH_LEVELS,
-    RESULT_EVIDENCE_LEVELS,
 )
 
 

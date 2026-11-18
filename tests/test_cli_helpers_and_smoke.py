@@ -5,7 +5,7 @@ Validates:
 2. Auto-creation of parent directories and exception handling (FileNotFoundError, IsADirectoryError, JSONDecodeError).
 3. Pure stdout output isolation with emit_json, and stderr emission with emit_stderr.
 4. format_cli_error schema and exit_cli_error routines.
-5. CLI smoke tests: argument parsing, --help on core subcommands (decode, match, audit, selftest).
+5. CLI smoke tests: argument parsing, --help on retained subcommands (profile, resume, ats, fact, diff, anon, selftest, doctor).
 6. Pure JSON stdout on CLI subcommands when --json is provided.
 """
 
@@ -146,12 +146,6 @@ class TestCliHelpers(unittest.TestCase):
         single_line = "熟悉 C/C++ 和 CI/CD 架构优化"
         self.assertEqual(read_text(single_line), single_line)
 
-    def test_jd_service_decodes_raw_jd_with_slashes(self):
-        """Regression test for JDService decoding raw text with C/C++ and CI/CD."""
-        from services.jd_service import JDService
-        decoded = JDService().decode_jd("岗位：后端架构师\n要求：精通 C/C++ 与 CI/CD 自动化流水线")
-        self.assertIsNotNone(decoded)
-
     def test_read_text_and_load_json_strict_path_errors(self):
         """Verifies that missing Path objects or missing .json files raise FileNotFoundError."""
         with self.assertRaises(FileNotFoundError):
@@ -185,12 +179,6 @@ class TestCliHelpers(unittest.TestCase):
         bad_json.write_text("{invalid json: [1, 2", encoding="utf-8")
         with self.assertRaises(ValueError):
             load_json_or_text(bad_json)
-
-    def test_resolve_input_fails_fast_on_corrupted_json(self):
-        """Verifies that parse_input fails fast with ValueError if expected_type='json' cannot be parsed."""
-        from core.input_router import parse_input
-        with self.assertRaises(ValueError):
-            parse_input("plain text not json", expected_type="json")
 
     def test_write_json_creates_parent_dirs(self):
         target = self.base_path / "nested" / "dir" / "out.json"
@@ -285,13 +273,15 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
     def test_cli_subcommands_help(self):
         import cli
         cases = [
-            (["jd", "decode", "--help"], ["jd_file", "--json"]),
-            (["jd", "match", "--help"], ["--profile", "--json"]),
-            (["ats", "audit", "--help"], ["input_file"]),
-            (["gap", "roi", "--help"], ["jd_files"]),
-            (["offer", "evaluate", "--help"], ["offer_file"]),
-            (["baoyan", "audit", "--help"], ["entry"]),
-            (["review", "--help"], ["--profile"]),
+            (["profile", "parse", "--help"], ["input_file", "--json"]),
+            (["profile", "refs", "--help"], ["--docs", "--query", "--json"]),
+            (["resume", "build", "--help"], ["profile", "--theme", "--pages"]),
+            (["ats", "audit", "--help"], ["input_file", "--jd", "--json"]),
+            (["ats", "ledger", "--help"], ["profile", "--jd", "--json"]),
+            (["ats", "filter", "--help"], ["profile", "--tag"]),
+            (["fact", "verify", "--help"], ["target", "--profile", "--json"]),
+            (["diff", "audit", "--help"], ["baseline_file", "tailored_file", "--json"]),
+            (["anon", "mask", "--help"], ["input_file", "--level", "--json"]),
         ]
         for cmd_args, expected_snippets in cases:
             with self.subTest(cmd=cmd_args):
@@ -302,40 +292,22 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
                 for snippet in expected_snippets:
                     self.assertIn(snippet, output.getvalue())
 
-    def test_cli_jd_decode_json_pure_stdout(self):
-        """Ensure --json produces 100% pure JSON on stdout with no extra log lines."""
-        proc = self.run_cli("jd", "decode", str(self.sample_jd), "--json")
-        self.assertEqual(proc.returncode, 0)
-        # Attempt direct JSON parsing from stdout
-        try:
-            data = json.loads(proc.stdout)
-        except json.JSONDecodeError as e:
-            self.fail(f"Stdout was not pure JSON: {e}\nOutput was: {proc.stdout}")
-
-        self.assertIn("layers", data)
-        self.assertIn("detected_signals", data)
-        self.assertEqual(len(data["layers"]), 5)
+    def test_cli_ats_audit_and_ledger_json_pure_stdout(self):
+        """Ensure ats audit and ats ledger --json produce 100% pure JSON on stdout."""
         audited = self.run_cli("ats", "audit", str(self.sample_profile), "--jd", str(self.sample_jd), "--json")
         self.assertEqual(audited.returncode, 0, audited.stderr)
-        self.assertTrue({"overall_score", "skill_ledger"}.issubset(json.loads(audited.stdout)))
+        audit_payload = json.loads(audited.stdout)
+        self.assertTrue({"overall_score", "skill_ledger"}.issubset(audit_payload))
 
-    def test_cli_jd_match_json_pure_stdout(self):
-        """Ensure match --json produces valid JSON on stdout."""
-        proc = self.run_cli(
-            "jd", "match",
-            str(self.sample_jd),
-            "--profile", str(self.sample_profile),
-            "--json"
-        )
-        self.assertEqual(proc.returncode, 0)
-        data = json.loads(proc.stdout)
-        self.assertIn("overall_match_score", data)
-        self.assertIn("interview_prob", data)
+        ledger = self.run_cli("ats", "ledger", str(self.sample_profile), "--jd", str(self.sample_jd), "--json")
+        self.assertEqual(ledger.returncode, 0, ledger.stderr)
+        ledger_payload = json.loads(ledger.stdout)
+        self.assertIsInstance(ledger_payload, dict)
 
     def test_cli_missing_file_stderr_and_exit_code(self):
-        proc = self.run_cli("jd", "decode", "non_existent_file_path.txt")
+        proc = self.run_cli("ats", "audit", "non_existent_file_path.txt")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("Error: JD file not found", proc.stderr)
+        self.assertIn("Error:", proc.stderr)
         self.assertEqual(proc.stdout.strip(), "")
 
     def assert_json_failure(self, args, error_type):
@@ -349,49 +321,34 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertEqual(payload["exit_code"], 1)
         self.assertTrue(payload["message"])
 
-    def test_cli_missing_jd_json_failure(self):
+    def test_cli_missing_input_json_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
-            missing = str(Path(tmp) / "missing.txt")
-            for command in ("decode", "match", "review"):
-                with self.subTest(command=command):
-                    args = ["review", missing] if command == "review" else ["jd", command, missing]
-                    if command in ("match", "review"):
-                        args += ["--profile", str(self.sample_profile)]
+            missing = str(Path(tmp) / "missing.json")
+            cases = [
+                ["profile", "parse", missing],
+                ["ats", "audit", missing],
+                ["ats", "ledger", missing, "--jd", str(self.sample_jd)],
+                ["fact", "verify", "bullet", "--profile", missing],
+                ["diff", "audit", missing, str(self.sample_profile)],
+            ]
+            for args in cases:
+                with self.subTest(args=args):
                     self.assert_json_failure(args, "input_not_found")
-
-    def test_offer_counter_rejects_explicit_missing_optional_inputs(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            offer = Path(tmp) / "offer.json"
-            offer.write_text('{"base_salary_monthly": 20000}', encoding="utf-8")
-            for flag in ("--profile", "--competing"):
-                with self.subTest(flag=flag):
-                    args = ["offer", "counter", str(offer), flag, str(Path(tmp) / "missing.json")]
-                    self.assert_json_failure(args, "input_not_found")
-                    proc = self.run_cli(*args)
-                    self.assertEqual(proc.returncode, 1)
-                    self.assertEqual(proc.stdout, "")
-                    self.assertIn("not found", proc.stderr)
-                    self.assertNotIn("Traceback", proc.stderr)
-            # Omitting optional inputs still uses the normal counter-offer flow.
-            proc = self.run_cli("offer", "counter", str(offer), "--json")
-            self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("counter_offer_letter", json.loads(proc.stdout))
 
     def test_cli_malformed_profile_json_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             bad = Path(tmp) / "profile.json"
             bad.write_text("{invalid json", encoding="utf-8")
-            offer = Path(tmp) / "offer.json"
-            offer.write_text('{"base_salary_monthly": 20000}', encoding="utf-8")
             commands = [
-                ["jd", "match", str(self.sample_jd)],
-                ["offer", "evaluate", str(offer)],
-                ["offer", "counter", str(offer)],
+                ["ats", "audit", str(bad)],
+                ["ats", "ledger", str(bad), "--jd", str(self.sample_jd)],
+                ["fact", "verify", "bullet", "--profile", str(bad)],
+                ["diff", "audit", str(bad), str(self.sample_profile)],
             ]
             for command in commands:
                 with self.subTest(command=command):
-                    self.assert_json_failure(command + ["--profile", str(bad)], "invalid_json")
-            proc = self.run_cli("jd", "match", str(self.sample_jd), "--profile", str(bad))
+                    self.assert_json_failure(command, "invalid_json")
+            proc = self.run_cli("ats", "audit", str(bad))
             self.assertEqual(proc.returncode, 1)
             self.assertEqual(proc.stdout, "")
             self.assertIn("Error:", proc.stderr)
@@ -405,18 +362,10 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
             output = Path(tmp) / "parsed.json"
             self.assert_json_failure(["profile", "parse", str(path), "--output", str(output)], "invalid_json")
             self.assertFalse(output.exists())
-            proc = self.run_cli("review", str(self.sample_jd), "--profile", str(self.sample_profile),
-                                "--answers", str(path), "--json")
-            self.assertEqual(proc.returncode, 1)
-            self.assertIn(str(path), json.loads(proc.stdout)["message"])
-            self.assertNotIn("Traceback", proc.stderr)
             self.assertEqual(path.read_text(encoding="utf-8"), "{invalid json")
             path.write_text("[]", encoding="utf-8")
-            self.assert_json_failure(["review", str(self.sample_jd), "--profile", str(path)], "invalid_input")
-            for flag in ("--session", "--answers"):
-                with self.subTest(flag=flag):
-                    self.assert_json_failure(["review", str(self.sample_jd), "--profile", str(self.sample_profile),
-                                              flag, str(path)], "invalid_input")
+            self.assert_json_failure(["diff", "audit", str(path), str(self.sample_profile)], "invalid_input")
+            self.assert_json_failure(["profile", "refs", "--docs", str(tmp), "--query", "cache", "--limit", "0"], "invalid_input")
 
     def test_cli_expected_error_boundary(self):
         import cli
@@ -424,80 +373,40 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         for error, kind in ((FileNotFoundError("input vanished"), "input_not_found"),
                             (PermissionError("unreadable input"), "io_error"),
                             (ValueError("invalid value"), "invalid_input")):
-            with self.subTest(error=kind), patch("sys.argv", ["offerget", "jd", "decode", "input", "--json"]):
-                with patch.object(cli, "cmd_jd_decode", side_effect=error), patch("sys.stdout", io.StringIO()) as out:
+            with self.subTest(error=kind), patch("sys.argv", ["offerget", "ats", "audit", "input", "--json"]):
+                with patch.object(cli, "cmd_ats_audit", side_effect=error), patch("sys.stdout", io.StringIO()) as out:
                     with self.assertRaises(SystemExit) as stopped:
                         cli.main()
                     self.assertEqual(stopped.exception.code, 1)
                     self.assertEqual(json.loads(out.getvalue())["error_type"], kind)
-        with patch("sys.argv", ["offerget", "jd", "decode", "input", "--json"]):
-            with patch.object(cli, "cmd_jd_decode", side_effect=RuntimeError("unexpected defect")):
+        with patch("sys.argv", ["offerget", "ats", "audit", "input", "--json"]):
+            with patch.object(cli, "cmd_ats_audit", side_effect=RuntimeError("unexpected defect")):
                 with self.assertRaisesRegex(RuntimeError, "unexpected defect"):
                     cli.main()
 
     @pytest.mark.browser
-    def test_application_review_accept_and_render(self):
+    def test_resume_build_renders_updated_pdf(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            db = tmp_path / "applications.db"
-            review = tmp_path / "review.json"
-            profile_out = tmp_path / "accepted_profile.json"
             resume_dir = tmp_path / "resume"
             source = tmp_path / "source.json"
             source.write_bytes(self.public_profile.read_bytes())
 
-            add = self.run_cli("application", "add", "APP-SMOKE", "--db", str(db), "--company", "测试公司", "--role", "后端工程师", "--json")
-            self.assertEqual(add.returncode, 0, add.stderr)
-
-            review_proc = self.run_cli(
-                "review", "examples/sample_ai_jd.txt",
-                "--profile", str(source),
-                "--proposal-db", str(db), "--application-id", "APP-SMOKE",
-                "--workspace", str(tmp_path), "--output", str(review), "--json",
-            )
-            self.assertEqual(review_proc.returncode, 0, review_proc.stderr)
-            proposal_id = json.loads(review.read_text(encoding="utf-8"))["material_proposal"]["proposal_id"]
-
-            accepted = self.run_cli(
-                "proposal", "accept", proposal_id, "--db", str(db),
-                "--profile", str(source),
-                "--jd", "examples/sample_ai_jd.txt",
-                "--output", str(profile_out), "--build-resume",
-                "--resume-output-dir", str(resume_dir), "--json",
-            )
-            self.assertEqual(accepted.returncode, 0, accepted.stdout + accepted.stderr)
-            self.assertTrue(profile_out.exists())
-            generated = json.loads(accepted.stdout)["generated_resumes"]
-            payload = json.loads(accepted.stdout)
-            self.assertEqual(payload["accept_phase"], "completed")
-            self.assertEqual(set(payload["artifact_status"].values()), {"present"})
-            self.assertTrue({"profile", "html", "pdf"}.issubset(payload["artifact_hashes"]))
-            for name, path in payload["output_paths"].items():
-                self.assertEqual(payload["artifact_hashes"][name], hashlib.sha256(Path(path).read_bytes()).hexdigest())
-            repeated = self.run_cli(
-                "review", "examples/sample_ai_jd.txt", "--profile", str(source),
-                "--proposal-db", str(db), "--application-id", "APP-SMOKE", "--json",
-            )
-            self.assertEqual(repeated.returncode, 0, repeated.stdout + repeated.stderr)
-            saved = json.loads(repeated.stdout)
-            self.assertEqual(saved["material_proposal"]["status"], "accepted")
-            self.assertEqual(saved["material_proposal"]["proposal_hash"], payload["proposal"]["proposal_hash"])
-            self.assertEqual(saved["summary"]["pending_change_count"], 0)
-            for kind in ("html", "pdf"):
-                self.assertGreater(Path(generated[kind]).stat().st_size, 0)
-
+            build1 = self.run_cli("resume", "build", str(source), "--theme", "modern-navy", "--output-dir", str(resume_dir))
+            self.assertEqual(build1.returncode, 0, build1.stderr)
+            pdfs = list(resume_dir.glob("resume_modern_navy*.pdf"))
+            self.assertEqual(len(pdfs), 1)
+            old_pdf = pdfs[0]
+            self.assertGreater(old_pdf.stat().st_size, 0)
+            old_hash = hashlib.sha256(old_pdf.read_bytes()).hexdigest()
 
             import fitz
-            old_pdf = Path(generated["pdf"])
-            old_hash = hashlib.sha256(old_pdf.read_bytes()).hexdigest()
             updated = json.loads(source.read_text(encoding="utf-8"))
             updated["projects"] = [{"name": "UpdatedResumeMarker", "bullets": ["使用 Python 开发新版报表工具，交付团队使用。"]}]
             source.write_text(json.dumps(updated, ensure_ascii=False), encoding="utf-8")
-            refreshed = self.run_cli("review", "--workspace", str(tmp_path), "--json")
-            self.assertEqual(refreshed.returncode, 0, refreshed.stdout + refreshed.stderr)
-            current = json.loads(refreshed.stdout)
-            self.assertTrue(current["execution"]["sources_changed"])
-            self.assertEqual(Path(current["generated_resumes"]["pdf"]), old_pdf)
+
+            build2 = self.run_cli("resume", "build", str(source), "--theme", "modern-navy", "--output-dir", str(resume_dir))
+            self.assertEqual(build2.returncode, 0, build2.stderr)
             self.assertNotEqual(hashlib.sha256(old_pdf.read_bytes()).hexdigest(), old_hash)
             with fitz.open(old_pdf) as document:
                 self.assertIn("UpdatedResumeMarker", "".join(page.get_text() for page in document))
@@ -511,9 +420,9 @@ class TestCliSmokeAndSubcommands(unittest.TestCase):
         self.assertIsInstance(AI_BUZZWORDS_LEXICON, list)
 
         import core
-        self.assertTrue(hasattr(core, "defense"))
-        self.assertTrue(hasattr(core, "jd_analyst"))
-        self.assertTrue(hasattr(core, "evidence"))
+        self.assertTrue(hasattr(core, "fact_guard"))
+        self.assertTrue(hasattr(core, "resume_builder"))
+        self.assertTrue(hasattr(core, "ats_checker"))
 
         from core.profile_adapter import ProfileContext
         hints = typing.get_type_hints(ProfileContext.to_view_model)

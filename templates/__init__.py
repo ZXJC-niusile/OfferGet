@@ -1,2 +1,0 @@
-"""OfferGet runtime templates package.
-"""

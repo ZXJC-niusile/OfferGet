@@ -7,13 +7,14 @@ from html import escape
 import pytest
 from PIL import Image
 
+from scripts.qa_common import synthetic_portrait_png
 from scripts.qa_modern_navy_layout import (
     STRUCTURAL_LAYOUTS, SECTION_LABELS, SemanticDocument, audit_html, coverage_errors,
     expected_field_order, field_section,
     final_failures, fixtures, pdf_line_overlaps,
-    source_ledger, synthetic_portrait_png, unchanged_content,
+    source_ledger, unchanged_content,
 )
-from tests.test_modern_navy_layout import valid_metrics
+from tests.helpers import valid_layout_metrics as valid_metrics
 
 
 ORIGINAL_CASES = {

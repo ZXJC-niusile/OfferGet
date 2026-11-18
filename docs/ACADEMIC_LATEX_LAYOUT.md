@@ -18,26 +18,6 @@ the native Typst generator is unchanged in this PR.
 ## Validation
 
     python -m pytest tests/test_academic_latex_design.py -v
-    python scripts/qa_academic_latex_layout.py --output artifacts/academic-latex
+    python scripts/qa_academic_layout.py --format latex --output artifacts/academic-latex
 
-The second command requires working XeLaTeX with xeCJK/standard LaTeX packages,
-Noto CJK fonts, PyMuPDF and Playwright Chromium. It compiles real native PDFs and
-renders the HTML fallback independently for six entirely fabricated bilingual,
-long-field, dense, photo-preference, exam/publication fixtures. Each mode gets
-separate PDFs, page PNGs and source-fact/margin checks. Two additional traced production
-builds inspect ResumeBuilder's returned PDF: real native compilation and an intentionally
-forced fallback using the real BrowserRenderer. Native missing glyphs,
-compiler errors and overfull horizontal boxes fail. A source hash manifest ties
-artifacts to the exact exporter and fixture revisions. Inspect all page images
-before approval; the checks alone do not establish visual quality.
-
-Each fixture resolves an explicit photo, no-photo or placeholder mode once for
-both LaTeX and HTML sources. Both native and fallback PDFs must contain exactly
-one embedded image for the portrait case and none for the other modes, including
-the production no-photo builds. Missing or duplicate portraits fail the gate.
-Source-mode and PDF-inspection unit tests do not replace actual renderer runs.
-
-Compilation failures are not treated as native success merely because a partial
-or stale PDF exists. XeLaTeX runs with shell escape disabled and halts on errors.
-Photo filenames containing braces, percent signs or line breaks produce a clear error
-rather than ambiguous TeX.
+Format-specific gates (in addition to [shared QA rules](RESUME_THEME_QA.md)): requires `xelatex` with `xeCJK`, Noto CJK fonts, `PyMuPDF`, and Playwright Chromium. Compiles six synthetic cases natively (`-no-shell-escape -halt-on-error`) and via HTML fallback separately, plus traced native and forced-fallback `ResumeBuilder` paths. Native missing glyphs, Overfull hboxes, or photo filenames with braces/percent signs/line breaks fail. Inspect both mode PDFs and page PNGs before approval.

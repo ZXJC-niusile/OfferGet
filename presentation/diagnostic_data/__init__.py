@@ -6,8 +6,6 @@ from importlib.resources import files
 FIXTURE_NAMES = (
     "sample_ai_jd.txt",
     "candidate_profile.json",
-    "academic_profile.json",
-    "sample_advisor.json",
 )
 
 
@@ -23,11 +21,7 @@ def load_fixture(name: str) -> dict:
 
 def missing_resources() -> list[str]:
     missing = []
-    for package, names in (
-        (__package__, FIXTURE_NAMES),
-        ("templates", ("offer_strategy.html",)),
-    ):
-        for name in names:
-            if not files(package).joinpath(name).is_file():
-                missing.append(f"{package}/{name}")
+    for name in FIXTURE_NAMES:
+        if not files(__package__).joinpath(name).is_file():
+            missing.append(f"{__package__}/{name}")
     return missing

@@ -193,34 +193,35 @@ def cmd_resume_build(args_list=None):
         if diff_md.exists() and diff_json.exists():
             print(f"  ✓ [diff-ledger     ] -> {diff_md.name} & {diff_json.name}")
 
-    # Synchronize candidate-named convenience files in the output directory
-    try:
-        import re
-        import shutil
-        primary_pdf = None
-        primary_html = None
-        if parsed.theme == "all" and "results" in locals():
-            if "modern-navy" in results and results["modern-navy"].get("pdf"):
-                primary_pdf = results["modern-navy"]["pdf"]
-                primary_html = results["modern-navy"].get("html")
-            elif results:
-                first_val = next(iter(results.values()))
-                primary_pdf = first_val.get("pdf")
-                primary_html = first_val.get("html")
-        elif "files" in locals():
-            primary_pdf = files.get("pdf")
-            primary_html = files.get("html")
+    # Synchronize candidate-named convenience files only when output is not anonymized.
+    if not parsed.anonymize:
+        try:
+            import re
+            import shutil
+            primary_pdf = None
+            primary_html = None
+            if parsed.theme == "all" and "results" in locals():
+                if "modern-navy" in results and results["modern-navy"].get("pdf"):
+                    primary_pdf = results["modern-navy"]["pdf"]
+                    primary_html = results["modern-navy"].get("html")
+                elif results:
+                    first_val = next(iter(results.values()))
+                    primary_pdf = first_val.get("pdf")
+                    primary_html = first_val.get("html")
+            elif "files" in locals():
+                primary_pdf = files.get("pdf")
+                primary_html = files.get("html")
 
-        if primary_pdf and Path(primary_pdf).exists():
-            clean_name = re.sub(r'[\/:*?"<>|]', '_', str(cand_name).strip()) or "个人"
-            named_pdf = out_dir / f"{clean_name}_个人简历.pdf"
-            shutil.copy2(primary_pdf, named_pdf)
-            print(f"  ★ [named-resume   ] -> {named_pdf.name}")
-            if primary_html and Path(primary_html).exists():
-                named_html = out_dir / f"{clean_name}_个人简历.html"
-                shutil.copy2(primary_html, named_html)
-    except Exception:
-        pass
+            if primary_pdf and Path(primary_pdf).exists():
+                clean_name = re.sub(r'[\\/:*?"<>|]', '_', str(cand_name).strip()) or "个人"
+                named_pdf = out_dir / f"{clean_name}_个人简历.pdf"
+                shutil.copy2(primary_pdf, named_pdf)
+                print(f"  ★ [named-resume   ] -> {named_pdf.name}")
+                if primary_html and Path(primary_html).exists():
+                    named_html = out_dir / f"{clean_name}_个人简历.html"
+                    shutil.copy2(primary_html, named_html)
+        except Exception:
+            pass
 
     print("=" * 68)
     print(f"🎉 Successfully built resume variant(s) in {out_dir}")
@@ -338,11 +339,22 @@ def cmd_resume_audit(args_list):
 
 def cmd_resume_dispatch(args_list):
     """Dispatches `offerget resume <subcommand>` to native handlers."""
+    usage = (
+        "Usage: offerget resume <build|render|autofit|audit> [options]\n\n"
+        "Subcommands:\n"
+        "  build      Build multi-template HTML/PDF/DOCX resumes from candidate profile\n"
+        "  render     Render an HTML resume to PDF\n"
+        "  autofit    Auto-fit an HTML resume to a single page\n"
+        "  audit      Audit resume metrics, verbs, and anti-inflation"
+    )
     if not args_list:
-        print("Usage: offerget resume <build|render|autofit|audit|selftest> [options]")
+        print(usage)
         sys.exit(1)
 
     subcmd = args_list[0]
+    if subcmd in ("-h", "--help", "help"):
+        print(usage)
+        sys.exit(0)
     rest = args_list[1:]
     if subcmd == "build":
         cmd_resume_build(rest)

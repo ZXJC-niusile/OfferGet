@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "offerget"
 version = "1.0.0"
-description = "Local-first JD analysis, resume auditing, academic application, and offer strategy toolkit"
+description = "Local-first resume skill toolchain: ingestion, fact/ATS auditing, diff tracking, and rendering"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "CC-BY-NC-SA-4.0"}
@@ -41,6 +41,7 @@ offerget = "cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+norecursedirs = ["output", ".agent", ".git", ".pytest_cache", ".ruff_cache", "build", "dist", "*.egg-info"]
 addopts = "-q"
 markers = [
     "browser: real browser/PDF integration; included in the default full run",
@@ -52,11 +53,10 @@ py-modules = ["cli"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["core*", "presentation*", "templates*", "themes*", "services*"]
+include = ["core*", "presentation*", "themes*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.html", "*.md"]
-"templates" = ["*.html"]
 "themes" = ["*.html", "*.md"]
 
 "presentation.diagnostic_data" = ["*.json", "*.txt"]

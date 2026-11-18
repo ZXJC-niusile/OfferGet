@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from PIL import Image, ImageDraw
+from PIL import Image
 
 from core.academic_exporter import AcademicExporter
 from core.profile_adapter import normalize_candidate_profile
@@ -15,23 +15,7 @@ from core.resume_builder import ResumeBuilder
 from core.resume_photo import image_to_base64_data_uri, resolve_photo
 from core.resume_view_model import AtsPlainRenderer, HtmlThemeRenderer, ResumeViewModel
 from presentation.commands.resume_cmd import cmd_resume_build
-from scripts.qa_modern_navy_layout import text_content
-
-
-@pytest.fixture
-def portrait(tmp_path):
-    """Clearly synthetic head-and-shoulders test illustration, never a real person."""
-    path = tmp_path / "synthetic-portrait.png"
-    image = Image.new("RGB", (120, 160), "#E6EDF2")
-    draw = ImageDraw.Draw(image)
-    draw.ellipse((40, 22, 80, 70), fill="#D8A47F")
-    draw.rectangle((52, 64, 68, 87), fill="#D8A47F")
-    draw.rounded_rectangle((21, 83, 99, 164), radius=27, fill="#264C72")
-    draw.ellipse((40, 20, 80, 36), fill="#29323B")
-    # Visible registration markers help later visual QA identify containment.
-    draw.rectangle((3, 3, 116, 156), outline="#C25252", width=2)
-    image.save(path)
-    return path
+from scripts.qa_common import text_content
 
 
 @pytest.fixture
@@ -82,11 +66,12 @@ def test_same_source_produces_photo_and_no_photo_without_changing_facts(profile,
         assert properties.get("min-width", "").strip() == "0"
     else:
         assert "padding-right:0px" in without
-    assert text_content(with_photo) == text_content(without)
+    rendered_text = text_content(without)
+    assert rendered_text == text_content(with_photo)
     from core.security_gate import validate_output_security
     assert validate_output_security(with_photo, format_type="html") == []
     assert validate_output_security(without, format_type="html") == []
-    assert "17 verified test cases" in without and "Synthetic Test Candidate" in without
+    assert "17 verified test cases" in rendered_text and "Synthetic Test Candidate" in rendered_text
     assert profile == original
 
 
@@ -105,7 +90,7 @@ def test_ats_html_and_markdown_respect_mode(profile):
 @pytest.mark.parametrize("method,image_marker,placeholder_marker", [
     ("generate_latex", r"\includegraphics", r"\fbox"),
     ("generate_typst", "#image(", "#rect("),
-    ("generate_latex_html_preview", "<img ", '<div class="photo-placeholder">'),
+    ("generate_academic_html_preview", "<img ", '<div class="photo-placeholder">'),
 ])
 def test_native_sources_and_preview_do_not_reenable_disabled_photo(profile, portrait, method, image_marker, placeholder_marker):
     exporter = AcademicExporter()
@@ -255,7 +240,7 @@ def test_cli_photo_requires_valid_image_before_renderer(tmp_path, capsys):
     assert "requires an actual image" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("method", ["generate_latex", "generate_typst", "generate_latex_html_preview"])
+@pytest.mark.parametrize("method", ["generate_latex", "generate_typst", "generate_academic_html_preview"])
 @pytest.mark.parametrize("context", [False, True])
 def test_native_exports_honor_profile_mode_without_implicit_downgrade(method, context):
     from core.profile_adapter import ProfileContext
@@ -306,7 +291,7 @@ def test_resolved_no_photo_vm_requires_explicit_mode_to_reenable(profile, portra
     assert ResumeViewModel.from_profile(vm, photo_path=portrait).photo_data_uri is None
     assert ResumeViewModel.from_profile(vm, photo_path=portrait, photo_mode="photo").photo_data_uri
     for method, marker in (("generate_latex", r"\includegraphics"), ("generate_typst", "#image("),
-                           ("generate_latex_html_preview", "<img ")):
+                           ("generate_academic_html_preview", "<img ")):
         render = getattr(AcademicExporter(), method)
         assert marker not in render(vm, photo_path=portrait)
         assert marker in render(vm, photo_path=portrait, photo_mode="photo")

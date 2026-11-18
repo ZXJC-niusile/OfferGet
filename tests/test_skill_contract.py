@@ -18,7 +18,7 @@ def test_skill_metadata_and_entrypoint_budget():
     assert len(text.splitlines()) < 120
 
 
-@pytest.mark.parametrize("path", ["SKILL.md", "references/task-workflows.md", "references/skill-design.md"])
+@pytest.mark.parametrize("path", ["SKILL.md", "references/task-workflows.md"])
 def test_skill_local_reference_links_resolve(path):
     document = ROOT / path
     for link in re.findall(r"\]\(([^)]+)\)", document.read_text(encoding="utf-8")):
@@ -31,8 +31,8 @@ def test_readme_has_no_machine_specific_file_links():
 
 
 @pytest.mark.parametrize("command", [
-    ["resume", "build"], ["profile", "parse"], ["review"],
-    ["proposal", "show"], ["proposal", "accept"], ["diff", "audit"],
+    ["resume", "build"], ["profile", "parse"], ["profile", "refs"],
+    ["ats", "audit"], ["fact", "verify"], ["diff", "audit"], ["anon", "mask"],
 ])
 def test_documented_recipe_command_help(command, monkeypatch, capsys):
     import cli
@@ -45,15 +45,13 @@ def test_documented_recipe_command_help(command, monkeypatch, capsys):
     assert "usage:" in capsys.readouterr().out.lower()
 
 
-def test_visibility_boundary_remains_in_router_and_export_recipe():
+def test_visibility_boundary_documented_without_exact_phrase_lock():
     router = (ROOT / "SKILL.md").read_text(encoding="utf-8")
     workflow = (ROOT / "references/task-workflows.md").read_text(encoding="utf-8")
-    for text in (router, workflow):
-        assert "reference-only" in text
-        assert "on-request" in text
-        assert "variant-specific" in text
-        assert "reject" in text
-    assert "Disclosure preflight before every export" in workflow
-    assert "separate disclosure-safe profile" in workflow
-    assert "wildcard tags keep all items" in workflow
-    assert "repeat the disclosure preflight" in workflow
+    for tag in ("reference-only", "on-request", "variant-specific", "always"):
+        assert tag in router
+    assert "reference-only" in workflow
+    assert "disclosure-safe" in workflow or "public" in workflow
+    assert "Organize materials" in router
+    assert "Format/export" in router
+    assert "Tailor to a JD" in router

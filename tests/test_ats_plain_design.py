@@ -8,7 +8,7 @@ import pytest
 from core.resume_view_model import AtsPlainRenderer, ResumeViewModel
 from core.security_gate import validate_output_security
 from scripts.qa_ats_plain_layout import cases, source_anchors, squash
-from scripts.qa_modern_navy_layout import text_content
+from scripts.qa_common import text_content
 
 # Generated with the unchanged renderer at main f01d6c1. These protect the
 # existing serialization contract, not a claim of baseline factual correctness.

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from core.academic_exporter import AcademicExporter
 from core.resume_view_model import ResumeViewModel
+from tests.helpers import academic_design_fixture as fixture
 
 
 class Text(HTMLParser):
@@ -14,22 +15,6 @@ class Text(HTMLParser):
         self.parts = []
     def handle_data(self, value):
         self.parts.append(value)
-
-
-def fixture():
-    return {"candidate": {"name": "示例 Alex & Lin", "title": "R&D Engineer", "email": "qa@example.invalid",
-                          "school": "Example & University", "degree": "MSc", "edu_time": "2018 - 2020",
-                          "education_rows": [["GPA > 3.8", "Award & Merit"]], "reserve_photo": False},
-            "experience": [{"org": "Research & Systems <Group>", "dept": "R&D", "role": "Engineer <Lead>",
-                            "time": "2020 - 2025", "bullets": ["Used **C++ & SQL**; latency < 20 ms.",
-                            "Literal &amp; and <strong>text</strong>."]}],
-            "projects": [{"name": "Project <One>", "role": "Owner & Maintainer", "time": "2022 - 2024",
-                          "bullets": [r"Printed \input{sample} literally; 95% complete."]}],
-            "publications": [{"title": "Evidence & Safety <Review>", "authors": "A. Lin & B. Example",
-                              "venue": "Synthetic Journal", "year": "2025"}],
-            "postgraduate_exam": {"target_school": "Graduate & School", "target_major": "Computing",
-                                  "scores": {"Math <A>": 130, "English": 80}, "total_score": 210},
-            "competencies": {"Tools & Languages": ["C++", "R&D"]}}
 
 
 def test_native_latex_uses_raw_fields_and_escapes_once():
@@ -49,7 +34,7 @@ def test_native_latex_uses_raw_fields_and_escapes_once():
 
 
 def test_html_fallback_preserves_all_fields_and_literal_markup():
-    source = AcademicExporter().generate_latex_html_preview(fixture(), reserve_photo=False)
+    source = AcademicExporter().generate_academic_html_preview(fixture(), reserve_photo=False)
     parser = Text(); parser.feed(source)
     text = " ".join(parser.parts).replace("\u00a0", " ")
     for expected in ("Research & Systems <Group>", "R&D · Engineer <Lead>", "Used ", "C++ & SQL",
@@ -62,11 +47,18 @@ def test_html_fallback_preserves_all_fields_and_literal_markup():
     assert "grid-template-columns: minmax(0, 1fr) auto" in source
 
 
+def test_legacy_latex_preview_alias_matches_academic_preview():
+    exporter = AcademicExporter()
+    profile = fixture()
+    expected = exporter.generate_academic_html_preview(profile, lang="en", reserve_photo=False)
+    assert exporter.generate_latex_html_preview(profile, lang="en", reserve_photo=False) == expected
+
+
 def test_custom_section_titles_are_data_in_both_formats():
     exporter = AcademicExporter()
     titles = {"education": r"Study <Notes> & \input{bad}"}
     tex = exporter.generate_latex(fixture(), section_titles=titles)
-    html = exporter.generate_latex_html_preview(fixture(), section_titles=titles)
+    html = exporter.generate_academic_html_preview(fixture(), section_titles=titles)
     assert r"Study <Notes> \& \textbackslash{}input\{bad\}" in tex
     assert "Study &lt;Notes&gt; &amp;" in html
     assert "<Notes>" not in html
@@ -77,7 +69,7 @@ def test_legacy_projected_view_model_decodes_generated_markup_once():
         "time": "2020 - 2025", "bullets": ["Used <strong>C++ &amp; SQL</strong>; x &lt; 2."]}])
     exporter = AcademicExporter()
     assert r"\textbf{C++ \& SQL}" in exporter.generate_latex(vm)
-    assert "<strong>C++ &amp; SQL</strong>" in exporter.generate_latex_html_preview(vm)
+    assert "<strong>C++ &amp; SQL</strong>" in exporter.generate_academic_html_preview(vm)
 
 
 def test_latex_compile_rejects_failed_partial_and_stale_pdf(tmp_path):
@@ -109,8 +101,8 @@ def test_photo_percent_and_brace_filenames_fail_clearly(tmp_path):
 def test_latex_qa_embedded_fixture_preserves_portrait_in_both_sources(tmp_path):
     import base64
 
-    from scripts.qa_academic_latex_layout import fixture_view_model
-    from scripts.qa_ats_docx_layout import cases
+    from scripts.qa_academic_layout import fixture_view_model
+    from scripts.qa_common import academic_docx_cases as cases
 
     case = next(case for case in cases() if case["name"] == "professional-embedded")
     portrait = tmp_path / "synthetic-portrait.png"
@@ -118,14 +110,14 @@ def test_latex_qa_embedded_fixture_preserves_portrait_in_both_sources(tmp_path):
     vm = fixture_view_model(case, portrait)
     exporter = AcademicExporter()
     assert exporter.generate_latex(vm).count(r"\includegraphics[") == 1
-    assert exporter.generate_latex_html_preview(vm).count('<img class="photo"') == 1
+    assert exporter.generate_academic_html_preview(vm).count('<img class="photo"') == 1
 
 
 def test_latex_qa_pdf_gate_rejects_missing_portrait():
     import fitz
 
-    from scripts.qa_academic_latex_layout import pdf_photo_metrics
-    from scripts.qa_modern_navy_layout import synthetic_portrait_png
+    from scripts.qa_academic_layout import pdf_photo_metrics
+    from scripts.qa_common import synthetic_portrait_png
 
     # PDF-inspection unit data, not a rendered resume or visual QA.
     with fitz.open() as pdf:

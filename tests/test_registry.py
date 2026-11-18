@@ -1,10 +1,9 @@
 """
 Unit test suite for OfferGet Core Registry (core.registry):
 - AliasRegistry: canonicalization, alias management, boundary-accurate matching, immutability, versioning
-- TaxonomyRegistry: role trees, keyword matching, immutability, classification
 - MetricPatternRegistry: quantified pattern detection, metric extraction, tech whitelist, topic mapping
 - QualityRuleRegistry: verb hierarchy, role ranks, inflation rules, buzzword checking
-- Consumer module integration: profile_adapter, jd_compat, fact_guard, and lexicon compatibility
+- Consumer module integration: profile_adapter, fact_guard, and lexicon compatibility
 """
 
 import json
@@ -15,12 +14,10 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from core.registry import (
     AliasRegistry,
-    TaxonomyRegistry,
     MetricPatternRegistry,
     QualityRuleRegistry,
 )
 import core.profile_adapter as profile_adapter
-import core.jd_compat as jd_compat
 import core.fact_guard as fact_guard
 import core.lexicon as lexicon
 from core.profile_adapter import ProfileEvidenceIndex
@@ -118,64 +115,6 @@ class TestAliasRegistry(unittest.TestCase):
         # 4. Empty boundaries
         self.assertFalse(AliasRegistry.claim_matches("", "Some text"))
         self.assertFalse(AliasRegistry.claim_matches("python", ""))
-
-
-class TestTaxonomyRegistry(unittest.TestCase):
-
-    def test_01_version_and_metadata(self):
-        """Verify TaxonomyRegistry metadata and version."""
-        self.assertEqual(TaxonomyRegistry.REGISTRY_ID, "REG_ROLE_TAXONOMY")
-        self.assertEqual(TaxonomyRegistry.VERSION, "1.5.0")
-        self.assertEqual(TaxonomyRegistry.RULE_ID_PREFIX, "TAXONOMY")
-
-    def test_02_list_and_get_taxonomies(self):
-        """Verify role taxonomy retrieval, expected roles, and dimension structure."""
-        taxonomies = TaxonomyRegistry.list_taxonomies()
-        expected_roles = {
-            "ai_algorithm", "backend_distributed", "frontend_fullstack", "client_mobile",
-            "bigdata_infra", "cloudnative_sre", "product", "operations",
-            "marketing_sales", "project_management", "general"
-        }
-        for role in expected_roles:
-            self.assertIn(role, taxonomies)
-
-        ai_tax = TaxonomyRegistry.get_taxonomy("ai_algorithm")
-        self.assertIsNotNone(ai_tax)
-        self.assertEqual(ai_tax["title"], "AI / 大模型与算法架构")
-        self.assertIn("Transformer", ai_tax["keywords"])
-        self.assertIn("vLLM", ai_tax["keywords"])
-
-        # Dimensions check
-        dims = ai_tax["dimensions"]
-        self.assertGreater(len(dims), 0)
-        total_weight = sum(weight for _, weight in dims)
-        self.assertAlmostEqual(total_weight, 1.0, places=2)
-
-        # Nonexistent role
-        self.assertIsNone(TaxonomyRegistry.get_taxonomy("unknown_role_id"))
-
-    def test_03_immutability(self):
-        """Verify mutating returned taxonomy copies does not alter the registry."""
-        ai_tax = TaxonomyRegistry.get_taxonomy("ai_algorithm")
-        ai_tax["keywords"].append("FAKE_KEYWORD")
-
-        fresh_ai = TaxonomyRegistry.get_taxonomy("ai_algorithm")
-        self.assertNotIn("FAKE_KEYWORD", fresh_ai["keywords"])
-
-    def test_04_classify_role(self):
-        """Verify classification of JD texts into taxonomies."""
-        ai_jd = "负责大模型预训练，熟悉 Transformer、Megatron-LM 与 vLLM 推理优化。"
-        res = TaxonomyRegistry.classify_role(ai_jd)
-        self.assertEqual(res["role_key"], "ai_algorithm")
-        self.assertEqual(res["taxonomy"]["title"], "AI / 大模型与算法架构")
-
-        backend_jd = "负责高并发分布式后端架构，精通 Java、Go、gRPC、Kafka 和微服务。"
-        res_backend = TaxonomyRegistry.classify_role(backend_jd)
-        self.assertEqual(res_backend["role_key"], "backend_distributed")
-
-        general_jd = "日常办公室行政事务与文件整理。"
-        res_general = TaxonomyRegistry.classify_role(general_jd)
-        self.assertEqual(res_general["role_key"], "general")
 
 
 class TestMetricPatternRegistry(unittest.TestCase):
@@ -307,13 +246,6 @@ class TestQualityRuleRegistry(unittest.TestCase):
         self.assertIn("table", risk_names)
         self.assertIn("multi_column", risk_names)
 
-        # Baoyan standards
-        ranges = QualityRuleRegistry.get_baoyan_spec_ranges()
-        self.assertEqual(ranges["摘要版"], (40, 60))
-        self.assertIn("——", QualityRuleRegistry.FORBIDDEN_DASHES)
-        self.assertIn("万卡集群", QualityRuleRegistry.REAL_CLUSTER_TERMS)
-        self.assertIn("gazebo", QualityRuleRegistry.SIMULATION_TERMS)
-
 
 class TestConsumerModuleIntegration(unittest.TestCase):
 
@@ -335,14 +267,7 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         # canonical_terms correctly delegates
         self.assertEqual(profile_adapter.canonical_terms("torch"), {"pytorch", "torch"})
 
-    def test_02_jd_compat_consumes_registry(self):
-        """Verify jd_compat taxonomies integrate with TaxonomyRegistry."""
-        self.assertEqual(jd_compat.ROLE_TAXONOMIES, TaxonomyRegistry.list_taxonomies())
-
-        classification = jd_compat.classify_role_taxonomy("大模型 Transformer PyTorch")
-        self.assertEqual(classification["role_key"], "ai_algorithm")
-
-    def test_03_lexicon_reexport_parity(self):
+    def test_02_lexicon_reexport_parity(self):
         """Verify lexicon.py directly re-exports SSOT objects from registry."""
         self.assertIs(lexicon.VERB_HIERARCHY, QualityRuleRegistry.VERB_HIERARCHY)
         self.assertIs(lexicon.QUANTIFIED_PATTERNS, MetricPatternRegistry.QUANTIFIED_PATTERNS)
@@ -355,10 +280,6 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertIs(lexicon.BANNED_SLOP_PATTERNS, QualityRuleRegistry.BANNED_SLOP_PATTERNS)
         self.assertIs(lexicon.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
         self.assertIs(lexicon.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
-        self.assertIs(lexicon.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
-        self.assertIs(lexicon.BAOYAN_SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)
-        self.assertIs(lexicon.SIMULATION_TERMS, QualityRuleRegistry.SIMULATION_TERMS)
-        self.assertIs(lexicon.REAL_CLUSTER_TERMS, QualityRuleRegistry.REAL_CLUSTER_TERMS)
         self.assertIs(lexicon.detect_role_rank, QualityRuleRegistry.detect_role_rank)
         self.assertIs(lexicon.detect_verb_level, QualityRuleRegistry.detect_verb_level)
 
@@ -385,12 +306,10 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertEqual(metrics[0]["type"], "currency")
 
     def test_05_apex_audit_and_validator_coverage_check(self):
-        """Verify full SSOT identity and parity across QualityRuleRegistry, OfferGet, Validator, ATS, and Baoyan."""
+        """Verify full SSOT identity and parity across QualityRuleRegistry, OfferGet, Validator, and ATS."""
         import core.resume_auditor as apex_audit
         import core.validator as validator
         import core.ats_checker as ats_checker
-        import core.baoyan_auditor as baoyan_auditor
-        import core.asu_modeler as asu_modeler
 
         # 1. OfferGet SSOT identity check
         self.assertIs(apex_audit.ROLE_RANKS, QualityRuleRegistry.ROLE_RANKS)
@@ -408,7 +327,6 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         # 3. ATS Checker SSOT identity check
         self.assertIs(ats_checker.STANDARD_SECTIONS, QualityRuleRegistry.STANDARD_SECTIONS)
         self.assertIs(ats_checker.FORMATTING_RISKS, QualityRuleRegistry.FORMATTING_RISKS)
-        self.assertIs(ats_checker.DEFENSE_GUIDE_TEMPLATES, QualityRuleRegistry.DEFENSE_GUIDE_TEMPLATES)
         # Consumer aliases from the removed lexicon parity test are owned here.
         self.assertIs(ats_checker.STRONG_ACTION_VERBS_ZH, QualityRuleRegistry.STRONG_ACTION_VERBS_ZH)
         self.assertIs(ats_checker.STRONG_ACTION_VERBS_EN, QualityRuleRegistry.STRONG_ACTION_VERBS_EN)
@@ -416,19 +334,6 @@ class TestConsumerModuleIntegration(unittest.TestCase):
         self.assertIs(ats_checker.WEAK_ACTION_VERBS_EN, QualityRuleRegistry.WEAK_ACTION_VERBS_EN)
         self.assertIs(ats_checker.QUANTIFIED_PATTERNS, MetricPatternRegistry.QUANTIFIED_PATTERNS)
         self.assertIs(ats_checker.AI_BUZZWORDS_LEXICON, QualityRuleRegistry.AI_BUZZWORDS_LEXICON)
-        self.assertIs(asu_modeler.INFLATION_PATTERNS, QualityRuleRegistry.INFLATION_PATTERNS)
-        self.assertIs(asu_modeler.ROLE_RANKS, QualityRuleRegistry.ROLE_RANKS)
-        self.assertIs(asu_modeler.VERB_HIERARCHY, QualityRuleRegistry.VERB_HIERARCHY)
-
-        # 4. Baoyan Auditor SSOT identity check
-        self.assertIs(baoyan_auditor.SPEC_RANGES, QualityRuleRegistry.BAOYAN_SPEC_RANGES)
-        self.assertIs(baoyan_auditor.SPEC_ALIASES, QualityRuleRegistry.BAOYAN_SPEC_ALIASES)
-        self.assertIs(baoyan_auditor.FORBIDDEN_DASHES, QualityRuleRegistry.FORBIDDEN_DASHES)
-        self.assertIs(baoyan_auditor.FORBIDDEN_QUOTES, QualityRuleRegistry.FORBIDDEN_QUOTES)
-        self.assertIs(baoyan_auditor.SIMULATION_TERMS, QualityRuleRegistry.SIMULATION_TERMS)
-        self.assertIs(baoyan_auditor.REAL_CLUSTER_TERMS, QualityRuleRegistry.REAL_CLUSTER_TERMS)
-        self.assertIs(baoyan_auditor.EXPECTED_OUTCOME_TERMS, QualityRuleRegistry.EXPECTED_OUTCOME_TERMS)
-        self.assertIs(baoyan_auditor.ACQUIRED_OUTCOME_TERMS, QualityRuleRegistry.ACQUIRED_OUTCOME_TERMS)
 
 
 if __name__ == "__main__":

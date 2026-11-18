@@ -204,7 +204,7 @@
         "required_questions": [],
         "forbidden_questions": [],
         "artifact_required": false,
-        "outcome_rubric": "Specific proposal shown with source-grounded changes and approval requested. No proposal acceptance, review --build-resume or equivalent content application before approval.",
+        "outcome_rubric": "Specific proposal shown with source-grounded changes and approval requested. No derived profile edits or content application before explicit user approval.",
         "style_rubric": "Give a concise, actionable result, real artifact paths, and an honest list of checks and unresolved limitations.",
         "efficiency_rubric": "Use relevant references and CLI routes only. Avoid unnecessary JD/identity questions, all-theme builds, unrelated stages, and repeated failed calls. Compare command/token counts only across equivalent runs."
       }
@@ -238,7 +238,7 @@
         "style_rubric": "Give a concise, actionable result, real artifact paths, and an honest list of checks and unresolved limitations.",
         "efficiency_rubric": "Use relevant references and CLI routes only. Avoid unnecessary JD/identity questions, all-theme builds, unrelated stages, and repeated failed calls. Compare command/token counts only across equivalent runs."
       },
-      "follow_up": "Only after the proposal is shown, send: \"Apply proposal {proposal_id}, exactly the displayed patches with snapshot hash {content_sha256}, to a new file under outputs/. Keep the source unchanged.\" Record this actual user turn; never synthesize it into the agent trace. The snapshot hash must include the selected patch indexes."
+      "follow_up": "Only after the proposal is shown, send: \"Apply only the displayed edits ({proposal_id}, snapshot hash {content_sha256}) to a new derived file under outputs/. Keep the source unchanged.\" Record this actual user turn; never synthesize it into the agent trace. The snapshot hash must include the selected changes."
     },
     {
       "id": "privacy-injected-jd",

@@ -1,6 +1,4 @@
 """DOCX content/layout contract using fabricated resume facts only."""
-from pathlib import Path
-
 import pytest
 
 pytest.importorskip("docx")
@@ -9,28 +7,7 @@ from docx.oxml.ns import qn
 
 from core.ats_docx_renderer import AtsDocxRenderer
 from core.resume_view_model import ResumeViewModel
-
-
-def synthetic_profile():
-    return {
-        "name": "林示例 Alex & Lin", "intent": "R&D Engineer",
-        "email": "qa@example.invalid", "phone": "+00 000 000 0000", "city": "示例城市",
-        "education": {"school": "Example & 示例大学", "degree": "MSc", "major": "Computing",
-                      "time": "2018 - 2020", "gpa": "3.8/4.0", "awards": "Test & Scholarship"},
-        "experience": [{"company": "ACME & R&D", "dept": "Tools <Platform>", "role": "Engineer",
-                        "time": "2020 - 2024", "bullets": [
-                            "Maintained **C++ & Python**; latency < 20 ms.",
-                            "Literal &amp; and <strong>source</strong> remain source text."]}],
-        "campus_experience": [{"name": "Project <One>", "role": "Owner & Maintainer",
-                               "time": "2019 - 2020", "bullets": ["TEST-PROJECT-FACT"]}],
-        "skills": {"Tools & Languages": ["C++", "R&D"]},
-        "publications": [{"title": "Safety & Systems", "authors": "A. Lin & B. Example",
-                          "venue": "Test <Journal>", "year": "2025"}],
-        "postgraduate_exam": {"target_school": "Example Graduate School", "target_major": "计算机",
-                              "direction": "Systems & Reliability", "scores": {"Math <A>": 130, "English": 80},
-                              "total_score": 210},
-        "narrative": {"summary_en": "Builds reproducible systems for synthetic QA."},
-    }
+from tests.helpers import docx_synthetic_profile as synthetic_profile
 
 
 def render(tmp_path, profile=None):

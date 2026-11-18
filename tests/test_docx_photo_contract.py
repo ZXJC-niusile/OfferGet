@@ -4,7 +4,6 @@ import copy
 import io
 import json
 import zipfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -17,8 +16,7 @@ from core.resume_builder import ResumeBuilder
 from core.resume_photo import image_to_base64_data_uri, photo_data_uri_to_png
 from core.resume_view_model import ResumeViewModel
 from presentation.commands.resume_cmd import cmd_resume_build
-from tests.test_ats_docx_design import synthetic_profile
-from tests.test_resume_photo_contract import portrait  # one shared synthetic illustration
+from tests.helpers import docx_synthetic_profile as synthetic_profile
 
 
 def text_runs(doc):

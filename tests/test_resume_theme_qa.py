@@ -55,8 +55,9 @@ def test_theme_source_preserves_facts_styles_and_photo_modes(theme, case, tmp_pa
         r"<style>.*?</style>", "", template, flags=re.DOTALL))
     assert case == original
     assert re.search(r"<title>(.*?)</title>", template).group(1) in html
-    assert text_content(html) == text_content(bare)
-    assert case["profile"]["name"] in html
+    rendered_text = text_content(html)
+    assert rendered_text == text_content(bare)
+    assert case["profile"]["name"] in rendered_text
     assert case["profile"]["email"] in html
     assert "{{" not in html
     assert validate_output_security(html, format_type="html") == []
@@ -100,6 +101,8 @@ def test_changed_themes_selects_changed_files_and_shared_regression_coverage():
     assert changed_themes(["themes/modern-corporate.html", "themes/classic-tech.html"]) == [
         "classic-tech", "modern-corporate"]
     assert changed_themes(["themes/modern-corporate.html", "scripts/qa_modern_navy_layout.py"]) == [
+        "modern-navy", "modern-corporate"]
+    assert changed_themes(["themes/modern-corporate.html", "scripts/qa_common.py"]) == [
         "modern-navy", "modern-corporate"]
     workflow = (ROOT / ".github/workflows/resume-visual.yml").read_text(encoding="utf-8")
     for source in ("core/resume_view_model.py", "core/profile_adapter.py", "core/resume_photo.py",

@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import hashlib
-from pathlib import Path
 
-from scripts.qa_common import build_source_manifest, squash
+from scripts.qa_common import (
+    academic_docx_cases,
+    build_source_manifest,
+    expected_profile_text,
+    fixtures,
+    squash,
+    synthetic_photo,
+    text_content,
+)
 
 
 def test_squash_handles_whitespace_and_empty():
@@ -38,3 +45,12 @@ def test_build_source_manifest_computes_sha256_and_git_blob_sha1(tmp_path):
 
     assert manifest["sample.py"]["sha256"] == expected_sha256
     assert manifest["sample.py"]["git_blob_sha1"] == expected_blob_sha1
+
+
+def test_shared_fixtures_and_text_helpers_are_available_from_qa_common():
+    assert len(fixtures()) == 26
+    assert any(case["name"] == "exam-publications" for case in academic_docx_cases())
+    assert synthetic_photo().startswith("data:image/png;base64,")
+    assert text_content("<html><body><p>Hello   QA</p></body></html>") == "Hello QA"
+    anchors = expected_profile_text({"name": "Synthetic", "experience": [{"bullets": ["Fact one"]}]})
+    assert "Synthetic" in anchors and "Factone" in anchors

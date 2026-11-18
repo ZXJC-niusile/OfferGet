@@ -272,13 +272,12 @@ def test_safe_save_locked_mocked_winerror_32(tmp_path: Path):
     assert res.final_path.read_bytes() == b"new-content-under-lock"
     assert "[WinError 32]" in res.notice
 
-    from core.report_generator import generate_report
-    template = tmp_path / "report-template.html"
-    template.write_text("<h1>New report</h1>", encoding="utf-8")
+    import json
+    from core.artifacts import write_json_atomic
     with patch("os.replace", side_effect=mock_replace):
-        actual = Path(generate_report({}, {}, template_path=template, output_path=dest))
+        actual = Path(write_json_atomic({"report": "New report"}, dest, allow_shadow=True))
     assert actual != dest.resolve()
-    assert actual.read_text(encoding="utf-8") == "<h1>New report</h1>"
+    assert json.loads(actual.read_text(encoding="utf-8")) == {"report": "New report"}
     assert dest.read_bytes() == b"initial"
 
 
@@ -307,14 +306,11 @@ def test_safe_save_locked_no_shadow_allowed(tmp_path: Path):
     assert "未允许影子副本" in res.notice
     assert res.error_message is not None
 
-    from core.job_flow import save_review_session
     from core.artifacts import write_json_atomic
-    for save in (lambda: save_review_session({"status": "new"}, dest),
-                 lambda: write_json_atomic({"answers": []}, dest, allow_shadow=False)):
-        with patch("os.replace", side_effect=mock_replace), pytest.raises(OSError):
-            save()
-        assert dest.read_bytes() == b"initial"
-        assert not list(tmp_path.glob("*_shadow_*"))
+    with patch("os.replace", side_effect=mock_replace), pytest.raises(OSError):
+        write_json_atomic({"answers": []}, dest, allow_shadow=False)
+    assert dest.read_bytes() == b"initial"
+    assert not list(tmp_path.glob("*_shadow_*"))
 
 
 # ---------------------------------------------------------------------------

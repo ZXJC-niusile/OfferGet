@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import unicodedata
 import re
 from pathlib import Path
@@ -27,13 +28,144 @@ from core.registry import (
     AliasRegistry,
     MetricPatternRegistry,
     QualityRuleRegistry,
-    TaxonomyRegistry,
 )
 
 NON_METRIC_TECH_PATTERNS = MetricPatternRegistry.NON_METRIC_TECH_PATTERNS
 INFLATION_PATTERNS = QualityRuleRegistry.INFLATION_PATTERNS
 FORBIDDEN_BUZZWORDS = QualityRuleRegistry.FORBIDDEN_BUZZWORDS
 METRIC_TYPE_TO_TOPICS: Dict[str, Set[str]] = MetricPatternRegistry.METRIC_TYPE_TO_TOPICS
+
+_INCREASE_VERBS = {"提升", "提高", "增长", "增加"}
+_DECREASE_VERBS = {"降低", "减少", "缩短", "下降"}
+_CHANGE_SPAN_RE = re.compile(
+    r"(?:从|由)\s*(\d+(?:\.\d+)?)\s*(%|％|[a-zA-Z]+)?\s*"
+    r"(?:提升至|优化至|增长至|增至|提高至|上升至|降至|降低至|优化到|减少到|缩短至|缩短到|降到|增长到|增加到|提高到|变更为|->|→)\s*"
+    r"(\d+(?:\.\d+)?)\s*(%|％|[a-zA-Z]+)?"
+)
+_DIFF_CLAIM_RE = re.compile(
+    r"(提升|提高|增长|增加|降低|减少|缩短|下降)\s*(?:了)?\s*(\d+(?:\.\d+)?)\s*(%|％|个?百分点)"
+)
+_SLASH_RATIO_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:/|／)\s*(\d+(?:\.\d+)?)")
+_ZH_SUBSET_RATIO_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(?:项|条|个|例|次|份|组|轮)中(?:有|占|包含|共)?\s*(\d+(?:\.\d+)?)"
+)
+_RATIO_CUE_RE = re.compile(r"(?:占比|比例|完成率|通过率|覆盖率|转化率|命中率|准确率|成功率|达标率|比例为|中(?:有|占|包含))")
+_RATIO_SKIP_PREFIX_RE = re.compile(r"(?:GPA|绩点|满分|排|TOP|第)\s*$", re.I)
+_PLAIN_PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(?:%|％)")
+_CLAUSE_BREAK_RE = re.compile(r"[，,：:\s\(\)（）\[\]【】]+")
+_CONNECTOR_WORDS_RE = re.compile(
+    r"^(?:并|并且|且|从而|因此|同时|进而|最终|相当于|即|约|共|合计|总计|累计|同比|环比|分别|使|让|令|把|将|其|使其|的|了|\s)+|"
+    r"(?:的|了|\s)+$"
+)
+_METRIC_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_+-]*|[\u4e00-\u9fff]{2,}")
+
+
+def _same_metric_context(clause: str, cm: re.Match, dm: re.Match) -> bool:
+    """Only link a baseline->result span to a change claim if both refer to the same metric."""
+    between = clause[cm.end():dm.start()]
+    if re.search(r"\d", between):
+        return False
+    tail = re.split(r"[，,]", between)[-1].strip() if re.search(r"[，,]", between) else between.strip()
+    residual = _CONNECTOR_WORDS_RE.sub("", _CLAUSE_BREAK_RE.sub(" ", tail)).strip()
+    if not residual:
+        return True
+    cm_start_seg = re.split(r"[，,：:]", clause[:cm.start()])[-1]
+    cm_tokens = {tok.lower() for tok in _METRIC_TOKEN_RE.findall(cm_start_seg)}
+    dm_tokens = {tok.lower() for tok in _METRIC_TOKEN_RE.findall(residual)}
+    if not dm_tokens:
+        return True
+    return all(any(tok in base_tok or base_tok in tok for base_tok in cm_tokens) for tok in dm_tokens)
+
+
+def _check_bullet_arithmetic_consistency(bullet: str) -> List[Dict[str, Any]]:
+    """Recalculate explicit ratios and baseline-to-result changes inside bullet prose."""
+    findings: List[Dict[str, Any]] = []
+    for clause in re.split(r"[。；;\n]+", bullet):
+        clause = clause.strip()
+        if not clause:
+            continue
+        change_matches = list(_CHANGE_SPAN_RE.finditer(clause))
+        diff_matches = list(_DIFF_CLAIM_RE.finditer(clause))
+        covered_spans: List[Tuple[int, int]] = []
+
+        for idx, cm in enumerate(change_matches):
+            next_start = change_matches[idx + 1].start() if idx + 1 < len(change_matches) else len(clause)
+            dm = next(
+                (d for d in diff_matches if cm.end() <= d.start() < next_start and _same_metric_context(clause, cm, d)),
+                None,
+            )
+            if dm is None:
+                continue
+            covered_spans.extend([cm.span(), dm.span()])
+            from_unit = (cm.group(2) or "").lower()
+            to_unit = (cm.group(4) or "").lower()
+            if from_unit and to_unit and from_unit != to_unit:
+                continue
+            base, res = float(cm.group(1)), float(cm.group(3))
+            diff_verb, disp, unit = dm.group(1), float(dm.group(2)), dm.group(3)
+            snippet = clause[cm.start():dm.end()]
+            if res > base and diff_verb in _DECREASE_VERBS:
+                findings.append({"claimed": snippet, "reason": f"变化方向矛盾：从 {base:g} 上升至 {res:g} 却声称{diff_verb} {disp:g}{unit}"})
+                continue
+            if res < base and diff_verb in _INCREASE_VERBS:
+                findings.append({"claimed": snippet, "reason": f"变化方向矛盾：从 {base:g} 下降至 {res:g} 却声称{diff_verb} {disp:g}{unit}"})
+                continue
+            if "百分点" in unit:
+                expected = abs(res - base)
+                if not math.isclose(expected, disp, abs_tol=0.5):
+                    findings.append({"claimed": snippet, "reason": f"百分点变化不一致：从 {base:g} 到 {res:g} 应为 {expected:.1f} 个百分点，而非 {disp:g} 个百分点"})
+            else:
+                if base == 0:
+                    findings.append({"claimed": snippet, "reason": "相对百分比变化的 baseline 不能为 0"})
+                    continue
+                expected = abs(res - base) / abs(base) * 100.0
+                if not math.isclose(expected, disp, abs_tol=0.5):
+                    findings.append({"claimed": snippet, "reason": f"相对变化百分比不一致：从 {base:g} 到 {res:g} 应为 {expected:.1f}%，而非 {disp:g}%"})
+
+        has_ratio_cue = bool(_RATIO_CUE_RE.search(clause))
+        pct_tokens = [
+            (pm, float(pm.group(1)))
+            for pm in _PLAIN_PCT_RE.finditer(clause)
+            if not any(s <= pm.start() < e for s, e in covered_spans)
+        ]
+        ratio_candidates = [
+            (rm, float(rm.group(2)), float(rm.group(1)), False)
+            for rm in _ZH_SUBSET_RATIO_RE.finditer(clause)
+        ] + [
+            (rm, float(rm.group(1)), float(rm.group(2)), True)
+            for rm in _SLASH_RATIO_RE.finditer(clause)
+        ]
+        for rm, num, den, is_slash in ratio_candidates:
+            if any(s <= rm.start() < e for s, e in covered_spans):
+                continue
+            prefix = clause[max(0, rm.start() - 16):rm.start()]
+            if _RATIO_SKIP_PREFIX_RE.search(prefix):
+                continue
+            if is_slash and "." not in rm.group(1) and "." not in rm.group(2) and 1990 <= num <= 2035 and 1 <= den <= 12:
+                continue
+            if den == 0:
+                if has_ratio_cue or pct_tokens:
+                    findings.append({"claimed": rm.group(0), "reason": "比率分母不能为 0"})
+                continue
+            if not has_ratio_cue or not pct_tokens:
+                continue
+            target_pct: Optional[float] = None
+            if len(pct_tokens) == 1:
+                target_pct = pct_tokens[0][1]
+            else:
+                # In multi-percentage clauses, match the percentage inside rm's phrase or its immediate ratio sub-clause.
+                tail = clause[rm.end():]
+                for seg_idx, seg in enumerate(re.split(r"[，,]", tail)[:2]):
+                    seg_pcts = [float(pm.group(1)) for pm in _PLAIN_PCT_RE.finditer(seg)]
+                    if len(seg_pcts) == 1 and (seg_idx == 0 or _RATIO_CUE_RE.search(seg)):
+                        target_pct = seg_pcts[0]
+                        break
+            if target_pct is not None:
+                expected = (num / den) * 100.0
+                if not math.isclose(expected, target_pct, abs_tol=0.5):
+                    findings.append({"claimed": f"{rm.group(0)} ({target_pct:g}%)", "reason": f"百分比与分子分母不一致：{num:g}/{den:g} 应为 {expected:.1f}%，而非 {target_pct:g}%"})
+
+    return findings
 
 
 def _build_known_tech_terms() -> Set[str]:
@@ -46,19 +178,11 @@ def _build_known_tech_terms() -> Set[str]:
         for a in aliases:
             terms.add(a.lower())
 
-    # 2. Keywords from technical engineering role taxonomies in TaxonomyRegistry
-    tech_roles = {
-        "ai_algorithm", "backend_distributed", "frontend_fullstack",
-        "client_mobile", "bigdata_infra", "cloudnative_sre"
-    }
-    for role_id in tech_roles:
-        tax = TaxonomyRegistry.get_taxonomy(role_id)
-        if tax:
-            for kw in tax.get("keywords", []):
-                terms.add(kw.lower())
-
-    # 3. Additional prominent frameworks, databases, libraries, tools
+    # 2. Prominent frameworks, architectures, databases, libraries, tools
     extra_techs = [
+        "transformer", "moe", "megatron", "rag", "agent",
+        "grpc", "微服务", "分布式事务", "ddd", "web vitals", "ssr", "bff",
+        "ios", "android", "flutter", "anr", "quic", "数据血缘", "finops",
         "tensorflow", "jax", "mxnet", "onnx", "tensorrt", "tensorrt-llm", "sglang",
         "openvino", "tvm", "ray", "nccl", "mpi", "gloo", "deepspeed", "megatron-lm", "vllm",
         "langchain", "llamaindex", "langgraph", "autogpt", "crewai",
@@ -590,6 +714,25 @@ class FactVerificationGuard:
         self.baseline_anchors.append(anchor)
         self.all_verified_numbers.add(baseline_value)
 
+    @staticmethod
+    def _extract_local_clause_tokens(text: str, start: int, end: int) -> Set[str]:
+        """Extract ASCII words and 2-char Hanzi bigrams from the metric's immediate sub-clause."""
+        sep_re = re.compile(r"[。；;!?\n，,、]|(?<!\d)[.](?!\d)")
+        left = 0
+        for sep in sep_re.finditer(text[:start]):
+            left = sep.end()
+        right_match = sep_re.search(text, end)
+        right = right_match.start() if right_match else len(text)
+        sub_clean = re.sub(r"\d+(?:\.\d+)?\s*(?:%|％)?", " ", text[left:right]).lower()
+        tokens: Set[str] = {tok for tok in re.findall(r"[a-z][a-z0-9_+-]+", sub_clean) if len(tok) > 1}
+        for run in re.findall(r"[\u4e00-\u9fff]+", sub_clean):
+            if len(run) == 1:
+                tokens.add(run)
+            else:
+                for idx in range(len(run) - 1):
+                    tokens.add(run[idx : idx + 2])
+        return tokens
+
     def _extract_and_index_text_metrics(
         self, text: str, source_id: str, extra_keywords: Optional[Set[str]] = None
     ) -> None:
@@ -607,10 +750,14 @@ class FactVerificationGuard:
                     self.all_verified_numbers.add(m["value"] * 10000.0)
                 elif "亿" in unit_l:
                     self.all_verified_numbers.add(m["value"] * 100000000.0)
+            local_tokens = self._extract_local_clause_tokens(
+                text, m.get("start", 0), m.get("end", len(text))
+            )
             self.baseline_anchors.append({
                 "anchor_id": f"{source_id}:{m['raw']}",
                 "topic": m.get("type", "generic"),
                 "keywords": list(kw),
+                "local_tokens": local_tokens,
                 "baseline_value": m["value"],
                 "baseline_raw": m["raw"],
                 "unit": m.get("unit", ""),
@@ -1394,25 +1541,6 @@ class FactVerificationGuard:
             }
         }
 
-    def verify_role_hierarchy(self, claimed_role: str, baseline_role: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """
-        Verifies whether a claimed job/project role title suffers from title inflation,
-        tier escalation, or domain drift relative to the baseline role.
-        """
-        if not baseline_role:
-            return None
-        return QualityRuleRegistry.check_role_escalation(claimed_role, baseline_role)
-
-    def verify_metric_scope(self, claimed_text: str, baseline_text: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Verifies whether quantified metrics in claimed_text suffer from scope drift,
-        entity substitution, ungrounded currency conversion, or unanchored denominators
-        relative to baseline_text.
-        """
-        if baseline_text is None:
-            baseline_text = getattr(self, "profile_all_text", "")
-        return QualityRuleRegistry.check_metric_scope_drift(claimed_text, baseline_text)
-
     def verify_bullet(
         self,
         bullet: str,
@@ -1532,6 +1660,15 @@ class FactVerificationGuard:
                     "rule_id": s.get("rule_id", "SCOPE_DRIFT"),
                     "fix_suggestion": s.get("fix_suggestion", "")
                 })
+
+        # 4. Internal metric recalculation consistency (ratio vs %, baseline->result change vs %)
+        for item in _check_bullet_arithmetic_consistency(bullet):
+            bullet_drifts.append({
+                "bullet": bullet,
+                "claimed_metric": item["claimed"],
+                "verified_baseline": item["reason"],
+                "metric_type": "METRIC_ARITHMETIC_INCONSISTENCY",
+            })
 
         return bullet_drifts, bullet_unverified
 
@@ -1714,6 +1851,7 @@ class FactVerificationGuard:
         # Extract local context around metric
         start = metric.get("start", 0)
         end = metric.get("end", len(bullet_text))
+        claimed_local_tokens = self._extract_local_clause_tokens(bullet_text, start, end)
         window_start = max(0, start - 30)
         window_end = min(len(bullet_text), end + 30)
         local_window = bullet_text[window_start:window_end].lower()
@@ -1726,7 +1864,7 @@ class FactVerificationGuard:
         is_after_context = bool(re.search(r"(?:至|到|压减至|优化至|提升至|达到|下降至|boost|to)\s*$", prefix_window))
 
         best_anchor = None
-        best_score = 0
+        best_rank: Tuple[int, int] = (0, -1)
 
         for anchor in self.baseline_anchors:
             topic = anchor.get("topic", "")
@@ -1844,11 +1982,16 @@ class FactVerificationGuard:
             if metric.get("unit") and metric.get("unit") == anchor.get("unit"):
                 score += 3
 
-            if score > best_score:
-                best_score = score
+            # Disambiguate equal-scoring sibling anchors by immediate sub-clause token overlap
+            # without letting narrative anchors outscore higher-ranked structured anchors.
+            anchor_local = anchor.get("local_tokens")
+            local_overlap = len(anchor_local & claimed_local_tokens) if anchor_local and claimed_local_tokens else 0
+            rank = (score, local_overlap)
+            if rank > best_rank:
+                best_rank = rank
                 best_anchor = anchor
 
-        return best_anchor if best_score >= 3 else None
+        return best_anchor if best_rank[0] >= 3 else None
 
     def _check_metric_drift(
         self, claimed_metric: Dict[str, Any], anchor: Dict[str, Any]
@@ -1999,61 +2142,6 @@ class FactVerificationGuard:
 
         return bullets
 
-    def audit_claims(
-        self,
-        tailored_text_or_dict: Union[str, dict, list],
-        subject_name: Optional[str] = None,
-    ) -> Any:
-        """
-        Audits resume text or dictionary into a schema-compliant typed AuditReport.
-        Reuses existing SSOT profile / ProfileContext without secondary normalization.
-        """
-        from core.evidence.auditor import EvidenceAuditor
-
-        auditor = EvidenceAuditor(self.profile_context or self.evidence_index or self.master_profile)
-        return auditor.audit(tailored_text_or_dict, subject_name=subject_name)
-
-    def generate_audit_report(
-        self,
-        tailored_text_or_dict: Union[str, dict, list],
-        subject_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Audits resume text or dictionary and returns a JSON-serializable report dictionary
-        strictly complying with OfferGet report schema.
-        """
-        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
-        return report.to_dict()
-
-    def generate_audit_report_html(
-        self,
-        tailored_text_or_dict: Union[str, dict, list],
-        subject_name: Optional[str] = None,
-        template_path: Optional[Union[str, Path]] = None,
-    ) -> str:
-        """
-        Audits resume text or dictionary and returns an interactive, styled HTML audit report string.
-        """
-        from core.evidence.report_renderer import render_audit_report_html
-
-        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
-        return render_audit_report_html(report, template_path=template_path)
-
-    def save_audit_report_html(
-        self,
-        tailored_text_or_dict: Union[str, dict, list],
-        output_path: Union[str, Path],
-        subject_name: Optional[str] = None,
-        template_path: Optional[Union[str, Path]] = None,
-    ) -> Path:
-        """
-        Audits resume text or dictionary, renders HTML, and saves to output_path.
-        """
-        from core.evidence.report_renderer import save_audit_report_html
-
-        report = self.audit_claims(tailored_text_or_dict, subject_name=subject_name)
-        return save_audit_report_html(report, output_path=output_path, template_path=template_path)
-
 
 # ---------------------------------------------------------------------------
 # Top-Level Convenience Functions
@@ -2086,23 +2174,3 @@ def verify_resume_facts(
         target_claim_id=target_claim_id,
         target_excerpt=target_excerpt,
     )
-
-
-def audit_resume_evidence(
-    tailored_text_or_dict: Union[str, dict, list],
-    master_profile: Union[dict, str, Path, Any],
-    subject_name: Optional[str] = None,
-) -> dict:
-    """
-    Convenience function to generate a schema-compliant evidence audit report.
-
-    Args:
-        tailored_text_or_dict: Resume text, list of bullets, or resume profile dictionary.
-        master_profile: SSOT candidate_profile.json dictionary or filepath.
-        subject_name: Optional subject candidate name.
-
-    Returns:
-        dict with OfferGet schema-compliant audit report.
-    """
-    guard = FactVerificationGuard(master_profile)
-    return guard.generate_audit_report(tailored_text_or_dict, subject_name=subject_name)

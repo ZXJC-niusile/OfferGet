@@ -321,7 +321,6 @@ class ResumeBuilder:
 
     def _verify_build_facts(self, baseline, profile):
         """Reuse content checks within this builder; layout remains theme-specific."""
-        from core.fingerprints import content_fingerprint
         from core.fact_guard import FactVerificationGuard
 
         key = content_fingerprint({"baseline": baseline, "profile": profile})
@@ -579,6 +578,15 @@ class ResumeBuilder:
 
         return {"md": actual_md_path, "html": actual_html_path, "pdf": Path(pdf_path)}
 
+    def _prepare_academic_build(self, output_dir, photo, photo_path, anonymize):
+        prof = self._resolve_profile(anonymize)
+        eff_photo_path = photo_path or self.photo_path
+        self._privacy_diff_ledger(False, output_dir, anonymize)
+        out_dir = self._resolve_output_dir(output_dir)
+
+        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
+        return out_dir, vm
+
     def build_academic_latex(
         self,
         output_dir: Optional[Union[str, Path]] = None,
@@ -595,12 +603,7 @@ class ResumeBuilder:
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds academic LaTeX resume, standalone HTML twin, and PDF."""
-        prof = self._resolve_profile(anonymize)
-        eff_photo_path = photo_path or self.photo_path
-        self._privacy_diff_ledger(False, output_dir, anonymize)
-        out_dir = self._resolve_output_dir(output_dir)
-
-        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
+        out_dir, vm = self._prepare_academic_build(output_dir, photo, photo_path, anonymize)
 
         tex_src = self.academic_exporter.generate_latex(
             vm,
@@ -610,7 +613,7 @@ class ResumeBuilder:
         tex_path = out_dir / "resume_academic_latex.tex"
         actual_tex_path = Path(write_text_atomic(tex_src, tex_path))
 
-        html_src = self.academic_exporter.generate_latex_html_preview(
+        html_src = self.academic_exporter.generate_academic_html_preview(
             vm,
             photo_size=photo_size,
             photo_width=photo_width,
@@ -659,12 +662,7 @@ class ResumeBuilder:
         **kwargs,
     ) -> Dict[str, Path]:
         """Builds modern academic Typst resume and compiles to PDF."""
-        prof = self._resolve_profile(anonymize)
-        eff_photo_path = photo_path or self.photo_path
-        self._privacy_diff_ledger(False, output_dir, anonymize)
-        out_dir = self._resolve_output_dir(output_dir)
-
-        vm = self._get_view_model(profile=prof, photo_path=eff_photo_path, reserve_photo=photo)
+        out_dir, vm = self._prepare_academic_build(output_dir, photo, photo_path, anonymize)
         photo_reference = None
         if vm.photo_path:
             import shutil
@@ -683,7 +681,7 @@ class ResumeBuilder:
 
         actual_html_path: Optional[Path] = None
         if not compiled or not Path(actual_compiled_pdf).exists():
-            html_src = self.academic_exporter.generate_latex_html_preview(
+            html_src = self.academic_exporter.generate_academic_html_preview(
                 vm,
                 lang="zh",
             )
@@ -894,31 +892,6 @@ class ResumeBuilder:
                 **kwargs,
             )
         return results
-
-    def export_review_resume(self, theme, output_dir, *, photo=True, existing_names_only=False):
-        """Export a review result and maintain its human-readable copies once."""
-        import re
-        from core.atomic_writer import safe_save_file
-
-        if theme == "all":
-            files = {name: {kind: str(path) for kind, path in paths.items()}
-                     for name, paths in self.build_all(output_dir=output_dir, photo=photo).items()}
-            generated = {"files": files, **files.get("modern-navy", {})}
-        else:
-            generated = {kind: str(path) for kind, path in
-                         self.build_theme(theme, output_dir=output_dir, photo=photo).items()}
-        profile = self.profile
-        candidate = profile.get("candidate", {})
-        name = candidate.get("name") or profile.get("name") or "候选人"
-        name = re.sub(r'[\\/:*?"<>|]', "_", str(name).strip()) or "个人"
-        for kind in ("pdf", "html"):
-            named = Path(output_dir) / f"{name}_个人简历.{kind}"
-            if generated.get(kind) and (not existing_names_only or named.is_file()):
-                saved = safe_save_file(named, Path(generated[kind]).read_bytes())
-                if not saved.success:
-                    raise OSError(saved.error_message)
-                generated[f"named_{kind}"] = str(saved.final_path)
-        return {**generated, "theme": theme, "output_dir": str(output_dir)}
 
     def audit_resume_quality(self, html_path: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
         """Audits generated resume HTML quality, layout health, security, and completeness."""

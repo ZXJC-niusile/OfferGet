@@ -1,186 +1,84 @@
 # OfferGet task workflows
 
-Run from the repository root containing `cli.py`. Replace example paths with the
-user's supplied paths; all shell paths below are quoted. A route is a bounded task,
-not a mandatory stage in a larger funnel.
+Run commands from the repository root containing `cli.py`. Replace placeholder paths
+with the user's paths and quote paths containing spaces. Each route is independent; do
+not force unrelated stages.
 
-## Format/export an existing resume
+## 1. Organize materials
 
-Input: a JSON profile or Markdown/text resume. Optional: theme, output format,
-page count, photo, language. Keep the source unchanged.
+Input: raw notes, old resumes (`.md`, `.txt`, `.docx`, `.html`, `.pdf`, `.json`),
+BibTeX citations (`.bib`), or supporting design/postmortem notes. Keep source files unchanged.
+
+```bash
+python cli.py profile parse "/path/to/resume.md" --output "/path/to/output/profile.json"
+# After reviewing parsed sections, warnings, and unclassified lines against sources:
+python cli.py profile parse "/path/to/output/profile.json" --confirm-parsed --output "/path/to/output/reviewed-profile.json"
+```
+
+- `--confirm-parsed` records that you inspected the parse report; it is not external fact verification.
+- Supporting project notes, postmortems, or private design docs can be searched locally without exposing them to public exports:
+
+```bash
+python cli.py profile refs --docs "/path/to/notes" --query "architecture QPS" --json
+```
+
+- Hits from `profile refs` carry `visibility: "reference-only"`. Use them to ask targeted follow-up questions or check claims; never copy unapproved `reference-only` text directly into a public resume.
+- For academic CVs, keep exact author order, candidate-name highlighting, publication status (`published`, `accepted`, `under_review`, `submitted`), and supplied `url` links intact. `.bib` files can also be parsed via `profile parse`.
+
+## 2. Format/export an existing resume
+
+Input: a reviewed JSON profile or `.md`/`.txt`/`.docx`/`.html`/`.pdf` resume (PDF text extraction requires `pypdf` or `PyMuPDF`). No JD is required. Keep the source unchanged.
 
 ### Disclosure preflight before every export
 
-Profile-based exports reject any visibility value other than `always` (a string or
-nonempty list). They cannot infer variant selection or disclosure approval. Before
-building, inspect the source and derived profile, including nested fields and aliases:
+Profile-based exports reject any visibility value other than `always` (a string or nonempty list). They cannot infer variant selection or disclosure approval. Before building, inspect the source and derived profile, including nested fields and aliases:
 
 - `reference-only`: never put this evidence or its confidential text in the resume.
 - `on-request`: exclude unless the user explicitly requests inclusion.
 - `variant-specific`: include only for the matching variant; `always` is eligible.
 - Conflicting/unclear tags or disclosure scope: ask before exporting those items.
 
-If restricted items exist, prepare a **separate disclosure-safe profile** containing
-only eligible entries and their permitted facts. Preserve the master unchanged,
-list exclusions for the user, and inspect the derived profile before rendering.
-Normalization keeps an unresolved source tag at the derived profile's root, so
-private analysis/proposal JSON stays restricted. Only after reviewing eligibility
-and excluding restricted facts, mark approved facts `always` or leave them untagged.
-Do not erase visibility metadata and then render the original content. Do not use
-`ats filter --tag all` as a privacy check: wildcard tags keep all items, and even a
-specific tag filter is not a complete recursive disclosure validator. Anonymization
-does not authorize disclosure of restricted evidence. If a safe projection cannot
-be verified, stop and ask for an approved public profile.
+If restricted items exist, prepare a **separate disclosure-safe profile** containing only eligible entries and their permitted facts. Preserve the master unchanged, list exclusions for the user, and inspect the derived profile before rendering. Do not use `ats filter --tag all` as a privacy check: wildcard tags keep all items, and even a specific tag filter is not a complete recursive disclosure validator. Anonymization (`anon mask`) does not authorize disclosure of restricted evidence. If a safe projection cannot be verified, stop and ask for an approved public profile.
 
-For Markdown/text imports, inspect the parsed result for internal notes that lost
-their visibility context; pre-rendered HTML also needs manual review because it has
-no profile tags to check. `--no-photo` excludes profile photos and reserved photo
-slots. The build input below means the inspected, disclosure-safe resume profile.
+For Markdown/text imports, inspect the parsed result for internal notes that lost their visibility context; pre-rendered HTML also needs manual review because it has no profile tags to check. `--no-photo` excludes profile photos and reserved photo slots.
 
 ```bash
 python cli.py resume build "/path/to/public-profile.json" --no-photo --pages auto --output-dir "/path/to/output"
 ```
 
-The same build command accepts `.md` and `.txt`. Inspect parsed facts before a
-submission-ready export: parsing is heuristic and may miss headings or dates.
-If a reusable JSON profile is needed, create a separate file:
+Omitting `--theme` builds `modern-navy`. Use `--theme all` only when comparing themes, `--theme ats-docx` for Word, or `academic-postgraduate` / `academic-latex` / `academic-typst` for academic CVs. Use `--pages 1` only for an explicit single-page requirement; if it cannot fit readably, report the failure rather than trimming achievements.
+
+## 3. Full workflow: tailor to a job description
+
+Input: a reviewed source profile and target JD (plain text or JD screenshot). If a screenshot is partially cut off or unreadable, ask the user to confirm the unclear requirements before tailoring.
+
+1. **Analyze & identify gaps**: Read the JD directly to identify core requirements, hard gates, and genuine skill gaps. Optionally run `python cli.py ats audit "/path/to/profile.json" --jd "/path/to/jd.txt" --json` or `python cli.py ats ledger "/path/to/profile.json" --jd "/path/to/jd.txt" --json` for keyword coverage. Never treat an absent JD keyword as candidate experience.
+2. **Present proposed edits & clarify missing facts**: Draft evidence-grounded suggestions using [sentence patterns](sentence-patterns.md), [anti-AI-slop](anti-ai-slop.md), [evidence rules](evidence-rules.md), and [inflation patterns](inflation-patterns.md). Show exact before/after changes and ask up to three targeted questions for missing scope or baselines.
+3. **Wait for user confirmation**: **Trade-off note**: OfferGet uses conversational confirmation rather than a code-enforced proposal database, so never modify the master profile or overwrite the source file. Only after explicit user confirmation, save the revised content to a separate derived profile (e.g. `/path/to/output/tailored.json`).
+4. **Verify facts, diff, and disclosure**: Before rendering, run deterministic checks and repeat the disclosure preflight above on the revised profile:
 
 ```bash
-python cli.py profile parse "/path/to/resume.md" --output "/path/to/output/profile.json"
-```
-
-Omitting `--theme` builds one `modern-navy` resume, matching the service and review
-pipeline defaults. Choose another theme on request, such as `classic-tech`,
-`ats-plain` for a plain-text companion, `ats-docx` for Word, or the academic formats.
-Use `--theme all` only when the user requests a gallery/comparison. Use
-`--pages 1` only for an explicit single-page requirement. If it cannot fit readably,
-report the failure rather than trimming achievements or claiming success.
-
-Output: the requested HTML/PDF, Markdown, or DOCX files and a brief check summary.
-No JD or content-rewrite approval is needed for faithful formatting. Existing
-claims remain the user's claims; formatting does not verify their truth.
-
-## Create a first resume
-
-Input: the user's real contact/education/experience/skills information, even if
-incomplete. First distinguish an actual application resume from a synthetic layout
-test. Ask for missing required identity or source facts; omit optional sections
-rather than inventing content. Lack of numerical impact is not itself a blocker.
-
-Before drafting, use the supplied target role (if any) and strongest supporting
-facts to choose two or three strengths worth emphasizing. A JD is optional; ask
-about direction only when it would materially change the draft. For each experience
-or project, make the context, personal contribution, and actual result clear. Put
-relevant evidence first within each entry, remove repeated background or tool lists,
-and preserve chronology, attribution, scope, and unresolved facts. Do not force a
-fixed bullet count or claim an outcome merely because work was completed.
-
-Prepare a source draft for review. Use the [sentence patterns](sentence-patterns.md)
-when useful, not as a checklist. Use specific, honest qualitative descriptions
-when a result was not measured. Ask the user to approve substantive proposed wording
-before applying it. Parse a reviewed Markdown draft or use the existing JSON schema;
-then follow the format/export route. Do not silently copy achievements, employers,
-or contact information from `examples/`.
-
-Output: a reviewed source draft, separate rendered files, and any unresolved facts.
-A draft with placeholders must be labeled as a draft, never submission-ready.
-
-## Tailor to a job description
-
-Input: an existing source profile and target JD. For a Markdown/text source, first
-parse into a separate JSON file and inspect it, or use the same inspected Markdown/text
-source throughout. Review and acceptance use the same profile loader and require unchanged
-source/JD fingerprints. On a retry after an interrupted acceptance, the stored
-recovery source also permits the exact approved output as input; unrelated changes
-remain rejected.
-
-```bash
-python cli.py review "/path/to/jd.txt" --profile "/path/to/profile.json" --goal tailor --workspace "/path/to/output" --json
-python cli.py proposal list --status draft --db "/path/to/output/proposals.db" --json
-python cli.py proposal show "MP-RETURNED-ID" --db "/path/to/output/proposals.db" --json
-```
-
-Deterministic sentence edits currently remove introductory framing only; they preserve
-actions, qualifications, metrics and attribution. Edit previews retain exact source
-references, and dependent wording/sorting patches require approval as one group.
-Use the JD to prioritize source-supported strengths, not to invent skills or
-promote the candidate's role. Review the draft for duplicated points and unclear
-personal contribution using the same writing guidance as a first resume.
-If `evidence_followup.questions` is nonempty, ask up to three source-bound fact
-questions first. Use the full `workflow.answer_template` or the file at `workflow.answer_path` for replies,
-preserving its `answer_context` version token. Then follow `workflow.next_command` or rerun `review --workspace "/path/to/output" --answers "<workflow.answer_path>"`.
-The workspace restores the source paths and goal, saves the current session and review,
-and keeps the proposal database linked. Written answers are preserved; later rounds
-may receive a new answer-template path. Updated sources refresh the workspace and discard
-stale question/answer snapshots. Existing resume exports are replaced at their current paths
-from the user-updated source; unapproved proposed wording is not applied.
-Explicit `--session` / `--save-session` flags remain supported.
-Replies stay unverified draft facts until explicitly accepted. Preserve every
-`approval_group` when selecting sorting patches; partial permutations are rejected.
-Show the updated proposed changes and their source evidence. Ask for approval
-of the proposal or selected patch indexes. The command below is an **approval
-boundary**, not the next automatic step:
-
-```bash
-python cli.py proposal accept "MP-RETURNED-ID" --db "/path/to/output/proposals.db" --profile "/path/to/profile.json" --jd "/path/to/jd.txt" --output "/path/to/output/tailored.json" --patch-ids "0,2" --json
-```
-
-Use the actual ID and approved indexes; omit `--patch-ids` only if all patches are
-approved. If the source/JD fingerprint conflicts, generate and review a fresh
-proposal rather than bypassing the conflict. Use the returned profile output path
-for the following commands, including any shadow/fallback path. Before rendering,
-repeat the disclosure preflight above on the tailored profile; an approved content
-patch does not authorize publishing reference-only evidence. The build command below
-assumes the tailored file is already verified disclosure-safe:
-
-```bash
+python cli.py fact verify "/path/to/output/tailored.json" --profile "/path/to/profile.json" --json
 python cli.py diff audit "/path/to/profile.json" "/path/to/output/tailored.json" --output-dir "/path/to/output/diff"
-python cli.py resume build "/path/to/output/tailored.json" --no-photo --output-dir "/path/to/output/resume"
+python cli.py resume build "/path/to/output/tailored.json" --no-photo --baseline "/path/to/profile.json" --output-dir "/path/to/output/resume"
 ```
 
-Output: draft review, approved derived profile, diff ledger, requested render files.
-Never treat a skill gap as a verified skill or promote a role without source evidence.
+## Standalone checks & privacy helpers
 
-## Audit without rewriting
-
-Run only the requested audit. These rule-based checks flag problems; they do not
-prove real-world truth or guarantee a particular employer's ATS result.
+For audit-only requests, run only the requested deterministic checks without rewriting content:
 
 ```bash
 python cli.py ats audit "/path/to/profile.json" --json
 python cli.py fact verify "Exact claim to inspect" --profile "/path/to/profile.json" --json
-python cli.py resume audit --claims "/path/to/claims.json" --html "/path/to/resume.html"
+python cli.py resume audit --claims "/path/to/claims.json" --html "/path/to/resume.html" --source "/path/to/profile.json"
+python cli.py anon mask "/path/to/profile.json" --level strict --map "/path/to/private/deanon.json" --output "/path/to/output/masked.json"
 ```
 
-Add `--jd "/path/to/jd.txt"` to ATS audit only if a target JD was supplied. Return
-findings with evidence paths and uncertainty. Do not apply edits without approval.
-
-## Other supported tasks
-
-These are optional destinations, never prerequisites for resume formatting:
-
-- Interview preparation: `python cli.py defense simulate --help`, or `review --goal interview` with
-  supplied answers. Use `--goal review` only for the combined workflow. Ask the
-  user for their own answers; do not fabricate experience. Simulation can start with `review --profile <resume> --goal interview --workspace <directory>`
-  without a JD. Questions use actual resume excerpts, personal work, choices, results and boundaries. Use
-  `practice_queue` for diagnosis-based follow-ups; answers keep their parent question ID.
-- Academic materials: `python cli.py baoyan --help`. Preserve simulation vs. physical
-  experiments, submitted vs. accepted papers, and personal contribution boundaries.
-- Offer analysis: `python cli.py offer --help`. Explain assumptions and uncertainty;
-  provide preparation support, not legal advice or automatic negotiation outreach.
-- Reversible anonymization: `python cli.py anon --help`. Inspect the masked artifact;
-  keep the reverse map private and never claim masking alone authorizes publication.
+If the user explicitly requests interview practice after completing the resume, ask questions grounded directly in the projects, responsibilities, and outcomes in the final resume without fabricating experience.
 
 ## Failure and verification
 
-- Missing input: ask for the exact file/facts needed for this route; do not demand a
-  JD for formatting or a photo when the user wants none.
-- Missing renderer: run `python cli.py doctor`; report the available HTML/source and
-  the unchecked PDF stage. Do not call a failed build a finished PDF.
-- Layout: inspect rendered pages at normal reading size, including first/last lines,
-  long contact links, section breaks, and multilingual text. Use a representative
-  long fixture when changing theme code.
-- Content: compare source/approved output and retain all factual anchors. An audit
-  pass does not replace human review of source truth.
-- Editing the project itself: run relevant pytest cases and the aggregate checks
-  described in README. Report actual counts/results, not historical badge counts.
+- **Missing input**: ask for the missing file/facts needed for the active route; do not demand a JD for formatting or a photo when none is requested.
+- **Missing renderer**: run `python cli.py doctor`; report the available HTML/source draft and the unchecked PDF stage honestly.
+- **Layout check**: inspect rendered pages at normal reading size for clipping, overlaps, missing glyphs, long links, and page breaks.
+- **Content check**: compare rendered text with the approved baseline; an audit score pass never replaces human review of factual truth.

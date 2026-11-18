@@ -26,7 +26,6 @@ from core.lexicon import (
     AI_BUZZWORDS_LEXICON,
     STANDARD_SECTIONS,
     FORMATTING_RISKS,
-    DEFENSE_GUIDE_TEMPLATES,
 )
 
 
@@ -730,15 +729,6 @@ def extract_candidate_skills(
     return competencies, verified_bullets
 
 
-def generate_skill_defense(skill: str) -> str:
-    """Generates interview defense strategy for honest gap without fabrication."""
-    skill_lower = skill.lower()
-    for key, defense in DEFENSE_GUIDE_TEMPLATES.items():
-        if key in skill_lower:
-            return defense
-    return DEFENSE_GUIDE_TEMPLATES["default"]
-
-
 def generate_skill_ledger(
     profile_data: Any,
     jd_decoded_or_text: Any,
@@ -750,7 +740,7 @@ def generate_skill_ledger(
     - 'present': Skills possessed and backed by verified experience bullets.
     - 'missing': Skills possessed in competencies but not highlighted in bullets (suggest adding).
     - 'unsupported_gap': Skills required by JD but absent in candidate profile.
-      CRITICAL: Strictly flag as honest gaps with interview defense advice, never fabricate or hallucinate!
+      CRITICAL: Strictly flag as honest gaps, never fabricate or hallucinate!
     """
     competencies, verified_bullets = extract_candidate_skills(profile_data, evidence_index=evidence_index)
 
@@ -818,12 +808,10 @@ def generate_skill_ledger(
                 })
         else:
             # Skill required by JD but absent in candidate profile
-            defense_advice = generate_skill_defense(skill_clean)
             unsupported_gap.append({
                 "skill": skill_clean,
                 "status": "unsupported_gap",
-                "interview_defense": defense_advice,
-                "anti_hallucination_rule": "CRITICAL: Strictly flag as honest gap. Never fabricate or hallucinate experience! Articulate foundational principles and fast ramp-up."
+                "anti_hallucination_rule": "CRITICAL: Strictly flag as honest gap. Never fabricate or hallucinate experience!"
             })
 
     total = len(eval_skills)

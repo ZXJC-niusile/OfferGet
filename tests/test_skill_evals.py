@@ -235,44 +235,61 @@ class SkillEvaluationTests(unittest.TestCase):
         with self.assertRaises(evals.EvalError):
             evals.grade_trace(path, self.suite, local_suite)
 
-    def test_smoke_ignores_unreferenced_links_and_rejects_referenced_escape(self):
-        import os
-        import subprocess
-
-        def directory_link(link, target):
-            try:
-                link.symlink_to(target, target_is_directory=True)
-            except OSError:
-                if os.name != "nt":
-                    raise
-                # Windows directory junctions exercise real path resolution
-                # without requiring the symbolic-link creation privilege.
-                result = subprocess.run([
-                    "powershell", "-NoProfile", "-NonInteractive", "-Command",
-                    "$ErrorActionPreference = 'Stop'\n"
-                    "New-Item -ItemType Junction -Path $env:OFFERGET_TEST_LINK "
-                    "-Value $env:OFFERGET_TEST_TARGET | Out-Null",
-                ], env={**os.environ, "OFFERGET_TEST_LINK": str(link), "OFFERGET_TEST_TARGET": str(target)},
-                   capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(link.resolve(), target.resolve())
-            # Remove only the link before TemporaryDirectory cleans the fixture.
-            self.addCleanup(lambda: link.unlink() if link.is_symlink() else link.rmdir())
-
+    def test_smoke_copies_only_referenced_inputs(self):
         local_suite = self.work / "suite.json"
         local_suite.write_bytes(self.suite_path.read_bytes())
-        outside = self.work / "outside"
-        outside.mkdir()
-        sentinel = outside / "must-not-copy.txt"
+        extra = self.work / "inputs/unreferenced"
+        extra.mkdir()
+        sentinel = extra / "must-not-copy.txt"
         sentinel.write_text("must not be copied")
-        directory_link(self.work / "inputs/unreferenced", outside)
         with patch.object(evals.shutil, "copy2", wraps=evals.shutil.copy2) as copier:
             report = evals.smoke(local_suite)
         self.assertTrue(all(c["status"] == "pass" for c in report["checks"]))
         self.assertNotIn(sentinel.resolve(), {Path(call.args[0]).resolve() for call in copier.call_args_list})
-        directory_link(self.work / "inputs/escape", ROOT)
-        suite = json.loads(local_suite.read_text(encoding="utf-8"))
-        suite["cases"][0]["files"] = ["inputs/escape/SKILL.md"]
+
+    def test_resolved_input_outside_bundle_is_rejected(self):
+        bundle = self.work / "bundle"
+        candidate = bundle / "inputs/linked.txt"
+        resolve = Path.resolve
+
+        def resolved(path, *args, **kwargs):
+            if path == candidate:
+                return self.work / "outside.txt"
+            return resolve(path, *args, **kwargs)
+
+        with patch.object(Path, "resolve", resolved):
+            with self.assertRaisesRegex(evals.EvalError, "path escapes bundle"):
+                evals.local_path(bundle, "inputs/linked.txt", "inputs")
+
+    def test_suite_rejects_real_directory_link_outside_bundle(self):
+        import os
+
+        bundle = self.work / "bundle"
+        shutil.copytree(self.work / "inputs", bundle / "inputs")
+        outside = self.work / "outside"
+        outside.mkdir()
+        (outside / "note.txt").write_text("synthetic")
+        link = bundle / "inputs/linked"
+        try:
+            link.symlink_to(outside, target_is_directory=True)
+        except OSError as error:
+            if os.name != "nt" or error.winerror not in (5, 1314):
+                raise
+            # A junction usually works without the Windows symlink privilege.
+            from _winapi import CreateJunction
+            try:
+                CreateJunction(str(outside), str(link))
+            except OSError as junction_error:
+                if junction_error.winerror not in (5, 1314):
+                    raise
+                self.skipTest(f"Windows denied both directory symlink and junction creation: {junction_error}")
+            self.addCleanup(link.rmdir)
+        else:
+            self.addCleanup(link.unlink)
+        self.assertEqual(link.resolve(), outside.resolve())
+        suite = copy.deepcopy(self.suite)
+        suite["cases"][0]["files"] = ["inputs/linked/note.txt"]
+        local_suite = bundle / "suite.json"
         local_suite.write_text(json.dumps(suite), encoding="utf-8")
         with self.assertRaisesRegex(evals.EvalError, "path escapes bundle"):
             evals.load_suite(local_suite)

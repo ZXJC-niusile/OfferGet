@@ -24,22 +24,11 @@ than forcing an entire entry into one unbreakable block.
 
 ## Validation
 
-Run the theme contracts with:
-
 ```bash
 python -m pytest tests/test_asu_dense_layout.py -q
+python scripts/qa_modern_navy_layout.py --theme asu-dense \
+  --baseline-root /absolute/path/to/exact-baseline \
+  --output-dir /absolute/path/to/empty-artifact-directory
 ```
 
-The contracts use the shared, explicitly synthetic multilingual fixtures and
-check unchanged body text, security validation, each photo mode, scoped overrides,
-and all five existing AutoFit profiles. They are not visual approval.
-
-The shared visual workflow must render this theme against the exact PR base with
-its real Chromium production builder, AutoFit and layout solver. Review the
-paired HTML, full-page screen PNG, every printed-page PNG, selectable-text PDF,
-renderer trace and `report.json`. Include both realistic medium-length production
-resumes and the long-string/multipage stress cases. Check clipping, overlaps,
-readable glyphs, dates, section breaks, repeated gutters and retained factual text.
-The local container cannot launch Chromium because its socket operation is
-restricted, so local source checks do not establish a successful PDF export.
-Final visual and exact-head CI results are recorded in the pull request.
+Runs the shared HTML visual harness (see [shared QA rules](RESUME_THEME_QA.md)), checking `body.resume-dense` overrides, tabular right-aligned dates, and long-entry continuation breaks.
