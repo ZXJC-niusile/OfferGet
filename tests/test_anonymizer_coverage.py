@@ -138,7 +138,7 @@ def test_strict_excludes_photos_before_reading_even_explicit_mode(tmp_path, cons
 @pytest.mark.parametrize("method", ["build_html_theme", "build_ats_plain", "build_academic_latex", "build_academic_typst"])
 def test_actual_export_entrypoints_exclude_requested_photo_sources(method, tmp_path, monkeypatch):
     # This exercises generated source artifacts, not browser/native PDF layout.
-    from tests.test_resume_builder import FastBrowserRenderer
+    from tests.helpers import FastBrowserRenderer
     from core.academic_exporter import AcademicExporter
 
     monkeypatch.setattr(AcademicExporter, "compile_latex", lambda *args, **kwargs: False)
@@ -204,7 +204,7 @@ def test_project_base_codename_mentions_are_masked_and_reversible(key):
     ("classic-tech", "strict", False), ("classic-tech", "standard", True),
 ])
 def test_default_export_does_not_write_reverse_identity_sidecars(tmp_path, level, constructor_level, theme):
-    from tests.test_resume_builder import FastBrowserRenderer
+    from tests.helpers import FastBrowserRenderer
     profile = {"candidate": {"name": "Synthetic Sidecar Person", "school": "Imaginary Academy"},
                "experience": [{"company": "Invented Employer"}]}
     baseline = {"candidate": {"name": "Synthetic Baseline Person", "school": "Fictional Baseline Academy"}}
@@ -258,3 +258,16 @@ def test_stale_original_output_is_preserved_with_explicit_scope_warning(tmp_path
     assert stale not in outputs.values()
     with zipfile.ZipFile(outputs["docx"]) as archive:
         assert "Synthetic Current Identity" not in archive.read("word/document.xml").decode()
+
+
+def test_cli_anonymized_build_does_not_leak_real_name_in_convenience_filename(tmp_path, monkeypatch):
+    from presentation.commands import resume_cmd
+    from tests.helpers import FastBrowserRenderer
+
+    monkeypatch.setattr("core.resume_builder.BrowserRenderer", FastBrowserRenderer)
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps({"candidate": {"name": "Synthetic Private Person"}}), encoding="utf-8")
+    out_dir = tmp_path / "out"
+    resume_cmd.cmd_resume_build([str(source), "--theme", "modern-navy", "--anonymize", "strict", "--output-dir", str(out_dir)])
+    created = {p.name for p in out_dir.iterdir()}
+    assert not any("Synthetic Private Person" in name for name in created), created

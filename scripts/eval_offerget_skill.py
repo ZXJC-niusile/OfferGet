@@ -325,8 +325,8 @@ def smoke(suite_path=DEFAULT_SUITE):
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONIOENCODING="utf-8")
         commands = [
             ("parse", ["profile", "parse", "inputs/resume.md", "--output", "profile.json", "--json"]),
-            ("draft_review", ["review", "inputs/target_jd.txt", "--profile", "inputs/profile.json", "--output", "review.json", "--json"]),
-            ("academic_guard", ["baoyan", "audit", "Gazebo 仿真冒充产线实测，论文在投却写为已录用。", "--role", "辅助成员", "--tier", "简历版", "--json"]),
+            ("ats_check", ["ats", "audit", "inputs/profile.json", "--jd", "inputs/target_jd.txt", "--json"]),
+            ("fact_guard", ["fact", "verify", "Reduced latency by 80%.", "--profile", "inputs/profile.json", "--json"]),
         ]
         for name, args in commands:
             try:
@@ -336,10 +336,11 @@ def smoke(suite_path=DEFAULT_SUITE):
                 ok = run.returncode == 0
                 if name == "parse":
                     ok = ok and data.get("profile", {}).get("candidate", {}).get("name") == "Alex Example" and (work / "profile.json").is_file()
-                elif name == "draft_review":
-                    ok = ok and data.get("material_proposal", {}).get("status") == "draft" and not data.get("generated_resumes") and (work / "review.json").is_file()
+                elif name == "ats_check":
+                    gaps = {item.get("skill") for item in data.get("skill_ledger", {}).get("unsupported_gap", [])}
+                    ok = ok and "Kubernetes" in gaps
                 else:
-                    ok = ok and data.get("checks", {}).get("simulation_vs_real_cluster", {}).get("passed") is False and data.get("checks", {}).get("expected_vs_acquired_outcomes", {}).get("passed") is False
+                    ok = ok and data.get("passed") is False and bool(data.get("drifts") or data.get("unverified_claims"))
                 checks.append({"name": name, "status": "pass" if ok else "fail", "returncode": run.returncode})
             except (OSError, UnicodeError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
                 checks.append({"name": name, "status": "fail", "error": str(exc)})

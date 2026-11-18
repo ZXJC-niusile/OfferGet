@@ -20,8 +20,6 @@ from core.anonymizer import (
     PrivacyAnonymizer,
     anonymize_profile,
     deanonymize_text,
-    PREDEFINED_STANDARD_MAPPINGS,
-    PREDEFINED_STRICT_MAPPINGS
 )
 
 

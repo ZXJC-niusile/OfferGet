@@ -260,7 +260,7 @@ class TestSecurityGateIntegration(unittest.TestCase):
 
     def test_resume_builder_html_defense(self):
         """Verify ResumeBuilder HTML themes escape all malicious payloads without XSS execution risks."""
-        from tests.test_resume_builder import FastBrowserRenderer
+        from tests.helpers import FastBrowserRenderer
         builder = ResumeBuilder(self.malicious_profile, renderer=FastBrowserRenderer())
 
         for theme in ["modern-navy", "classic-tech"]:
@@ -285,7 +285,7 @@ class TestSecurityGateIntegration(unittest.TestCase):
 
     def test_resume_builder_ats_plain_defense(self):
         """Verify ATS Plain single-column HTML escapes malicious inputs."""
-        from tests.test_resume_builder import FastBrowserRenderer
+        from tests.helpers import FastBrowserRenderer
         builder = ResumeBuilder(self.malicious_profile, renderer=FastBrowserRenderer())
         res = builder.build_ats_plain(self.test_dir, photo=True)
         ats_html = res["html"].read_text(encoding="utf-8")
@@ -337,7 +337,7 @@ class TestSecurityGateIntegration(unittest.TestCase):
     def test_academic_exporter_html_preview_defense(self):
         """Verify AcademicExporter HTML preview escapes all XSS payloads."""
         exporter = AcademicExporter()
-        html_preview = exporter.generate_latex_html_preview(self.malicious_profile, reserve_photo=True)
+        html_preview = exporter.generate_academic_html_preview(self.malicious_profile, reserve_photo=True)
 
         self.assertNotIn("<script>", html_preview)
         self.assertNotIn("<iframe", html_preview)

@@ -3,9 +3,7 @@ Comprehensive Unit Test Suite for OfferGet ATS Auditor Module.
 Tests 4 Dimensions, Three-State Skill Ledger, Anti-AI Detector, Visibility Filter, and Edge Cases.
 """
 
-import copy
 import json
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -21,10 +19,7 @@ from core.ats_checker import (
     generate_skill_ledger,
     filter_profile_by_visibility,
     extract_bullets_from_input,
-    is_bullet_quantified,
-    find_action_verbs
 )
-from core.jd_compat import decode_jd
 
 
 class TestATSAuditor(unittest.TestCase):
@@ -39,7 +34,7 @@ class TestATSAuditor(unittest.TestCase):
         with open(self.jd_path, "r", encoding="utf-8") as f:
             self.jd_text = f.read()
 
-        self.decoded_jd = decode_jd(self.jd_text)
+        self.decoded_jd = self.jd_text
         self.auditor = ATSAuditor()
 
     # =======================================================================
@@ -300,11 +295,10 @@ python pytorch cuda deep learning transformer
         self.assertIn("Rust", gap_skills)
         self.assertIn("Kubernetes", gap_skills)
 
-        # Verify interview defense advice and anti-hallucination warning for gaps
+        # Verify anti-hallucination warning for gaps without fabricated talk tracks
         for gap in ledger["unsupported_gap"]:
-            self.assertIn("interview_defense", gap)
+            self.assertNotIn("interview_defense", gap)
             self.assertIn("anti_hallucination_rule", gap)
-            self.assertTrue(len(gap["interview_defense"]) > 20)
 
         # Verify summary counts
         summary = ledger["summary"]

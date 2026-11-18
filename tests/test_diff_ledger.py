@@ -13,8 +13,6 @@ from core.diff_ledger import (
     DiffSeverity,
     DiffEntry,
     DiffLedger,
-    DIFF_CATEGORY_META,
-    DIFF_SEVERITY_BADGES,
 )
 from core.fact_guard import FactVerificationGuard
 

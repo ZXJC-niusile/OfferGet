@@ -21,27 +21,11 @@ Missing-fact markers retain their visible warning treatment.
 
 ## Verification
 
-Browser-independent checks:
-
 ```sh
-python -m pytest tests/test_academic_postgraduate_layout.py tests/test_resume_view_model.py tests/test_resume_builder.py -q
-python -m pytest tests -q
-python cli.py selftest
-```
-
-The shared visual-regression runner accepts the academic theme:
-
-```sh
+python -m pytest tests/test_academic_postgraduate_layout.py -q
 python scripts/qa_modern_navy_layout.py --theme academic-postgraduate \
   --baseline-root /absolute/path/to/exact-baseline \
   --output-dir /absolute/path/to/empty-artifact-directory
 ```
 
-Use synthetic ordinary-length and stress CJK/English profiles, including real
-exam targets and score-table values; inspect all before/after PDF pages at normal
-reading size. Verify the actual `ResumeBuilder` path with AutoFit and adaptive
-fill enabled, alongside raw/compact/solver cases and no/reserved/embedded photos.
-Record the exact baseline and head revisions, page count, text preservation,
-clipping/overlap measurements, and screenshots/PDFs. A unit-test pass or static
-HTML inspection is not a visual pass. If Chromium is unavailable, leave visual
-acceptance pending and inspect the exact-head CI artifacts instead.
+Theme-specific checks (see [shared QA rules](RESUME_THEME_QA.md)): expands the shared matrix with exam target/score fixtures (`30` total cases), verifying Song serif headings, single-column exam tables, and selectable score cells across real `ResumeBuilder` and raw paths.

@@ -106,3 +106,35 @@ def cmd_profile_parse(args: Any) -> None:
     print("=" * 68)
     if not getattr(args, "output", None):
         print("[*] 提示: 加上 `--output my_profile.json` 可保存为标准化底稿文件供多处复用。")
+
+
+def cmd_profile_refs(args: Any) -> None:
+    """Handler for `offerget profile refs --docs <path...> --query <text> [--limit 5] [--json]`."""
+    from core.reference_index import ReferenceKnowledgeIndex
+
+    docs = getattr(args, "docs", None) or []
+    query = (getattr(args, "query", None) or "").strip()
+    raw_limit = getattr(args, "limit", None)
+    limit = 5 if raw_limit is None else int(raw_limit)
+    if not docs or not query:
+        fail_cli(args, "invalid_input", "Both --docs and --query are required")
+    if limit < 1:
+        fail_cli(args, "invalid_input", "--limit must be >= 1")
+
+    index = ReferenceKnowledgeIndex(docs)
+    hits = index.search(query, limit=limit)
+    payload = {
+        "query": query,
+        "visibility": "reference-only",
+        "total_chunks": len(index.chunks),
+        "hits": hits,
+        "skipped_files": index.skipped_files,
+    }
+    if getattr(args, "json", False):
+        emit_json(payload)
+        return
+
+    print(f"[Reference-Only Recall] query={query!r}, indexed_chunks={len(index.chunks)}, hits={len(hits)}")
+    for i, hit in enumerate(hits, 1):
+        print(f"{i}. [{hit['doc_title']} > {hit['section_path']}] (score={hit['score']})")
+        print(f"   {hit['content'][:200]}{'...' if len(hit['content']) > 200 else ''}")

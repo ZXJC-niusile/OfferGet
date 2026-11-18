@@ -7,7 +7,6 @@ metric scope, credential fidelity, and adaptive layout actions.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +14,7 @@ from core.cli_helpers import (
     load_profile,
     load_json_or_text,
     emit_json,
-    emit_stderr,
+    fail_cli,
 )
 from core.fact_guard import FactVerificationGuard
 from core.diff_ledger import DiffLedger
@@ -25,13 +24,11 @@ def cmd_diff_audit(args: Any) -> None:
     """Handler for `offerget diff audit <baseline_file> <tailored_file>`."""
     baseline_path = Path(args.baseline_file)
     if not baseline_path.exists():
-        emit_stderr(f"[-] Error: Baseline profile file not found: {baseline_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Baseline profile file not found: {baseline_path}")
 
     tailored_path = Path(args.tailored_file)
     if not tailored_path.exists():
-        emit_stderr(f"[-] Error: Tailored resume file not found: {tailored_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Tailored resume file not found: {tailored_path}")
 
     baseline_data = load_profile(str(baseline_path))
 

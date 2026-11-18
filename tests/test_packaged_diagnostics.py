@@ -70,7 +70,7 @@ def test_wheel_installed_diagnostics_outside_source_tree(tmp_path):
     # as it is in CI (pip install setuptools wheel before the test suite).
     source = tmp_path / "source"
     source.mkdir()
-    for name in ("core", "presentation", "services", "templates", "themes"):
+    for name in ("core", "presentation", "themes"):
         shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns("__pycache__"))
     for name in ("cli.py", "pyproject.toml", "README.md", "LICENSE"):
         shutil.copyfile(ROOT / name, source / name)
@@ -85,7 +85,6 @@ def test_wheel_installed_diagnostics_outside_source_tree(tmp_path):
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
         assert all(f"presentation/diagnostic_data/{name}" in names for name in FIXTURE_NAMES)
-        assert "templates/offer_strategy.html" in names
         assert not any(name.startswith(("examples/", "tests/")) for name in names)
 
     installation = tmp_path / "isolated"

@@ -12,15 +12,13 @@ import copy
 import hashlib
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts.qa_modern_navy_layout import fixtures, synthetic_photo, text_content
-from scripts.qa_common import squash
+from scripts.qa_common import fixtures, squash, synthetic_photo, text_content
 
 
 def source_anchors(profile):
@@ -229,7 +227,7 @@ def main(argv=None):
               "headRevision": os.environ.get("QA_HEAD_SHA"), "checkoutRevision": os.environ.get("GITHUB_SHA"),
               "baselineRevision": (baseline / "revision.txt").read_text().strip(), "fixtures": [], "failures": []}
     sources = ("core/resume_view_model.py", "core/resume_builder.py", "core/profile_adapter.py",
-               "core/browser_renderer.py", "scripts/qa_ats_plain_layout.py", "scripts/qa_modern_navy_layout.py")
+               "core/browser_renderer.py", "scripts/qa_ats_plain_layout.py", "scripts/qa_common.py")
     report["sourceManifest"] = {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in sources}
     try:
         for case in cases():

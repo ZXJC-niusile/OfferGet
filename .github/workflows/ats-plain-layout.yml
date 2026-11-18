@@ -12,12 +12,11 @@ on:
       - 'core/atomic_writer.py'
       - 'core/artifacts.py'
       - 'core/paths.py'
-      - 'core/asu_modeler.py'
       - 'pyproject.toml'
       - 'requirements.txt'
       - 'core/browser_renderer.py'
+      - 'scripts/qa_common.py'
       - 'scripts/qa_ats_plain_layout.py'
-      - 'scripts/qa_modern_navy_layout.py'
       - 'tests/test_ats_plain_design.py'
       - '.github/workflows/ats-plain-layout.yml'
 concurrency:

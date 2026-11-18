@@ -72,7 +72,7 @@ def check_sample_assets() -> dict[str, Any]:
     return {
         "name": "Installed Diagnostic Resources",
         "valid": valid,
-        "detail": "Verified (synthetic fixtures and report template)" if valid else f"Missing: {', '.join(missing)}",
+        "detail": "Verified (synthetic fixtures)" if valid else f"Missing: {', '.join(missing)}",
         "guidance": "Reinstall OfferGet; its installed diagnostic resources are incomplete." if not valid else "",
     }
 

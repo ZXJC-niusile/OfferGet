@@ -72,6 +72,44 @@ def publication_text_parts(publication: Dict[str, Any]) -> List[str]:
     return [PUBLICATION_LABELS.get(key, "") + value for key, value in publication_facts(publication)]
 
 
+def publication_url(publication: Dict[str, Any]) -> str:
+    """Return a sanitized explicit publication link when supplied."""
+    from html import unescape
+    raw_url = publication.get("raw_url") if "raw_url" in publication else unescape(str(publication.get("url") or ""))
+    return sanitize_url(str(raw_url or "").strip())
+
+
+def candidate_author_names(vm: "ResumeViewModel") -> set[str]:
+    """Collect normalized candidate names for exact author-list bolding."""
+    names: set[str] = set()
+    for val in (vm.raw_name, vm.name):
+        if val and str(val).strip():
+            names.add(" ".join(str(val).strip().lower().split()))
+    if isinstance(vm.raw_profile, dict):
+        cand = vm.raw_profile.get("candidate", {})
+        if isinstance(cand, dict):
+            for k in ("name", "en_name"):
+                val = cand.get(k)
+                if val and str(val).strip():
+                    names.add(" ".join(str(val).strip().lower().split()))
+    return names
+
+
+def format_publication_authors(authors_text: str, names: set[str], escape_fn, bold_fn) -> str:
+    """Preserve author order while bolding exact matches to the candidate's own name."""
+    if not names:
+        return escape_fn(authors_text)
+    tokens = re.split(r"([;,]\s*)", authors_text)
+    out = []
+    for idx, tok in enumerate(tokens):
+        if idx % 2 == 1:
+            out.append(escape_fn(tok))
+        else:
+            norm = " ".join(tok.strip().lower().split())
+            out.append(bold_fn(escape_fn(tok)) if norm and norm in names else escape_fn(tok))
+    return "".join(out)
+
+
 @dataclass
 class ResumeViewModel:
     """Unified, pre-escaped View Model for cross-template resume rendering."""
@@ -314,6 +352,11 @@ class ResumeViewModel:
                 raw_value = _publication_text(pub.get(key))
                 publication[key] = escape_html_text(raw_value)
                 publication[f"raw_{key}"] = raw_value
+            raw_link = str(pub.get("url") or pub.get("paper_url") or pub.get("link") or "").strip()
+            safe_link = sanitize_url(raw_link) if raw_link else ""
+            if safe_link:
+                publication["url"] = escape_html_attribute(safe_link)
+                publication["raw_url"] = safe_link
             publications.append(publication)
 
         # Postgraduate Exam resolution
@@ -663,11 +706,24 @@ class HtmlThemeRenderer:
         """Expose only the publication facts already present in the view model."""
         if not vm.publications:
             return ""
+        author_names = candidate_author_names(vm)
         entries = []
         for index, publication in enumerate(vm.publications):
+            pub_url = publication_url(publication)
             fields = []
             for key, text in publication_facts(publication):
-                value = f'<span class="publication-{key}" data-field="publications.{index}.{key}">{escape_html_text(text)}</span>'
+                if key == "authors":
+                    inner = format_publication_authors(
+                        text, author_names, escape_html_text, lambda s: f"<strong>{s}</strong>"
+                    )
+                else:
+                    inner = escape_html_text(text)
+                if key == "title" and pub_url:
+                    inner = (
+                        f'<a href="{escape_html_attribute(pub_url)}" '
+                        f'target="_blank" rel="noopener noreferrer">{inner}</a>'
+                    )
+                value = f'<span class="publication-{key}" data-field="publications.{index}.{key}">{inner}</span>'
                 label = PUBLICATION_LABELS.get(key, "")
                 fields.append(f'<span class="publication-fact">{label}{value}</span>')
             if fields:

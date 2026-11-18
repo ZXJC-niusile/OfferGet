@@ -40,8 +40,8 @@ python -m pytest tests/test_packaged_diagnostics.py -ra
 
 That test builds and installs a wheel with package indexes disabled, removes its
 build checkout, and runs diagnostics outside the source tree while forbidding
-network access and installed-resource writes. It verifies packaged fixtures and
-the report template; it does not validate an sdist or rendered resume output.
+network access and installed-resource writes. It verifies packaged fixtures;
+it does not validate an sdist or rendered resume output.
 For an installed package, `python -m cli doctor` and `python -m cli selftest`
 work outside the checkout. Do not infer package contents from old artifact names
 or sizes.

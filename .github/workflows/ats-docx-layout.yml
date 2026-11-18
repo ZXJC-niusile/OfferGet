@@ -13,11 +13,10 @@ on:
       - 'core/atomic_writer.py'
       - 'core/artifacts.py'
       - 'core/paths.py'
-      - 'core/asu_modeler.py'
       - 'pyproject.toml'
       - 'requirements.txt'
+      - 'scripts/qa_common.py'
       - 'scripts/qa_ats_docx_layout.py'
-      - 'scripts/qa_modern_navy_layout.py'
       - 'tests/test_ats_docx_design.py'
       - '.github/workflows/ats-docx-layout.yml'
   workflow_dispatch:

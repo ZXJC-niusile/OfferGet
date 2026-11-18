@@ -1,7 +1,7 @@
-"""OfferGet Core Engine - Strategic Job Description Decoding & Offer Strategy OS.
+"""OfferGet Core Engine - Deterministic Resume Ingestion, Auditing, and Rendering.
 
-Implements PEP 562 module-level __getattr__ for lightweight lazy-loading of heavy
-vertical business domains while keeping eager imports for core infrastructure.
+Implements PEP 562 module-level __getattr__ for lazy-loading core modules while
+keeping core CLI helpers and registries eager.
 """
 
 from __future__ import annotations
@@ -15,14 +15,8 @@ __version__ = "1.0.0"
 from core import cli_helpers
 from core import registry
 
-# 2. PEP 562 Lazy Loading Registry for Heavy Vertical Domains
+# 2. PEP 562 Lazy Loading Registry for Core Resume Modules
 _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
-    # core.run_context
-    "StageTrace": ("core.run_context", "StageTrace"),
-    "RunContext": ("core.run_context", "RunContext"),
-    "compute_fingerprint": ("core.run_context", "compute_fingerprint"),
-    "sanitize_trace_payload": ("core.run_context", "sanitize_trace_payload"),
-
     # core.resume_view_model
     "ResumeViewModel": ("core.resume_view_model", "ResumeViewModel"),
     "HtmlThemeRenderer": ("core.resume_view_model", "HtmlThemeRenderer"),
@@ -52,17 +46,7 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "generate_micro_typography_css": ("core.layout_solver", "generate_micro_typography_css"),
     "inject_micro_typography": ("core.layout_solver", "inject_micro_typography"),
 
-    # core.jd_compat
-    "decode_jd": ("core.jd_compat", "decode_jd"),
-
-    # core.jd_compat
-    "match_profile_to_jd": ("core.jd_compat", "match_profile_to_jd"),
-
-    # core.report_generator
-    "generate_report": ("core.report_generator", "generate_report"),
-
     # core.validator
-    "validate_bilingual_html": ("core.validator", "validate_bilingual_html"),
     "validate_anti_ai_slop": ("core.validator", "validate_anti_ai_slop"),
 
     # core.ats_checker
@@ -70,14 +54,6 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "generate_skill_ledger": ("core.ats_checker", "generate_skill_ledger"),
     "filter_profile_by_visibility": ("core.ats_checker", "filter_profile_by_visibility"),
     "ATSAuditor": ("core.ats_checker", "ATSAuditor"),
-
-    # core.gap_roi
-    "SkillGapROIEngine": ("core.gap_roi", "SkillGapROIEngine"),
-    "calculate_gap_roi": ("core.gap_roi", "calculate_gap_roi"),
-
-    # core.offer_negotiator
-    "OfferNegotiator": ("core.offer_negotiator", "OfferNegotiator"),
-    "evaluate_offer_package": ("core.offer_negotiator", "evaluate_offer_package"),
 
     # core.anonymizer
     "PrivacyAnonymizer": ("core.anonymizer", "PrivacyAnonymizer"),
@@ -94,28 +70,9 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "DiffCategory": ("core.diff_ledger", "DiffCategory"),
     "DiffSeverity": ("core.diff_ledger", "DiffSeverity"),
 
-    # core.baoyan_auditor
-    "BaoyanAuditor": ("core.baoyan_auditor", "BaoyanAuditor"),
-    "audit_baoyan_entry": ("core.baoyan_auditor", "audit_baoyan_entry"),
-    "compress_baoyan_entry": ("core.baoyan_auditor", "compress_baoyan_entry"),
-    "count_baoyan_words": ("core.baoyan_auditor", "count_baoyan_words"),
-
-    # core.baoyan_pipeline
-    "BaoyanPipeline": ("core.baoyan_pipeline", "BaoyanPipeline"),
-    "BaoyanStatus": ("core.baoyan_pipeline", "BaoyanStatus"),
-    "validate_academic_profile": ("core.baoyan_pipeline", "validate_academic_profile"),
-    "generate_camp_checklist": ("core.baoyan_pipeline", "generate_camp_checklist"),
-
-    # core.advisor_matcher
-    "AdvisorMatcher": ("core.advisor_matcher", "AdvisorMatcher"),
-    "AdvisorProfile": ("core.advisor_matcher", "AdvisorProfile"),
-    "CandidateProfile": ("core.advisor_matcher", "CandidateProfile"),
-    "Publication": ("core.advisor_matcher", "Publication"),
-    "match_advisor_and_draft_email": ("core.advisor_matcher", "match_advisor_and_draft_email"),
-
-    # core.defense
-    "DefenseSimulator": ("core.defense", "DefenseSimulator"),
-    "simulate_project_defense": ("core.defense", "simulate_project_defense"),
+    # core.academic_sync
+    "AcademicPublication": ("core.academic_sync", "AcademicPublication"),
+    "BibTexPublicationParser": ("core.academic_sync", "BibTexPublicationParser"),
 
     # core.lexicon
     "VERB_HIERARCHY": ("core.lexicon", "VERB_HIERARCHY"),
@@ -129,57 +86,49 @@ _LAZY_IMPORTS: Dict[str, Tuple[str, str]] = {
     "INFLATION_PATTERNS": ("core.lexicon", "INFLATION_PATTERNS"),
     "FORBIDDEN_BUZZWORDS": ("core.lexicon", "FORBIDDEN_BUZZWORDS"),
     "AI_BUZZWORDS_LEXICON": ("core.lexicon", "AI_BUZZWORDS_LEXICON"),
+
     # core.atomic_writer
     "SafeSaveResult": ("core.atomic_writer", "SafeSaveResult"),
     "safe_save_file": ("core.atomic_writer", "safe_save_file"),
     "atomic_write": ("core.atomic_writer", "atomic_write"),
     "is_file_locked": ("core.atomic_writer", "is_file_locked"),
+
     # core.resume_parser
     "ResumeTextParser": ("core.resume_parser", "ResumeTextParser"),
     "parse_resume_to_profile": ("core.resume_parser", "parse_resume_to_profile"),
+
+    # core.reference_index
+    "ReferenceKnowledgeIndex": ("core.reference_index", "ReferenceKnowledgeIndex"),
+    "chunk_markdown_document": ("core.reference_index", "chunk_markdown_document"),
 }
 
 _SUBMODULES: set[str] = {
     "academic_exporter",
-    "atomic_writer",
-    "advisor_matcher",
+    "academic_sync",
     "anonymizer",
-    "application_tracker",
-    "asu_modeler",
+    "artifacts",
+    "atomic_writer",
     "ats_checker",
-    "baoyan_auditor",
-    "baoyan_pipeline",
-    "resume_parser",
-    "browser_renderer",
+    "ats_docx_renderer",
     "autofit",
-    "resume_auditor",
-    "render",
-    "audit",
-
+    "browser_renderer",
     "cli_helpers",
-    "defense",
-    "evidence",
+    "diff_ledger",
     "fact_guard",
-    "gap_roi",
-    "input_router",
-    "interview_debrief",
-    "interview_review_contract",
-    "jd_compat",
-    "jd_analyst",
-    "job_flow",
+    "fingerprints",
+    "layout_solver",
     "lexicon",
-    "material_proposal",
-    "offer_negotiator",
+    "paths",
     "profile_adapter",
+    "reference_index",
     "registry",
-    "report_generator",
-    "rendercv_adapter",
-    "resume_version_diff",
+    "resume_auditor",
     "resume_builder",
+    "resume_parser",
+    "resume_photo",
+    "resume_themes",
     "resume_view_model",
-    "run_context",
     "security_gate",
-    "services",
     "validator",
 }
 
@@ -207,31 +156,18 @@ def __dir__() -> List[str]:
 
 
 __all__ = [
-    "StageTrace",
-    "RunContext",
-    "compute_fingerprint",
-    "sanitize_trace_payload",
     "cli_helpers",
-    "services",
     "registry",
     "ResumeViewModel",
     "HtmlThemeRenderer",
     "AtsPlainRenderer",
     "ResumeBuilder",
     "audit_resume_quality",
-    "decode_jd",
-    "match_profile_to_jd",
-    "generate_report",
-    "validate_bilingual_html",
     "validate_anti_ai_slop",
     "audit_resume_ats",
     "generate_skill_ledger",
     "filter_profile_by_visibility",
     "ATSAuditor",
-    "SkillGapROIEngine",
-    "calculate_gap_roi",
-    "OfferNegotiator",
-    "evaluate_offer_package",
     "PrivacyAnonymizer",
     "anonymize_profile",
     "deanonymize_text",
@@ -241,21 +177,8 @@ __all__ = [
     "DiffEntry",
     "DiffCategory",
     "DiffSeverity",
-    "BaoyanAuditor",
-    "audit_baoyan_entry",
-    "compress_baoyan_entry",
-    "count_baoyan_words",
-    "BaoyanPipeline",
-    "BaoyanStatus",
-    "validate_academic_profile",
-    "generate_camp_checklist",
-    "AdvisorMatcher",
-    "AdvisorProfile",
-    "CandidateProfile",
-    "Publication",
-    "match_advisor_and_draft_email",
-    "DefenseSimulator",
-    "simulate_project_defense",
+    "AcademicPublication",
+    "BibTexPublicationParser",
     "VERB_HIERARCHY",
     "STRONG_ACTION_VERBS_ZH",
     "STRONG_ACTION_VERBS_EN",
@@ -271,5 +194,9 @@ __all__ = [
     "safe_save_file",
     "atomic_write",
     "is_file_locked",
+    "ResumeTextParser",
+    "parse_resume_to_profile",
+    "ReferenceKnowledgeIndex",
+    "chunk_markdown_document",
     "__version__",
 ]

@@ -9,7 +9,6 @@ Verifies:
 5. Micro-typography CSS generation and HTML injection across engines.
 """
 
-import re
 import unittest
 from pathlib import Path
 import tempfile
@@ -23,26 +22,10 @@ from core.layout_solver import (
     solve_layout,
     generate_micro_typography_css,
     inject_micro_typography,
-    MIN_BODY_FONT_PT_FLOOR,
 )
 from core.resume_builder import ResumeBuilder
 from core.academic_exporter import AcademicExporter
-
-
-class FastBrowserRenderer:
-    """Lightweight mock renderer for testing layout builder integration."""
-    MINIMAL_PDF = b"%PDF-1.4\n1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n3 0 obj<< /Type /Page /Parent 2 0 R >>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<< /Size 4 /Root 1 0 R >>\nstartxref\n164\n%%EOF\n"
-
-    def render_pdf(self, html_path, pdf_path, timeout_seconds=30):
-        Path(pdf_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(pdf_path).write_bytes(self.MINIMAL_PDF)
-        return True, 1, "Mock render"
-
-    def count_pages(self, pdf_path):
-        return 1
-
-    def measure_overflow(self, html_path, a4_target_height=1122.5):
-        return 1000, 0
+from tests.helpers import FastBrowserRenderer
 
 
 class TestLayoutSolver(unittest.TestCase):
@@ -341,7 +324,7 @@ class TestLayoutSolver(unittest.TestCase):
             self.assertIn("text-wrap: pretty;", html_content)
 
     def test_integration_with_academic_exporter(self):
-        """AcademicExporter.generate_latex_html_preview automatically injects micro-typography rules."""
+        """AcademicExporter.generate_academic_html_preview automatically injects micro-typography rules."""
         profile = {
             "name": "李学者",
             "title": "清华大学计算机系",
@@ -364,7 +347,7 @@ class TestLayoutSolver(unittest.TestCase):
             ],
         }
         exporter = AcademicExporter()
-        preview_html = exporter.generate_latex_html_preview(profile)
+        preview_html = exporter.generate_academic_html_preview(profile)
         self.assertIn("offerget-micro-typography", preview_html)
         self.assertIn("text-wrap: pretty;", preview_html)
         self.assertIn("text-wrap: balance;", preview_html)

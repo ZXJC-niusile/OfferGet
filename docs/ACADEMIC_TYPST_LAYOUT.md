@@ -14,29 +14,9 @@ filenames use quoted code strings, separate from content markup escaping.
 
 ## Reproduce verification
 
-Install the repository dependencies, Noto CJK and Liberation fonts, the pinned
-`typst==0.15.0` Python native compiler, and Playwright Chromium. Then run:
+Install the repository dependencies, Noto CJK and Liberation fonts, `typst==0.15.0`, and Playwright Chromium, then run:
 
     python -m pytest tests/test_academic_typst_design.py -v
-    python scripts/qa_academic_typst_layout.py --output artifacts/academic-typst
+    python scripts/qa_academic_layout.py --format typst --output artifacts/academic-typst
 
-The harness renders the same fabricated profiles through real native Typst and the
-existing academic HTML fallback separately. It also traces actual ResumeBuilder
-returned PDFs in native and intentionally forced-fallback branches; the latter uses
-BrowserRenderer's normal executable discovery. Every mode has independent source-fact,
-A4 and margin checks, native CJK font checks, page PNGs, and a source hash manifest.
-Review every actual page image before approving. No private resumes or paid services
-are used. This change does not alter LaTeX or the previously verified HTML fallback.
-
-Reference: [Typst block stickiness](https://typst.app/docs/reference/layout/block/),
-[bullet list spacing](https://typst.app/docs/reference/model/list/), and the
-[maintainer-published Python compiler](https://pypi.org/project/typst/0.15.0/).
-
-## Photo mode compatibility
-
-The native renderer consumes the shared resolved photo selection. Explicit no-photo
-(including `reserve_photo=False`) excludes profile images without reading them.
-Placeholder mode only draws a reserved slot. Photo mode validates a real raster;
-the builder's separately quoted `photo_reference` only relocates an already selected
-image and cannot enable an excluded photo. The visual harness resolves all three
-modes explicitly before rendering native and fallback sources.
+Format-specific gates (see [shared QA rules](RESUME_THEME_QA.md)): checks Typst CJK font embedding (`Noto Sans CJK`), traced native vs forced-fallback `ResumeBuilder` paths, and `photo_reference` relocation constraints without enabling excluded `--no-photo` images.

@@ -24,20 +24,9 @@ selection rather than removing content to force a one-page resume.
 
 ```sh
 python -m pytest tests/test_engineering_sb2nov_layout.py tests/test_resume_theme_qa.py -q
-python -m pytest tests -q
-python cli.py selftest
 python scripts/qa_modern_navy_layout.py --theme engineering-sb2nov \
   --baseline-root /absolute/path/to/exact-baseline \
   --output-dir /absolute/path/to/empty-artifact-directory
 ```
 
-The common sixteen-case matrix includes ordinary and stress CJK/English input,
-no/reserved/embedded photos, long skill labels/values, raw and compact layouts,
-dense solver layouts, and actual `ResumeBuilder` output with AutoFit and adaptive
-fill enabled. Browser-independent markup contracts are not a PDF or visual pass.
-
-Before merging, inspect all before/after PDF pages and actual production
-screenshots for serif glyph coverage, centered-header/photo alignment, hanging
-bullets, date placement, clipping, overlaps, and page breaks. Check selectable
-text and exact head/base revisions. If local browser execution is restricted,
-record that limitation and inspect the exact-head CI artifacts instead.
+Checks serif fallback (`Noto Serif CJK SC`), centered header alignment, italic roles/dates, and monochrome exam score cells via the [shared QA harness](RESUME_THEME_QA.md).

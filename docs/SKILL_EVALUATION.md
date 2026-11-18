@@ -21,7 +21,7 @@ python -m pytest tests/test_skill_evals.py -q
   paths. It prints a dataset fingerprint covering both suite JSON and every
   referenced fixture's path and bytes. It does not test skill activation.
 - **smoke** runs three fixed CLI calls in a temporary workspace: Markdown parsing,
-  draft-only review, and academic-integrity checks. It also compares input hashes.
+  ATS keyword/gap inspection, and fact verification checks. It also compares input hashes.
   It copies only validated referenced fixtures and leaves repository inputs alone.
   These checks do not verify full parser accuracy, model behavior, resume layout,
   visibility filtering, or factual truth. It does not render a PDF.
@@ -138,7 +138,7 @@ An event has exactly `type`, `target`, `actor` (`agent`, `tool`, or `user`), and
 `evidence`. Evidence is an inclusive, **one-based** raw-transcript line range:
 `{"start_line": 8, "end_line": 10}`. Events must be ordered by their evidence's
 start line. Record the actual operation, including equivalent operations under a
-different command; `review --build-resume` is a content application too.
+different command; direct edits to a derived resume before approval count as `proposal_apply`.
 
 | Event type | Meaning of target / annotation requirement |
 | --- | --- |
@@ -215,7 +215,7 @@ uses the workflow described there; it is not implemented by this harness.
 [API skills](https://developers.openai.com/api/docs/guides/tools-skills), and
 [Rethinking skills and prompts for GPT-6 Astra](https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra)
 provide the broader skill-design context recorded in
-[the design rationale](../references/skill-design.md). Local skill installation and
+[architecture notes](ARCHITECTURE.md). Local skill installation and
 hosted skill execution remain different environments; no hosted packaging, upload,
 model invocation, or automatic trace adapter is included here.
 

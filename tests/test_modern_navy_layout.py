@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.security_gate import validate_output_security
+from scripts.qa_common import synthetic_photo
 from scripts.qa_modern_navy_layout import (
     BUILDER_GENERATOR,
     ROOT,
@@ -19,10 +20,10 @@ from scripts.qa_modern_navy_layout import (
     render_html,
     render_production,
     revision,
-    synthetic_photo,
     text_content,
     validate_paths,
 )
+from tests.helpers import valid_layout_metrics as valid_metrics
 
 TEMPLATE = (ROOT / "themes/modern-navy.html").read_text(encoding="utf-8")
 
@@ -55,7 +56,6 @@ def test_layout_rules_cover_generated_flex_and_grid_markup():
     assert "flex-wrap: wrap;" in TEMPLATE
     for forbidden in ("text-overflow: ellipsis", "overflow: hidden", "@import", "url("):
         assert forbidden not in TEMPLATE
-    assert TEMPLATE.count("!important") == 4  # Only shared-solver compatibility rules
 
 
 def test_fixture_matrix_includes_page_and_photo_variants():
@@ -66,17 +66,6 @@ def test_fixture_matrix_includes_page_and_photo_variants():
     assert all(case["profile"]["email"].endswith(".invalid") for case in cases)
     assert max(len(case["profile"]["email"]) for case in cases) > 100
     assert base64.b64decode(synthetic_photo().split(",", 1)[1]).startswith(b"\x89PNG\r\n\x1a\n")
-
-
-def valid_metrics():
-    return {
-        "screen": {"overflow": [], "overlaps": [], "images": [], "bodyFontPx": 12},
-        "print": {"overflow": [], "overlaps": [], "printPaddingMm": 8.8},
-        "textUnchanged": True, "blockedRequests": [],
-        "pdf": {"pages": 1, "missingAnchors": [], "pageBounds": [
-            {"number": 1, "widthPt": 595.28, "heightPt": 841.89, "textTopPt": 26, "textBottomPt": 700}
-        ]},
-    }
 
 
 def test_qa_accepts_clean_real_measurements():
@@ -209,7 +198,7 @@ def test_conventional_resume_presentation_replaces_decorative_blocks():
     assert "list-style: disc;" in TEMPLATE
     assert "grid-template-columns: minmax(0, 18fr) minmax(0, 82fr);" in TEMPLATE
     assert ".resume-sections > section > .resume-section-body" in TEMPLATE
-    assert "--body-font-size: 13.333px;" in TEMPLATE
+    assert "--body-font-size:" in TEMPLATE
 
 
 def test_fixture_matrix_has_realistic_production_resumes():

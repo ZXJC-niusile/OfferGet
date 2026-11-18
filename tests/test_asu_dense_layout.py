@@ -9,8 +9,8 @@ TEMPLATE = (ROOT / "themes/asu-dense.html").read_text(encoding="utf-8")
 
 def test_generated_inline_markup_has_scoped_layout_overrides():
     # Shared rendering replaces <header> and injects inline flex/nowrap styles.
-    assert ".resume-dense .header-top {\n      display: block !important;" in TEMPLATE
-    assert ".resume-dense #skills li {\n      display: block !important;" in TEMPLATE
+    assert re.search(r"\.resume-dense\s+\.header-top\s*\{[^}]*display:\s*block\s*!important", TEMPLATE)
+    assert re.search(r"\.resume-dense\s+#skills\s+li\s*\{[^}]*display:\s*block\s*!important", TEMPLATE)
     skills_rule = re.search(r"\.resume-dense #skills li > span\s*\{([^}]+)\}", TEMPLATE)
     assert "white-space: normal !important;" in skills_rule.group(1)
     for selector in ("header > div:first-child", ".header-top > *", ".contacts a",

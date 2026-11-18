@@ -162,7 +162,11 @@ def load_json_or_text(path_or_str: Union[str, Path, os.PathLike[str]]) -> Tuple[
                 return data, text
             raise ValueError(f"JSON file must contain object or array, got {type(data).__name__}")
         except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON syntax in {path_or_str}: {exc}") from exc
+            raise json.JSONDecodeError(
+                f"Invalid JSON syntax in {path_or_str}: {exc.msg}",
+                exc.doc,
+                exc.pos,
+            ) from exc
     elif stripped.startswith(("{", "[")):
         try:
             data = json.loads(stripped)
@@ -266,7 +270,10 @@ def load_profile(path_or_str: Union[str, Path]) -> Dict[str, Any]:
     p = Path(path_or_str)
     if p.exists() and p.is_file():
         if p.suffix.lower() == ".json":
-            return load_json(str(p))
+            data = load_json(str(p))
+            if not isinstance(data, dict):
+                raise ValueError(f"Profile JSON must be an object, got {type(data).__name__}: {p}")
+            return data
         from core.resume_parser import parse_resume_to_profile
         return parse_resume_to_profile(p)
 
@@ -282,17 +289,6 @@ def load_profile(path_or_str: Union[str, Path]) -> Dict[str, Any]:
     return parse_resume_to_profile(str(path_or_str))
 
 
-def open_application_store(args_or_path: Any = None):
-    """Create the shared SQLite store used by application-related commands."""
-    from core.application_tracker import ApplicationStore
-
-    if isinstance(args_or_path, (str, Path)):
-        db_path = str(args_or_path)
-    else:
-        db_path = getattr(args_or_path, "db", None) or "offerget_applications.db"
-    return ApplicationStore(db_path)
-
-
 __all__ = [
     "read_text",
     "load_json",
@@ -305,7 +301,6 @@ __all__ = [
     "format_cli_error",
     "exit_cli_error",
     "fail_cli",
-    "open_application_store",
     "require_file",
 ]
 

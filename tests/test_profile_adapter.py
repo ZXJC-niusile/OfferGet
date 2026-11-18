@@ -23,11 +23,6 @@ from core.profile_adapter import (
     build_profile_evidence_index,
     normalize_candidate_profile,
 )
-from core.gap_roi import SkillGapROIEngine
-from core.rendercv_adapter import export_rendercv, import_rendercv, write_rendercv_json
-import subprocess
-import sys
-import tempfile
 
 
 class TestProfileAdapter(unittest.TestCase):
@@ -165,16 +160,6 @@ class TestProfileAdapter(unittest.TestCase):
         self.assertIn("years_of_experience", index.input_quality["unknown_fields"])
         self.assertIn("major", index.input_quality["unknown_fields"])
 
-        # 3. Gap ROI engine _normalize_profile governance
-        engine = SkillGapROIEngine()
-        cand_obj = engine._normalize_profile(minimal)
-        self.assertEqual(cand_obj.education_level, "")
-        self.assertEqual(cand_obj.years_of_experience, 0.0)
-        self.assertEqual(cand_obj.major, "")
-        self.assertTrue(engine.last_input_quality["unknown_experience"])
-        self.assertTrue(engine.last_input_quality["unknown_education"])
-        self.assertTrue(engine.last_input_quality["unknown_major"])
-
     def test_05_missing_title_not_hallucinated_to_yunying(self):
         """Test that missing title/intent is NOT hallucinated to '运营岗'."""
         # Case B (flat)
@@ -227,29 +212,11 @@ class TestProfileAdapter(unittest.TestCase):
         idx = build_profile_evidence_index(ctx1)
         self.assertIs(idx, ctx1.evidence_index)
 
-    def test_08_profile_context_integration_with_fact_guard_and_canonical(self):
-        """Test ProfileContext with FactVerificationGuard and profile_to_canonical."""
+    def test_08_profile_context_integration_with_fact_guard(self):
+        """Test ProfileContext with FactVerificationGuard."""
         from core.fact_guard import FactVerificationGuard
-        from core.jd_compat import profile_to_canonical
 
         ctx = build_profile_context(self.profile_data)
-
-        # Canonical profile lazy evaluation & defensive copies
-        cand1 = ctx.get_canonical_profile()
-        cand2 = ctx.get_canonical_profile()
-        self.assertEqual(cand1, cand2)
-        self.assertIsNot(cand1, cand2)  # Defensive copy on every get
-        self.assertEqual(cand1.name, ctx.normalized_profile["candidate"]["name"])
-
-        # Mutating cand1 does not mutate ctx internal canonical profile
-        cand1.skills.clear()
-        self.assertEqual(len(cand1.skills), 0)
-        self.assertGreater(len(ctx.get_canonical_profile().skills), 0)
-        self.assertGreater(len(ctx.canonical_profile_copy().skills), 0)
-
-        # profile_to_canonical directly on ctx returns identical data
-        cand3 = profile_to_canonical(ctx)
-        self.assertEqual(cand2.name, cand3.name)
 
         # FactVerificationGuard reuses ctx.evidence_index directly
         guard = FactVerificationGuard(ctx)
@@ -310,9 +277,6 @@ class TestProfileAdapter(unittest.TestCase):
 
         # 1. Private fields tampering must be blocked
         with self.assertRaises(AttributeError):
-            ctx._canonical_profile = "malicious_override"
-
-        with self.assertRaises(AttributeError):
             ctx._raw_profile = {}
 
         with self.assertRaises(AttributeError):
@@ -324,125 +288,9 @@ class TestProfileAdapter(unittest.TestCase):
         with self.assertRaises(AttributeError):
             ctx.new_unknown_attr = 999
 
-        # 2. Canonical profile mutations do not corrupt subsequent reads
-        canonical = ctx.get_canonical_profile()
-        original_skills = list(canonical.skills)
-        canonical.skills.append("POISON_SKILL")
-        canonical.name = "POISON_NAME"
-
-        fresh_canonical = ctx.get_canonical_profile()
-        self.assertEqual(fresh_canonical.skills, original_skills)
-        self.assertNotIn("POISON_SKILL", fresh_canonical.skills)
-        self.assertNotEqual(fresh_canonical.name, "POISON_NAME")
-
-        # 3. Context version alignment: evidence_index, claims, and canonical_profile reflect the same version
-        self.assertEqual(fresh_canonical.name, ctx.normalized_profile["candidate"]["name"])
-        self.assertEqual(set(fresh_canonical.skills), set(ctx.evidence_index.skills))
+        # 2. Context version alignment: evidence_index, claims, and skills reflect the same state
+        self.assertEqual(set(ctx.skills), set(ctx.evidence_index.skills))
         self.assertEqual(len(ctx.claims), len(ctx.evidence_index.claims))
-
-
-class TestRenderCVAdapter(unittest.TestCase):
-    def setUp(self):
-        self.rendercv = {
-            "cv": {
-                "name": "Alex Example",
-                "headline": "Backend Engineer",
-                "location": "Shanghai",
-                "email": "alex@example.com",
-                "phone": "+1 555 0100",
-                "social_networks": [{"network": "GitHub", "username": "https://github.com/alex"}],
-                "sections": {
-                    "Experience": {"entries": [{
-                        "company": "Example Inc.", "position": "Engineer",
-                        "start_date": "2021-01", "end_date": "2024-01",
-                        "highlights": ["Reduced p95 latency by 20%"],
-                    }]},
-                    "Education": {"entries": [{
-                        "institution": "Example University", "area": "Computer Science",
-                        "degree": "MSc", "start_date": "2018", "end_date": "2020",
-                        "highlights": ["Honors"],
-                    }]},
-                    "Projects": {"entries": [{
-                        "name": "Search Service", "summary": "Built search backend",
-                        "highlights": ["Indexed 1M records"],
-                    }]},
-                    "Skills": {"entries": [{"label": "Languages", "details": "Python, Go"}]},
-                    "Awards": {"entries": [{"name": "Best Project"}]},
-                },
-            },
-            "design": {"theme": "classic"},
-        }
-
-    def test_import_maps_core_facts_and_reports_unsupported_sections(self):
-        result = import_rendercv(self.rendercv)
-        profile = result.profile
-        self.assertEqual(profile["candidate"]["name"], "Alex Example")
-        self.assertEqual(profile["experience"][0]["company"], "Example Inc.")
-        self.assertEqual(profile["experience"][0]["bullets"], ["Reduced p95 latency by 20%"])
-        self.assertEqual(profile["projects"][0]["name"], "Search Service")
-        self.assertEqual(profile["competencies"]["Languages"], ["Python", "Go"])
-        self.assertEqual(profile["candidate"]["school"], "Example University")
-        self.assertIn("Awards", result.unsupported_sections)
-        self.assertTrue(any("Awards" in warning for warning in result.warnings))
-        self.assertIn("unsupported_sections", profile["rendercv_import_metadata"])
-
-    def test_export_roundtrip_and_json_file(self):
-        imported = import_rendercv(self.rendercv)
-        exported = export_rendercv(imported.profile)
-        cv = exported["cv"]
-        self.assertEqual(cv["name"], "Alex Example")
-        self.assertEqual(cv["sections"]["Experience"]["entries"][0]["company"], "Example Inc.")
-        self.assertEqual(cv["sections"]["Projects"]["entries"][0]["name"], "Search Service")
-        with tempfile.TemporaryDirectory() as tmp:
-            path = write_rendercv_json(imported.profile, Path(tmp) / "nested" / "cv.json")
-            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), exported)
-
-    def test_json_path_supported_yaml_rejected_without_extra_dependency(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            json_path = Path(tmp) / "cv.json"
-            json_path.write_text(json.dumps(self.rendercv), encoding="utf-8")
-            self.assertEqual(import_rendercv(json_path).profile["candidate"]["name"], "Alex Example")
-            yaml_path = Path(tmp) / "cv.yaml"
-            yaml_path.write_text("cv: {}", encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "accepts JSON"):
-                import_rendercv(yaml_path)
-
-    def test_invalid_sections_shape_fails_closed(self):
-        invalid = {"cv": {"sections": ["not", "a", "mapping"]}}
-        with self.assertRaisesRegex(ValueError, "must be an object"):
-            import_rendercv(invalid)
-
-    def test_cli_import_and_export(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "rendercv.json"
-            profile = Path(tmp) / "profile.json"
-            exported = Path(tmp) / "exported.json"
-            source.write_text(json.dumps(self.rendercv), encoding="utf-8")
-            base = [sys.executable, str(PROJECT_ROOT / "cli.py"), "rendercv"]
-            imported = subprocess.run(
-                base + ["import", str(source), "--output", str(profile), "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
-            )
-            self.assertEqual(imported.returncode, 0, imported.stderr)
-            self.assertTrue(profile.exists())
-            export = subprocess.run(
-                base + ["export", str(profile), "--output", str(exported), "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
-            )
-            self.assertEqual(export.returncode, 0, export.stderr)
-            self.assertTrue(exported.exists())
-            self.assertIn("Experience", json.loads(exported.read_text(encoding="utf-8"))["cv"]["sections"])
-
-    def test_cli_json_error_contract(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            output = Path(tmp) / "profile.json"
-            proc = subprocess.run(
-                [sys.executable, str(PROJECT_ROOT / "cli.py"), "rendercv", "import", str(Path(tmp) / "missing.json"), "--output", str(output), "--json"],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=PROJECT_ROOT,
-            )
-            self.assertEqual(proc.returncode, 1)
-            self.assertEqual(json.loads(proc.stdout)["error_type"], "rendercv_import_error")
-            self.assertEqual(proc.stderr, "")
 
 
 if __name__ == "__main__":

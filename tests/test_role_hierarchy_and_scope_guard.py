@@ -15,7 +15,6 @@ Addresses user-reported AI rewrite defects:
    - Speculative currency conversion: "80万元" drifted to "$110K USD"
 """
 
-import pytest
 from core.registry import QualityRuleRegistry
 from core.fact_guard import FactVerificationGuard
 

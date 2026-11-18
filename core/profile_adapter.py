@@ -124,7 +124,6 @@ class ProfileContext:
         bullets: Tuple[str, ...],
         metric_anchors: Tuple[Dict[str, Any], ...],
         input_quality: Dict[str, Any],
-        canonical_profile: Optional[Any] = None,
     ):
         object.__setattr__(self, "_raw_profile", copy.deepcopy(raw_profile))
         object.__setattr__(self, "_normalized_profile", copy.deepcopy(normalized_profile))
@@ -134,7 +133,6 @@ class ProfileContext:
         object.__setattr__(self, "bullets", tuple(bullets))
         object.__setattr__(self, "_metric_anchors", tuple(copy.deepcopy(a) for a in metric_anchors))
         object.__setattr__(self, "_input_quality", copy.deepcopy(input_quality))
-        object.__setattr__(self, "_canonical_profile", canonical_profile)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise AttributeError(f"ProfileContext is immutable, cannot modify '{name}'")
@@ -175,93 +173,9 @@ class ProfileContext:
         """Returns a defensive copy of the normalized profile."""
         return copy.deepcopy(self._normalized_profile)
 
-    def normalized_profile_copy(self) -> Dict[str, Any]:
-        """Returns a defensive copy of the normalized profile."""
-        return copy.deepcopy(self._normalized_profile)
-
     def raw_profile_copy(self) -> Dict[str, Any]:
         """Returns a defensive copy of the raw profile."""
         return copy.deepcopy(self._raw_profile)
-
-    def get_canonical_profile(self) -> Any:
-        """Lazily extracts and caches the canonical CandidateProfile representation, returning a defensive copy."""
-        if self._canonical_profile is None:
-            from core.jd_compat import profile_to_canonical
-
-            canonical = profile_to_canonical(self)
-            object.__setattr__(self, "_canonical_profile", canonical)
-        return copy.deepcopy(self._canonical_profile)
-
-    def canonical_profile_copy(self) -> Any:
-        """Explicit helper returning a defensive copy of the canonical CandidateProfile."""
-        return self.get_canonical_profile()
-
-    def to_analyst_candidate(self) -> Any:
-        """Project this ProfileContext into core.jd_analyst.models.CandidateProfile."""
-        return self.get_canonical_profile()
-
-    def to_advisor_candidate(self) -> Any:
-        """Project this ProfileContext into core.advisor_matcher.CandidateProfile."""
-        from core.advisor_matcher import CandidateProfile as AdvisorCandidateProfile
-
-        prof = self._normalized_profile
-        raw = self._raw_profile
-        cand = prof.get("candidate", {}) if isinstance(prof.get("candidate"), dict) else {}
-        raw_cand = raw.get("candidate", {}) if isinstance(raw.get("candidate"), dict) else raw
-        edu = prof.get("education", {}) if isinstance(prof.get("education"), dict) else {}
-        raw_edu = raw.get("education", {}) if isinstance(raw.get("education"), dict) else {}
-        standing = raw.get("academic_standing", {}) if isinstance(raw.get("academic_standing"), dict) else {}
-
-        school = (
-            raw_edu.get("school")
-            or edu.get("school")
-            or cand.get("school")
-            or cand.get("institution")
-            or raw_cand.get("undergraduate_school")
-            or raw_cand.get("university")
-            or raw.get("degree_school", "")
-        )
-        major = raw_edu.get("major") or edu.get("major") or cand.get("major") or raw_cand.get("major", "")
-        gpa = str(standing.get("gpa_display") or standing.get("gpa") or raw_edu.get("gpa") or cand.get("gpa") or raw.get("gpa", ""))
-        rank = str(standing.get("rank") or raw_edu.get("rank") or cand.get("rank") or raw.get("rank", ""))
-
-        coursework = [c.get("course_name", "") for c in standing.get("core_courses", [])] if "core_courses" in standing else list(raw.get("coursework", raw.get("courses", [])))
-        honors = [
-            h.get("name", "") if isinstance(h, dict) else str(h)
-            for h in (raw.get("honors") or raw.get("honors_awards") or raw.get("awards") or prof.get("honors_awards") or [])
-        ]
-
-        interests = list(raw.get("research_interests", raw.get("interests", [])))
-        if not interests and "target_schools" in raw:
-            for ts in raw["target_schools"]:
-                if isinstance(ts, dict) and ts.get("research_direction") and ts["research_direction"] not in interests:
-                    interests.append(ts["research_direction"])
-        if not interests and "graduation_thesis" in raw and isinstance(raw["graduation_thesis"], dict):
-            interests.extend(raw["graduation_thesis"].get("tags", []))
-
-        grade = str(raw_cand.get("grade") or cand.get("grade") or raw.get("grade") or "")
-        target_degree = str(raw.get("target_degree") or raw_cand.get("target_degree") or cand.get("target_degree") or "")
-
-        return AdvisorCandidateProfile(
-            name=str(cand.get("name") or raw_cand.get("name", "候选人")),
-            undergraduate_school=str(school),
-            major=str(major),
-            grade=grade,
-            target_degree=target_degree,
-            gpa=gpa,
-            rank=rank,
-            rank_percentage=standing.get("rank_percentage") or raw.get("rank_percentage"),
-            honors_awards=honors,
-            publications=list(raw.get("publications", prof.get("publications", []))),
-            projects=list(raw.get("projects", prof.get("projects", []))),
-            coursework=coursework,
-            skills=list(self.skills),
-            research_interests=interests,
-            read_advisor_papers=list(raw.get("read_advisor_papers", [])),
-            email=str(cand.get("email") or raw_cand.get("email", "")),
-            phone=str(cand.get("phone") or raw_cand.get("phone", "")),
-            wechat=str(raw_cand.get("wechat", "")),
-        )
 
     def to_view_model(
         self,

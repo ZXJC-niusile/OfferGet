@@ -8,32 +8,33 @@ OfferGet ATS Command Handlers:
 from __future__ import annotations
 
 import os
-import sys
 
 from core.cli_helpers import (
     read_text,
     load_profile,
     write_json,
     emit_json,
-    emit_stderr,
+    fail_cli,
 )
 
-from services.profile_service import ProfileService
+from core.ats_checker import (
+    audit_resume_ats,
+    filter_profile_by_visibility,
+    generate_skill_ledger,
+)
 
 
 def cmd_ats_audit(args):
     """Handler for `offerget ats audit <input_file>`."""
     input_path = args.input_file
     if not os.path.exists(input_path):
-        emit_stderr(f"[-] Error: Input file not found: {input_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Input file not found: {input_path}")
 
     jd_path = args.jd
     if jd_path and not os.path.exists(jd_path):
-        emit_stderr(f"[-] Error: JD file not found: {jd_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"JD file not found: {jd_path}")
 
-    result = ProfileService().audit_ats(
+    result = audit_resume_ats(
         profile_or_text=input_path,
         jd_decoded_or_text=jd_path,
         target_tag=args.tag
@@ -80,16 +81,14 @@ def cmd_ats_ledger(args):
     profile_path = args.profile
     jd_path = args.jd
     if not os.path.exists(profile_path):
-        emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Profile file not found: {profile_path}")
     if not os.path.exists(jd_path):
-        emit_stderr(f"[-] Error: JD file not found: {jd_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"JD file not found: {jd_path}")
 
     profile_data = load_profile(profile_path)
     jd_text = read_text(jd_path)
 
-    ledger = ProfileService().generate_skill_ledger(profile_data, jd_text)
+    ledger = generate_skill_ledger(profile_data, jd_text)
 
     if args.json:
         emit_json(ledger)
@@ -118,7 +117,7 @@ def cmd_ats_ledger(args):
     print("\n[3] UNSUPPORTED GAPS (Required by JD but candidate lacks; DO NOT FAKE):")
     for item in ledger["unsupported_gap"][:5]:
         print(f"    ! {item['skill']}")
-        print(f"      Defense Strategy: {item['interview_defense']}")
+        print(f"      Note: {item['anti_hallucination_rule']}")
     print("=" * 68)
 
 
@@ -127,11 +126,10 @@ def cmd_ats_filter(args):
     profile_path = args.profile
     tag = args.tag
     if not os.path.exists(profile_path):
-        emit_stderr(f"[-] Error: Profile file not found: {profile_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Profile file not found: {profile_path}")
 
     profile_data = load_profile(profile_path)
-    tailored = ProfileService().filter_by_visibility(profile_data, tag)
+    tailored = filter_profile_by_visibility(profile_data, target_tag=tag)
 
     if args.output:
         write_json(tailored, args.output)

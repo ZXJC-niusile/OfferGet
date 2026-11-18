@@ -370,7 +370,7 @@ class TestResumeViewModel(unittest.TestCase):
         output_html = self.test_dir / "test_autofit_output.html"
         output_pdf = self.test_dir / "test_autofit_output.pdf"
 
-        from tests.test_resume_builder import FastBrowserRenderer
+        from tests.helpers import FastBrowserRenderer
         browser_renderer = FastBrowserRenderer()
         autofit_engine = AutoFitEngine(browser_renderer)
 
@@ -560,8 +560,8 @@ class TestAcademicExporter(unittest.TestCase):
         self.assertIn("#image(", typ_img)
         self.assertIn("photo.png", typ_img)
 
-    def test_generate_latex_html_preview_security(self):
-        html_src = self.exporter.generate_latex_html_preview(self.sample_profile, reserve_photo=True)
+    def test_generate_academic_html_preview_security(self):
+        html_src = self.exporter.generate_academic_html_preview(self.sample_profile, reserve_photo=True)
         self.assertIn("张三", html_src)
         self.assertIn("算法研究员", html_src)
         self.assertIn("清华大学", html_src)

@@ -1,14 +1,13 @@
 """
 OfferGet Fact & Privacy Command Handlers:
 - cmd_fact_verify: Fact verification & anti-drift guard against SSOT profile
-- cmd_anon_mask (cmd_anon_profile): Anonymize profile JSON or resume text
+- cmd_anon_mask: Anonymize profile JSON or resume text
 - cmd_anon_unmask: Restore anonymized profile or text using mapping
 """
 
 from __future__ import annotations
 
 import os
-import sys
 
 from core.cli_helpers import (
     load_profile,
@@ -17,6 +16,7 @@ from core.cli_helpers import (
     write_text,
     emit_json,
     emit_stderr,
+    fail_cli,
 )
 
 from core.anonymizer import PrivacyAnonymizer
@@ -27,8 +27,7 @@ def cmd_anon_mask(args):
     """Handler for `offerget anon mask <file>`."""
     input_path = args.input_file
     if not os.path.exists(input_path):
-        emit_stderr(f"[-] Error: Input file not found: {input_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Input file not found: {input_path}")
 
     json_data, content = load_json_or_text(input_path)
     is_json = json_data is not None
@@ -60,19 +59,14 @@ def cmd_anon_mask(args):
             print(anon_data)
 
 
-cmd_anon_profile = cmd_anon_mask
-
-
 def cmd_anon_unmask(args):
     """Handler for `offerget anon unmask <file> --map <map_file>`."""
     input_path = args.input_file
     map_path = args.map
     if not os.path.exists(input_path):
-        emit_stderr(f"[-] Error: Input file not found: {input_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Input file not found: {input_path}")
     if not os.path.exists(map_path):
-        emit_stderr(f"[-] Error: De-anonymization map not found: {map_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"De-anonymization map not found: {map_path}")
 
     json_data, content = load_json_or_text(input_path)
     is_json = json_data is not None
@@ -102,8 +96,7 @@ def cmd_fact_verify(args):
     """Handler for `offerget fact verify <file_or_text> --profile <profile.json>`."""
     profile_path = args.profile
     if not os.path.exists(profile_path):
-        emit_stderr(f"[-] Error: Master profile file not found: {profile_path}")
-        sys.exit(1)
+        fail_cli(args, "input_not_found", f"Master profile file not found: {profile_path}")
 
     master_profile = load_profile(profile_path)
 

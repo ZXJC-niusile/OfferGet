@@ -30,6 +30,7 @@ SOURCE_FACTS = {
 THEMES = (
     "modern-navy", "classic-tech", "asu-dense",
     "academic-postgraduate", "engineering-sb2nov", "modern-corporate", "modern-career",
+    "executive-mckinsey", "awesome-cv", "wall-street-classic",
 )
 FORMATS = THEMES + ("ats-markdown", "ats-html", "docx", "latex", "typst", "academic-html")
 HTML_FORMATS = THEMES + ("ats-html", "academic-html")
@@ -80,7 +81,7 @@ def render(format_name, profile_or_vm, tmp_path):
         return exporter.generate_latex(vm, reserve_photo=False)
     if format_name == "typst":
         return exporter.generate_typst(vm, reserve_photo=False)
-    return exporter.generate_latex_html_preview(vm, reserve_photo=False)
+    return exporter.generate_academic_html_preview(vm, reserve_photo=False)
 
 
 def text_content(format_name, output):
@@ -225,3 +226,41 @@ def test_typst_multiline_qualifiers_stay_in_the_original_bullet(tmp_path):
     profile = {"publications": [{"title": "MultilineQ2", "summary": "Start\n- literal\n= heading"}]}
     output = render("typst", profile, tmp_path)
     assert "Start\n  " + r"\- literal" + "\n  " + r"\= heading" in output
+
+
+def test_bibtex_parse_author_order_bolding_and_title_url_links(tmp_path):
+    from core.resume_parser import parse_resume_to_profile
+
+    bib = tmp_path / "pubs.bib"
+    bib.write_text(
+        "@inproceedings{chen2026sparse,\n"
+        "  title = {Sparse Context Decoding},\n"
+        "  author = {Alice Wu and Bob Chen and Carol Li},\n"
+        "  booktitle = {ICML},\n"
+        "  year = {2026},\n"
+        "  url = {https://example.org/sparse.pdf},\n"
+        "  note = {Under Review}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    parsed = parse_resume_to_profile(str(bib))
+    assert len(parsed["publications"]) == 1
+    pub = parsed["publications"][0]
+    assert pub["url"] == "https://example.org/sparse.pdf"
+    assert pub["status"] == "Under Review"
+    profile = {"candidate": {"name": "Bob Chen"}, "publications": parsed["publications"]}
+
+    html_out = render("modern-navy", profile, tmp_path)
+    assert 'href="https://example.org/sparse.pdf"' in html_out
+    assert "<strong>Bob Chen</strong>" in html_out
+    assert html_out.index("Alice Wu") < html_out.index("<strong>Bob Chen</strong>") < html_out.index("Carol Li")
+
+    latex_out = render("latex", profile, tmp_path)
+    assert r"\href{https://example.org/sparse.pdf}{Sparse Context Decoding}" in latex_out
+    assert r"\textbf{Bob Chen}" in latex_out
+    assert latex_out.index("Alice Wu") < latex_out.index(r"\textbf{Bob Chen}") < latex_out.index("Carol Li")
+
+    typst_out = render("typst", profile, tmp_path)
+    assert '#link("https://example.org/sparse.pdf")[*Sparse Context Decoding*]' in typst_out
+    assert "*Bob Chen*" in typst_out
+    assert typst_out.index("Alice Wu") < typst_out.index("*Bob Chen*") < typst_out.index("Carol Li")

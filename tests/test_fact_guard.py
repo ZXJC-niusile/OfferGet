@@ -6,7 +6,6 @@ unverified numerical claim flagging, tech term whitelisting, and scoring.
 """
 
 import json
-import os
 import sys
 import unittest
 from pathlib import Path

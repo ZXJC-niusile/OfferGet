@@ -1,6 +1,27 @@
-# HTML resume theme visual QA
+# Resume theme and format QA
 
-The shared harness compares the same explicitly synthetic input against an
+This document defines the shared visual QA gates across all resume formats
+(HTML/PDF themes, ATS plain, ATS DOCX, Academic LaTeX, and Academic Typst)
+plus the shared HTML theme regression harness.
+
+## Shared cross-format QA rules
+
+- **Shared fixture source (`scripts/qa_common.py`)**: All layout QA harnesses share
+  explicitly fabricated bilingual profiles (`.invalid` contacts, code-drawn
+  synthetic portrait, no real user data, no remote fonts/network requests).
+- **Real renderers only**: Visual QA requires real local compilers/browsers
+  (`Chromium` + `PyMuPDF` for HTML/ATS plain; `xelatex` for LaTeX; `typst` for
+  Typst; `soffice` + `python-docx` for DOCX). Missing renderers fail or mark
+  visual stages unverified (`--source-only`); mocked screenshots never pass.
+- **Common acceptance gates**: Exact source fact preservation in output &
+  selectable PDF text, A4 dimensions with repeated print gutters, zero horizontal
+  overflow/overlap, expected photo/placeholder/no-photo image counts, source hash
+  manifests, and mandatory human visual review of page PNGs before release (per
+  [release verification](RELEASE_VERIFICATION.md)).
+
+## HTML theme visual harness
+
+The shared HTML harness compares the same explicitly synthetic input against an
 isolated exact baseline and the working tree. New themes absent from the baseline
 receive initial-layout checks only, recorded as `initial-layout-only` in the report. It supports all ten HTML themes:
 `executive-mckinsey`, `awesome-cv`, `wall-street-classic`,

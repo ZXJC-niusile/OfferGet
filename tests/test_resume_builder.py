@@ -16,40 +16,7 @@ from PIL import Image
 from core.browser_renderer import BrowserRenderer
 from core.resume_builder import ResumeBuilder, audit_resume_quality
 from core.resume_view_model import ResumeViewModel
-
-
-class FastBrowserRenderer(BrowserRenderer):
-    """A lightweight headless browser renderer for unit tests that generates valid A4 PDFs
-    instantly without spawning heavy headless Chromium processes.
-    """
-    MINIMAL_PDF_BYTES = (
-        b"%PDF-1.4\n"
-        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
-        b"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
-        b"3 0 obj\n<< /Type /Page /Parent 2 0 R >>\nendobj\n"
-        b"xref\n0 4\n"
-        b"0000000000 65535 f \n"
-        b"0000000009 00000 n \n"
-        b"0000000058 00000 n \n"
-        b"0000000115 00000 n \n"
-        b"trailer\n<< /Size 4 /Root 1 0 R >>\n"
-        b"startxref\n164\n%%EOF\n"
-    )
-
-    def __init__(self, browser_path: str = "fast-test-renderer"):
-        self.browser_path = browser_path
-
-    def render_pdf(self, html_path, pdf_path, timeout_seconds=30):
-        pdf_file = Path(pdf_path).resolve()
-        pdf_file.parent.mkdir(parents=True, exist_ok=True)
-        pdf_file.write_bytes(self.MINIMAL_PDF_BYTES)
-        return True, 1, f"Fast test render 1 page ({len(self.MINIMAL_PDF_BYTES)} bytes)"
-
-    def count_pages(self, pdf_path):
-        return 1
-
-    def measure_overflow(self, html_path, a4_target_height=1122.5):
-        return 1000, 0
+from tests.helpers import FastBrowserRenderer
 
 
 class TestResumeBuilder(unittest.TestCase):

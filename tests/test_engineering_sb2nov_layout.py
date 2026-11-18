@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 from core.resume_view_model import HtmlThemeRenderer, ResumeViewModel
-from scripts.qa_modern_navy_layout import fixtures
+from scripts.qa_common import fixtures
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = (ROOT / "themes/engineering-sb2nov.html").read_text(encoding="utf-8")

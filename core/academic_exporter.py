@@ -28,7 +28,13 @@ from typing import Any, Dict, Optional, Union
 
 from core.profile_adapter import require_public_profile
 from core.resume_photo import image_to_base64_data_uri as _image_to_base64_data_uri, resolve_photo
-from core.resume_view_model import PUBLICATION_LABELS, publication_facts, publication_text_parts
+from core.resume_view_model import (
+    PUBLICATION_LABELS,
+    candidate_author_names,
+    format_publication_authors,
+    publication_facts,
+    publication_url,
+)
 
 
 from core.security_gate import (
@@ -242,13 +248,27 @@ class AcademicExporter:
                     lines.extend(r"\item " + bullet(text) for text in bullets)
                     lines.append(r"\end{itemize}")
 
-        publications = [publication_text_parts(pub) for pub in vm.publications]
-        publications = [parts for parts in publications if parts]
-        if publications:
+        pub_items = [(pub, publication_facts(pub)) for pub in vm.publications]
+        pub_items = [(pub, facts) for pub, facts in pub_items if facts]
+        if pub_items:
+            author_names = candidate_author_names(vm)
             section("publications", "PUBLICATIONS", "学术发表与代表作")
             lines.append(r"\begin{itemize}")
-            for parts in publications:
-                lines.append(r"\item " + " · ".join(esc(part) for part in parts))
+            for pub, facts in pub_items:
+                pub_url = publication_url(pub)
+                parts = []
+                for key, value in facts:
+                    if key == "authors":
+                        rendered = format_publication_authors(
+                            value, author_names, esc, lambda s: r"\textbf{" + s + "}"
+                        )
+                    else:
+                        rendered = esc(PUBLICATION_LABELS.get(key, "") + value)
+                    if key == "title" and pub_url:
+                        safe_href = pub_url.replace("\\", "").replace("{", "%7B").replace("}", "%7D").replace("%", r"\%").replace("#", r"\#")
+                        rendered = r"\href{" + safe_href + "}{" + rendered + "}"
+                    parts.append(rendered)
+                lines.append(r"\item " + " · ".join(parts))
             lines.append(r"\end{itemize}")
         if vm.competencies:
             section("skills", "SKILLS", "专业技能")
@@ -369,16 +389,23 @@ class AcademicExporter:
                           raw(item, "role_label") or raw(item, "role"))
                     lines.extend('- ' + bullet(value).replace('\n', '\n  ') for value in self._raw_bullets(item))
                     lines.append('')
-        publications = [publication_facts(pub) for pub in vm.publications]
-        publications = [facts for facts in publications if facts]
-        if publications:
+        pub_items = [(pub, publication_facts(pub)) for pub in vm.publications]
+        pub_items = [(pub, facts) for pub, facts in pub_items if facts]
+        if pub_items:
+            author_names = candidate_author_names(vm)
             lines.append('== 学术发表与代表作')
-            for facts in publications:
+            for pub, facts in pub_items:
+                pub_url = publication_url(pub)
                 parts = []
                 for key, value in facts:
-                    text = esc(PUBLICATION_LABELS.get(key, "") + value)
+                    if key == "authors":
+                        text = format_publication_authors(value, author_names, esc, lambda s: "*" + s + "*")
+                    else:
+                        text = esc(PUBLICATION_LABELS.get(key, "") + value)
                     if key == "title":
                         text = '*' + text + '*'
+                        if pub_url:
+                            text = f'#link({json.dumps(pub_url, ensure_ascii=False)})[{text}]'
                     elif key == "venue":
                         text = '_' + text + '_'
                     parts.append(text)
@@ -392,7 +419,7 @@ class AcademicExporter:
                 lines += ['*' + esc(category) + '*: ' + esc(value), '']
         return '\n'.join(lines)
 
-    def generate_latex_html_preview(
+    def generate_academic_html_preview(
         self,
         profile: Union[Any, Dict[str, Any]],
         reserve_photo: Optional[bool] = True,
@@ -504,13 +531,24 @@ strong {{ font-weight: 700; }}
                     entry(raw(item, "org" if key == "experience" else "name"), raw(item, "time"),
                           raw(item, "role_label") or raw(item, "role"))
                     parts.append("<ul>" + "".join("<li>" + bullet(text) + "</li>" for text in self._raw_bullets(item)) + "</ul>")
-        publications = [publication_text_parts(pub) for pub in vm.publications]
-        publications = [fields for fields in publications if fields]
-        if publications:
+        pub_items = [(pub, publication_facts(pub)) for pub in vm.publications]
+        pub_items = [(pub, facts) for pub, facts in pub_items if facts]
+        if pub_items:
+            author_names = candidate_author_names(vm)
             section("publications", "PUBLICATIONS", "学术发表与代表作")
             parts.append("<ul>")
-            for fields in publications:
-                parts.append("<li>" + " · ".join(esc(value) for value in fields) + "</li>")
+            for pub, facts in pub_items:
+                pub_url = publication_url(pub)
+                fields = []
+                for key, value in facts:
+                    if key == "authors":
+                        rendered = format_publication_authors(value, author_names, esc, lambda s: f"<strong>{s}</strong>")
+                    else:
+                        rendered = esc(PUBLICATION_LABELS.get(key, "") + value)
+                    if key == "title" and pub_url:
+                        rendered = f'<a href="{escape_html_attribute(pub_url)}" target="_blank" rel="noopener noreferrer">{rendered}</a>'
+                    fields.append(rendered)
+                parts.append("<li>" + " · ".join(fields) + "</li>")
             parts.append("</ul>")
         if vm.competencies:
             section("skills", "SKILLS", "专业技能")
@@ -538,6 +576,9 @@ strong {{ font-weight: 700; }}
 ul {{ break-inside: auto !important; page-break-inside: auto !important; }} }}
 </style>"""
         return html.replace("</head>", overrides + "</head>")
+
+    # Compatibility for callers of the original LaTeX preview API.
+    generate_latex_html_preview = generate_academic_html_preview
 
     def compile_typst(self, typ_path: str | Path, pdf_path: str | Path) -> bool:
         """Compiles Typst file to PDF using Python package or CLI."""

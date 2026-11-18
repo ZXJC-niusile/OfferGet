@@ -6,16 +6,13 @@ from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import tempfile
-import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.browser_renderer import (
     BrowserRenderer,
-    RenderResult,
     _kill_process_tree,
     _safe_decode,
 )

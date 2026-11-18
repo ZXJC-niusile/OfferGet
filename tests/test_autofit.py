@@ -13,7 +13,7 @@ MODULE_ROOT = Path(__file__).resolve().parent.parent
 if str(MODULE_ROOT) not in sys.path:
     sys.path.insert(0, str(MODULE_ROOT))
 
-from core.autofit import AutoFitEngine, TUNING_LADDER, TuneProfile
+from core.autofit import AutoFitEngine, TUNING_LADDER
 from core.browser_renderer import BrowserRenderer, RenderResult
 
 

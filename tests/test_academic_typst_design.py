@@ -1,10 +1,9 @@
 """Literal facts, native markup and layout contracts for Typst."""
 import json
-from pathlib import Path
 
 from core.academic_exporter import AcademicExporter
 from core.resume_view_model import ResumeViewModel
-from tests.test_academic_latex_design import fixture
+from tests.helpers import academic_design_fixture as fixture
 
 
 def test_typst_preserves_raw_facts_and_neutralizes_label_markup():
